@@ -1,0 +1,20 @@
+[versions]
+meshtastic-sdk = "0.2.1-SNAPSHOT"
+androidx-activity-compose = "1.13.0"
+androidx-lifecycle = "2.11.0"
+kotlinx-coroutines = "1.11.0"
+kotlinx-datetime = "0.8.0"
+
+[libraries]
+androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "androidx-activity-compose" }
+androidx-lifecycle-viewmodel-compose = { module = "org.jetbrains.androidx.lifecycle:lifecycle-viewmodel-compose", version.ref = "androidx-lifecycle" }
+androidx-lifecycle-runtime-compose = { module = "org.jetbrains.androidx.lifecycle:lifecycle-runtime-compose", version.ref = "androidx-lifecycle" }
+kotlinx-coroutines-swing = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-swing", version.ref = "kotlinx-coroutines" }
+
+meshtastic-sdk-core = { module = "org.meshtastic:sdk-core", version.ref = "meshtastic-sdk" }
+meshtastic-sdk-transport-websocket = { module = "org.meshtastic:sdk-transport-websocket", version.ref = "meshtastic-sdk" }
+meshtastic-sdk-transport-tcp = { module = "org.meshtastic:sdk-transport-tcp", version.ref = "meshtastic-sdk" }
+meshtastic-sdk-transport-serial = { module = "org.meshtastic:sdk-transport-serial", version.ref = "meshtastic-sdk" }
+meshtastic-sdk-transport-ble = { module = "org.meshtastic:sdk-transport-ble", version.ref = "meshtastic-sdk" }
+kotlinx-datetime = { module = "org.jetbrains.kotlinx:kotlinx-datetime", version.ref = "kotlinx-datetime" }
+kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "kotlinx-coroutines" }

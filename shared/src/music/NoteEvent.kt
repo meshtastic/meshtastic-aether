@@ -1,0 +1,43 @@
+package org.meshtastic.ambient.music
+
+enum class Voice { Bell, Mallet, Pluck, Breath, Pad, Drone, Shimmer }
+
+/** One sounding note. [atFrame] is in the audio sample counter, the app's single clock. */
+data class NoteEvent(
+    val atFrame: Long,
+    val voice: Voice,
+    val pitchHz: Double,
+    val velocity: Float,
+    val pan: Float,
+    val reverbSend: Float,
+    val durationFrames: Long,
+    val brightness: Float,
+)
+
+/** Global sound character, changed slowly. All fields 0..1 except [rootHz]. */
+data class Texture(
+    val rootHz: Double,
+    val brightness: Float,
+    val reverbSize: Float,
+    val reverbWet: Float,
+    val detune: Float,
+    val shimmer: Float,
+    val noise: Float,
+    val layerLevels: Map<Voice, Float>,
+)
+
+sealed interface ControlEvent {
+    val atFrame: Long
+
+    data class SetTexture(override val atFrame: Long, val texture: Texture) : ControlEvent
+}
+
+data class ComposerOutput(val notes: List<NoteEvent>, val controls: List<ControlEvent>)
+
+/** The seam a MIDI/OSC output would implement; the synth is the one implementation now. */
+interface NoteSink {
+    fun schedule(output: ComposerOutput)
+}
+
+/** Wall-clock view the composer needs; [dayOfWeek] is 1 = Monday .. 7 = Sunday. Built by the app from kotlinx-datetime. */
+data class LocalMoment(val dayOfWeek: Int, val minuteOfDay: Int, val epochMillis: Long)

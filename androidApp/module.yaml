@@ -1,0 +1,17 @@
+product: android/app
+
+apply:
+  - //common.module-template.yaml
+
+dependencies:
+  - //shared
+  - $libs.androidx.activity.compose
+  - $compose.preview
+  - $compose.uiTooling
+
+settings:
+  compose: enabled
+  android:
+    applicationId: org.meshtastic.ambient
+    namespace: org.meshtastic.ambient
+    minSdk: 26 # meshtastic-sdk's floor

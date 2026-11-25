@@ -1,0 +1,11 @@
+.kotlin/
+build/
+local.properties
+.idea/
+*.iml
+.DS_Store
+.mcp.json
+.claude/settings.json
+.claude/worktrees/
+captures/
+*.capture
