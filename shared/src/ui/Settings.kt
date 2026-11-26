@@ -87,6 +87,7 @@ internal fun encodeLink(choice: LinkChoice): String? = when (choice) {
     LinkChoice.Demo -> "demo"
     is LinkChoice.Tcp -> "tcp$SEP${choice.host}$SEP${choice.port}"
     is LinkChoice.WebSocket -> "ws$SEP${choice.url}"
+    is LinkChoice.Serial -> "serial$SEP${choice.path}$SEP${choice.label}"
     LinkChoice.Replay, is LinkChoice.Ble -> null
 }
 
@@ -101,6 +102,10 @@ internal fun decodeLink(text: String): LinkChoice? {
             LinkChoice.Tcp(host, port)
         }
         "ws" -> text.substringAfter(SEP, "").takeIf { it.isNotBlank() }?.let { LinkChoice.WebSocket(it) }
+        "serial" -> {
+            val path = parts.getOrNull(1)?.takeIf { it.isNotBlank() } ?: return null
+            LinkChoice.Serial(path, parts.getOrNull(2)?.takeIf { it.isNotBlank() } ?: path)
+        }
         else -> null
     }
 }

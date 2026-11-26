@@ -29,7 +29,7 @@ The 90 second demo above has sound. Below, the scene while it listens to a gener
 
 ```sh
 ./kotlin run -m desktopApp                      # desktop
-./kotlin run -m desktopApp -- --fullscreen      # also: --demo, --replay, --tcp host[:port], --ask, --look standard|projector|oled
+./kotlin run -m desktopApp -- --fullscreen      # also: --demo, --replay, --tcp host[:port], --serial PORT, --ask, --look standard|projector|oled
 ./kotlin run -m webApp                          # browser; tap to start audio
 ./kotlin run -m androidApp                      # device or emulator
 ./kotlin run -m iosApp                          # Mac only
@@ -44,7 +44,7 @@ The Android app installs on Android TV and Google TV with a launcher banner. Use
 
 ```sh
 adb shell am start -n org.meshtastic.aether/.MainActivity --es tcp 192.168.1.20:4403
-# also: --ez demo true, --ez replay true, --es look oled, --ez ask true
+# also: --es serial <port>, --ez demo true, --ez replay true, --es look oled, --ez ask true
 ```
 
 After the first connect the saved link reconnects on its own. tvOS is not possible: Compose Multiplatform and meshtastic-sdk publish no tvOS variants. On an Apple TV, mirror the iOS app with AirPlay.
@@ -53,12 +53,13 @@ To record the sound for a video, start the desktop app with `AETHER_RECORD_AUDIO
 
 ## Connect
 
-The connect screen opens on a connected group of toggle buttons that picks one link type at a time: Network (TCP), Bluetooth, WebSocket and Demo. A target lists only the types it supports: Network is desktop, Android and iOS, and Bluetooth is not on web. The group opens on the saved link's type while its countdown runs, else on the type you last chose, else on Network (WebSocket on web). On a TV or with a keyboard, focus starts on the selected type.
+The connect screen opens on a connected group of toggle buttons that picks one link type at a time: Network (TCP), Bluetooth, USB, WebSocket and Demo. A target lists only the types it supports: Network is desktop, Android and iOS, Bluetooth is not on web, and USB is desktop and Android. The group opens on the saved link's type while its countdown runs, else on the type you last chose, else on Network (WebSocket on web). On a TV or with a keyboard, focus starts on the selected type.
 
 - Demo: a scripted five-minute mesh, no node needed. The button reads Start the demo, and `--demo` does the same at launch.
 - Network: a host field and a port field (digits only; a blank port means 4403), then Connect over TCP. `--tcp host[:port]` connects at launch on desktop, and the `tcp` intent extra does the same on Android.
 - Bluetooth: Scan for Bluetooth radios lists each node by name, the last five characters of its address and a signal word (Strong, Good, Fair, Weak or Signal unknown). Tapping a radio connects, so this pane has no connect button.
-- WebSocket: a `ws://` or `wss://` address, prefilled with `wss://meshtastic.local/api/v1/ws`, the firmware's WebSocket phone API (ESP32 firmware serves it on port 443 and 80, meshtasticd on its web server port). A page served over HTTPS, such as a hosted web app, may only open `wss://`, so the browser must trust the node's certificate: open `https://<node>/` once to accept its self-signed one.
+- USB: Find USB radios lists the serial ports present, likely Meshtastic boards first, each by its board name (on Linux from its `/dev/serial/by-id` name, since many boards report the same USB product) and port. Tapping one connects, and the link is saved: on Linux it is saved by its stable `/dev/serial/by-id` path. Android asks for USB permission for each device the first time. `--serial PORT` opens a port at launch.
+- WebSocket: a `ws://` or `wss://` address, prefilled with the firmware's WebSocket phone API: `wss://meshtastic.local/api/v1/ws` on web, `ws://meshtastic.local/api/v1/ws` in the native apps, which would refuse a stock node's self-signed certificate (ESP32 firmware serves it on port 443 and 80, meshtasticd on its web server port). A page served over HTTPS, such as a hosted web app, may only open `wss://`, so the browser must trust the node's certificate: open `https://<node>/` once to accept its self-signed one.
 - A connect button stays disabled while its fields are invalid, and the field says why. The Go key on the keyboard submits from the TCP port and the WebSocket address.
 - An unreachable host shows `Can't reach host:port - retrying` in the status line, and the raw error goes to the log. A link that fails to start shows its reason on the connect screen.
 

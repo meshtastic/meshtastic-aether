@@ -132,6 +132,11 @@ private fun sessionFor(choice: LinkChoice): Session = when (choice) {
         Log.i("app", "session ble ${choice.radio.name} ${choice.radio.address}")
         Session(link.source, link::connect, link::disconnect, failureText = { unreachableText(choice.radio.name ?: choice.radio.address) })
     }
+    is LinkChoice.Serial -> {
+        val link = LiveLink.serial(choice.path) ?: error("USB serial is not available on this target")
+        Log.i("app", "session serial ${choice.path}")
+        Session(link.source, link::connect, link::disconnect, failureText = { unreachableText(choice.label) })
+    }
     is LinkChoice.WebSocket -> {
         require(choice.url.startsWith("ws://") || choice.url.startsWith("wss://")) { "WebSocket address must start with ws:// or wss://" }
         val link = LiveLink.webSocket(choice.url)

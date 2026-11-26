@@ -26,6 +26,16 @@ class SettingsTest {
         assertEquals(LinkChoice.WebSocket("ws://10.0.0.5:80/ws?a=b|c"), Settings(store).link)
     }
 
+    // A serial radio is saved, unlike a Bluetooth pick, so the countdown can reopen it on the next launch.
+    @Test
+    fun `a serial port survives a round trip and a missing label falls back to the path`() {
+        val store = MemoryStore()
+        Settings(store).link = LinkChoice.Serial("/dev/serial/by-id/usb-RAK_4631-if00", "RAK4631")
+        assertEquals(LinkChoice.Serial("/dev/serial/by-id/usb-RAK_4631-if00", "RAK4631"), Settings(store).link)
+        assertEquals(LinkChoice.Serial("COM3", "COM3"), decodeLink("serial|COM3"))
+        assertNull(decodeLink("serial|"))
+    }
+
     // Regression: picking Bluetooth or the replay erased the saved TCP link, so the next launch had nothing to reconnect to.
     @Test
     fun `choosing a link that cannot be saved keeps the saved one`() {

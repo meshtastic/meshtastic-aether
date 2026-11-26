@@ -19,6 +19,38 @@ class ConnectLinkTest {
     }
 
     @Test
+    fun `USB sits between Bluetooth and WebSocket where the platform has serial`() {
+        assertEquals(
+            listOf(LinkKind.Network, LinkKind.Bluetooth, LinkKind.Serial, LinkKind.WebSocket, LinkKind.Demo),
+            availableKinds(supportsTcp = true, bluetooth = true, serial = true),
+        )
+        assertEquals(listOf(LinkKind.WebSocket, LinkKind.Demo), availableKinds(supportsTcp = false, bluetooth = false, serial = false))
+    }
+
+    @Test
+    fun `a serial link needs a pick and names itself by its label`() {
+        assertNull(currentLink(LinkKind.Serial, "h", "1", "ws://x"))
+        assertEquals("RAK4631", LinkChoice.Serial("/dev/ttyACM0", "RAK4631").label())
+        assertEquals(LinkKind.Serial, LinkChoice.Serial("/dev/ttyACM0", "RAK4631").kind())
+    }
+
+    @Test
+    fun `the WebSocket prefill is wss for the browser and ws for the native apps on the firmware path`() {
+        assertEquals("wss://meshtastic.local/api/v1/ws", defaultWebSocketUrl(secure = true))
+        assertEquals("ws://meshtastic.local/api/v1/ws", defaultWebSocketUrl(secure = false))
+    }
+
+    @Test
+    fun `likely Meshtastic ports come first and the rest follow by label`() {
+        val ports = listOf(
+            org.meshtastic.aether.serial.SerialRadio("/dev/b", "zeta", false),
+            org.meshtastic.aether.serial.SerialRadio("/dev/c", "Heltec", true),
+            org.meshtastic.aether.serial.SerialRadio("/dev/a", "alpha", false),
+        )
+        assertEquals(listOf("Heltec", "alpha", "zeta"), orderedPorts(ports).map { it.label })
+    }
+
+    @Test
     fun `the chooser offers only the kinds the platform can run with real links first and the demo last`() {
         assertEquals(listOf(LinkKind.WebSocket, LinkKind.Demo), availableKinds(supportsTcp = false, bluetooth = false))
         assertEquals(

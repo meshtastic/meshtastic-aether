@@ -24,7 +24,7 @@ fun resolveLook(flag: PaletteChoice?, saved: PaletteChoice?, fullscreenLaunch: B
     flag ?: saved ?: if (fullscreenLaunch) PaletteChoice.Projector else PaletteChoice.Standard
 
 /**
- * `--demo` starts the demo, `--tcp host[:port]` connects at launch (port defaults to the phone API's 4403),
+ * `--demo` starts the demo, `--serial PORT` opens a USB serial radio, `--tcp host[:port]` connects at launch (port defaults to the phone API's 4403),
  * `--replay` loops the bundled capture, `--fullscreen` opens fullscreen, `--look standard|projector|oled` picks the
  * look, `--ask` ignores the saved link and any `--demo`, `--replay` or `--tcp` and shows the connect screen. A bad `--tcp` or `--look` value is an error to show, not a choice.
  */
@@ -37,6 +37,15 @@ fun parseLaunchArgs(args: Array<String>): LaunchArgs {
         val value = args.getOrNull(lookAt + 1).orEmpty()
         look = parseLook(value)
         if (look == null) return LaunchArgs(null, "Cannot use --look \"$value\": expected standard, projector or oled.", fullscreen, ask = ask)
+    }
+    val serialAt = args.indexOf("--serial")
+    if (serialAt >= 0) {
+        val value = args.getOrNull(serialAt + 1).orEmpty().trim()
+        return if (value.isEmpty() || value.startsWith("--")) {
+            LaunchArgs(null, "Cannot use --serial: expected the port, for example /dev/ttyACM0 or COM3.", fullscreen, look, ask)
+        } else {
+            LaunchArgs(LinkChoice.Serial(value, value), null, fullscreen, look, ask)
+        }
     }
     val tcpAt = args.indexOf("--tcp")
     if (tcpAt >= 0) {

@@ -27,15 +27,17 @@ import androidx.compose.ui.unit.dp
 internal enum class LinkKind(val label: String) {
     Network("Network"),
     Bluetooth("Bluetooth"),
+    Serial("USB"),
     WebSocket("WebSocket"),
     Demo("Demo"),
 }
 
-/** The kinds this target can offer, real links first and the demo last: WebSocket and the demo everywhere, TCP and Bluetooth only where the platform has them. */
-internal fun availableKinds(supportsTcp: Boolean, bluetooth: Boolean): List<LinkKind> =
+/** The kinds this target can offer, real links first and the demo last: WebSocket and the demo everywhere, TCP, Bluetooth and USB serial only where the platform has them. */
+internal fun availableKinds(supportsTcp: Boolean, bluetooth: Boolean, serial: Boolean = false): List<LinkKind> =
     listOfNotNull(
         LinkKind.Network.takeIf { supportsTcp },
         LinkKind.Bluetooth.takeIf { bluetooth },
+        LinkKind.Serial.takeIf { serial },
         LinkKind.WebSocket,
         LinkKind.Demo,
     )
@@ -53,6 +55,7 @@ internal fun LinkChoice.kind(): LinkKind? = when (this) {
     is LinkChoice.Tcp -> LinkKind.Network
     is LinkChoice.WebSocket -> LinkKind.WebSocket
     is LinkChoice.Ble -> LinkKind.Bluetooth
+    is LinkChoice.Serial -> LinkKind.Serial
     LinkChoice.Replay -> null
 }
 

@@ -44,10 +44,12 @@ class ConnectScreenUiTest {
         focusChooser: Boolean = false,
         lastKind: LinkKind? = null,
         onKind: (LinkKind) -> Unit = {},
+        secureWebSocket: Boolean = false,
+        serial: Boolean = false,
     ) = setContent {
         AmbientTheme {
             Box(Modifier.size(width.dp, height.dp)) {
-                ConnectScreen(chosen::add, pending, failure, LinkChoice.Tcp("node.local", 4403), supportsTcp = true, bluetooth = false, focusChooser = focusChooser, lastKind = lastKind, onKind = onKind)
+                ConnectScreen(chosen::add, pending, failure, LinkChoice.Tcp("node.local", 4403), supportsTcp = true, bluetooth = false, focusChooser = focusChooser, lastKind = lastKind, onKind = onKind, secureWebSocket = secureWebSocket, serial = serial)
             }
         }
     }
@@ -98,13 +100,57 @@ class ConnectScreenUiTest {
         assertEquals(listOf(LinkKind.Demo), kinds)
     }
 
-    // An HTTPS page can only open wss://, so the prefilled address must already work from the hosted web app.
+    // An HTTPS page can only open wss://, and the native apps would refuse a stock node's self-signed certificate.
     @Test
-    fun `the WebSocket pane is prefilled with a secure address`() = runComposeUiTest {
-        show()
-        onNode(hasText("WebSocket") and hasClickAction()).performClick()
+    fun `the WebSocket pane prefills wss in the browser and ws in the native apps`() = runComposeUiTest {
+        var secure by androidx.compose.runtime.mutableStateOf(true)
+        setContent {
+            AmbientTheme {
+                Box(Modifier.size(800.dp, 600.dp)) {
+                    androidx.compose.runtime.key(secure) {
+                        ConnectScreen({}, null, null, null, supportsTcp = true, bluetooth = false, lastKind = LinkKind.WebSocket, secureWebSocket = secure)
+                    }
+                }
+            }
+        }
         waitForIdle()
         onNode(hasSetTextAction() and hasText("wss://meshtastic.local/api/v1/ws")).assertExists()
+        secure = false
+        waitForIdle()
+        onNode(hasSetTextAction() and hasText("ws://meshtastic.local/api/v1/ws")).assertExists()
+    }
+
+    @Test
+    fun `the USB pane lists likely radios first and picking one starts a serial link`() = runComposeUiTest {
+        val chosen = mutableListOf<LinkChoice>()
+        setContent {
+            AmbientTheme {
+                Box(Modifier.size(800.dp, 900.dp)) {
+                    SerialSection({ chosen += LinkChoice.Serial(it.path, it.label) }, find = {
+                        listOf(
+                            org.meshtastic.aether.serial.SerialRadio("/dev/ttyUSB0", "CP2102 bridge", false),
+                            org.meshtastic.aether.serial.SerialRadio("/dev/serial/by-id/usb-RAK-if00", "RAK4631", true),
+                        )
+                    })
+                }
+            }
+        }
+        onNode(hasText("Find USB radios") and hasClickAction()).performClick()
+        waitForIdle()
+        val rows = onAllNodes(hasClickAction() and (hasText("RAK4631") or hasText("CP2102 bridge"))).fetchSemanticsNodes()
+        assertEquals(2, rows.size)
+        assertTrue(rows[0].boundsInRoot.top < rows[1].boundsInRoot.top && rows[0].config.toString().contains("RAK4631"), "the likely radio is listed first")
+        onNode(hasText("RAK4631") and hasClickAction()).performClick()
+        assertEquals(listOf<LinkChoice>(LinkChoice.Serial("/dev/serial/by-id/usb-RAK-if00", "RAK4631")), chosen)
+    }
+
+    @Test
+    fun `the USB pane says when no serial device is present`() = runComposeUiTest {
+        setContent { AmbientTheme { SerialSection({}, find = { emptyList() }) } }
+        onNode(hasText("Find USB radios") and hasClickAction()).performClick()
+        waitForIdle()
+        onNodeWithText(NO_SERIAL_PORTS).assertExists()
+        onNode(hasText("Look again") and hasClickAction()).assertExists()
     }
 
     // Regression: editing the host left the countdown running and it connected to the saved link.

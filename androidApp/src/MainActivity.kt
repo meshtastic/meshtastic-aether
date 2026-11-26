@@ -62,11 +62,12 @@ class MainActivity : ComponentActivity() {
 
 /**
  * The desktop flags, from intent extras, so a TV with no keyboard can be started from adb:
- * `am start -n org.meshtastic.aether/.MainActivity --es tcp host:port` (also `--ez demo true`, `--ez replay true`,
+ * `am start -n org.meshtastic.aether/.MainActivity --es tcp host:port` (also `--es serial <port>`, `--ez demo true`, `--ez replay true`,
  * `--es look oled`, `--ez ask true`).
  */
 internal fun launchArgsFrom(intent: android.content.Intent?): Array<String> = buildList {
     intent?.getStringExtra("tcp")?.let { add("--tcp"); add(it) }
+    intent?.getStringExtra("serial")?.let { add("--serial"); add(it) }
     intent?.getStringExtra("look")?.let { add("--look"); add(it) }
     if (intent?.getBooleanExtra("demo", false) == true) add("--demo")
     if (intent?.getBooleanExtra("replay", false) == true) add("--replay")

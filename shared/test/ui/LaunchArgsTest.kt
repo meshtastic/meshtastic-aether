@@ -86,4 +86,13 @@ class LaunchArgsTest {
         assertNull(autoConnectLink(saved, ask = false, autoConnects = true, hasLaunchLink = false, hasLaunchError = true))
         assertNull(autoConnectLink(null, ask = false, autoConnects = true, hasLaunchLink = false, hasLaunchError = false))
     }
+
+    @Test
+    fun `serial opens a port at launch and a missing port is an error`() {
+        assertEquals(LinkChoice.Serial("/dev/ttyACM0", "/dev/ttyACM0"), parseLaunchArgs(arrayOf("--serial", "/dev/ttyACM0")).link)
+        val missing = parseLaunchArgs(arrayOf("--serial"))
+        assertNull(missing.link)
+        assertNotNull(missing.error)
+        assertNotNull(parseLaunchArgs(arrayOf("--serial", "--fullscreen")).error)
+    }
 }

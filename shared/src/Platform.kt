@@ -23,6 +23,9 @@ internal interface Platform {
     /** True where the system has its own Back control (Android); Escape and the HUD close are enough elsewhere. */
     val hasSystemBack: Boolean
 
+    /** The web build: an HTTPS page may only open `wss://`, so the WebSocket address defaults to it. */
+    val isBrowser: Boolean get() = false
+
     /** A television: a remote with a D-pad and Select is the input, so hints name Select and Back, not taps or keys. */
     val isTelevision: Boolean get() = false
 

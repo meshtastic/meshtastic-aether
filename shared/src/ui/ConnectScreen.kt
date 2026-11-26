@@ -44,12 +44,16 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import org.meshtastic.aether.ble.bleSupported
 import org.meshtastic.aether.getPlatform
+import org.meshtastic.aether.serial.serialSupported
+import org.meshtastic.aether.getPlatform
 
 /**
- * The firmware's WebSocket phone API path (ESP32 and meshtasticd both serve it), secure by default: an HTTPS
- * page, such as the hosted web app, may only open `wss://`, and an ESP32 node serves it on 443 as well as 80.
+ * The prefilled address of the firmware's WebSocket phone API (ESP32 and meshtasticd both serve `/api/v1/ws`).
+ * The browser gets `wss://`, because an HTTPS page may only open that; the native apps get `ws://`, because a stock
+ * node's certificate is self-signed and they would refuse it.
  */
-private const val DEFAULT_WS_URL = "wss://meshtastic.local/api/v1/ws"
+internal fun defaultWebSocketUrl(secure: Boolean): String =
+    if (secure) "wss://meshtastic.local/api/v1/ws" else "ws://meshtastic.local/api/v1/ws"
 private const val DEFAULT_HOST = "meshtastic.local"
 private const val TAGLINE = "The mesh, on the ether."
 private val GLYPH_SIZE = 56.dp
@@ -77,6 +81,7 @@ internal fun LinkChoice.label(): String = when (this) {
     is LinkChoice.Tcp -> "$host:$port"
     is LinkChoice.WebSocket -> url
     is LinkChoice.Ble -> radio.name ?: radio.address
+    is LinkChoice.Serial -> label
 }
 
 /** The TCP fields read as a link, or the reason they cannot be: a blank port means the default, anything else must be 1..65535. */
@@ -115,7 +120,7 @@ internal fun currentLink(kind: LinkKind, host: String, port: String, ws: String)
     LinkKind.Demo -> LinkChoice.Demo
     LinkKind.Network -> (tcpEntry(host, port) as? TcpEntry.Valid)?.link
     LinkKind.WebSocket -> if (webSocketError(ws) == null) LinkChoice.WebSocket(ws.trim()) else null
-    LinkKind.Bluetooth -> null
+    LinkKind.Bluetooth, LinkKind.Serial -> null
 }
 
 /**
@@ -133,6 +138,8 @@ internal fun ConnectScreen(
     modifier: Modifier = Modifier,
     supportsTcp: Boolean = remember { getPlatform().supportsTcp },
     bluetooth: Boolean = remember { bleSupported() },
+    serial: Boolean = remember { serialSupported() },
+    secureWebSocket: Boolean = remember { getPlatform().isBrowser },
     focusChooser: Boolean = false,
     lastKind: LinkKind? = null,
     onKind: (LinkKind) -> Unit = {},
@@ -142,11 +149,11 @@ internal fun ConnectScreen(
         // The chooser sits under BoxWithConstraints, which composes during layout, so the first frames may not have it yet.
         if (focusChooser) repeat(FOCUS_TRIES) { if (runCatching { chooserFocus.requestFocus() }.getOrDefault(false)) return@LaunchedEffect else withFrameNanos { } }
     }
-    val kinds = availableKinds(supportsTcp, bluetooth)
+    val kinds = availableKinds(supportsTcp, bluetooth, serial)
     val pendingLink = pending?.link
     var host by remember { mutableStateOf(lastTcp?.host ?: DEFAULT_HOST) }
     var port by remember { mutableStateOf((lastTcp?.port ?: LinkChoice.DEFAULT_TCP_PORT).toString()) }
-    var ws by remember { mutableStateOf((pendingLink as? LinkChoice.WebSocket)?.url ?: DEFAULT_WS_URL) }
+    var ws by remember { mutableStateOf((pendingLink as? LinkChoice.WebSocket)?.url ?: defaultWebSocketUrl(secureWebSocket)) }
     var kind by remember { mutableStateOf(initialKind(kinds, pendingLink?.kind(), lastKind)) }
     var chosen by remember { mutableStateOf<LinkKind?>(null) }
     val selected = if (kind in kinds) kind else kinds.first()
@@ -244,6 +251,8 @@ internal fun ConnectScreen(
 
             LinkKind.Bluetooth -> BluetoothSection({ choose(LinkKind.Bluetooth, LinkChoice.Ble(it)) }, onInteract = ::cancelPending)
 
+            LinkKind.Serial -> SerialSection({ choose(LinkKind.Serial, LinkChoice.Serial(it.path, it.label)) }, onInteract = ::cancelPending)
+
             LinkKind.WebSocket -> {
                 val wsError = webSocketError(ws).takeIf { ws.isNotBlank() } ?: if (ws.isBlank()) WS_BLANK_ERROR else null
                 OutlinedTextField(
@@ -265,7 +274,7 @@ internal fun ConnectScreen(
         if (failure != null && (chosen == null || chosen == selected)) ErrorSurface(failure)
     }
 
-    val primary: (@Composable () -> Unit)? = if (selected == LinkKind.Bluetooth) {
+    val primary: (@Composable () -> Unit)? = if (selected == LinkKind.Bluetooth || selected == LinkKind.Serial) {
         null
     } else {
         {

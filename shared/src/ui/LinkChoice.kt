@@ -16,6 +16,9 @@ sealed interface LinkChoice {
     /** A node's WebSocket endpoint, for example `wss://meshtastic.local/api/v1/ws`. */
     data class WebSocket(val url: String) : LinkChoice
 
+    /** A radio on a USB serial port: [path] reopens it (a stable by-id path where Linux has one), [label] names it. */
+    data class Serial(val path: String, val label: String) : LinkChoice
+
     /** A scanned Bluetooth radio; it cannot be saved, because the scan handle does not outlive the scan. */
     data class Ble(val radio: BleRadio) : LinkChoice
 
