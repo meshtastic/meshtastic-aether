@@ -19,9 +19,21 @@ class ControlsTest {
             Key.DirectionDown to KeyAction.VolumeDown,
             Key.M to KeyAction.ToggleMute,
             Key.D to KeyAction.Disconnect,
+            Key.DirectionCenter to KeyAction.ToggleOverlay,
+            Key.MediaPlayPause to KeyAction.ToggleMute,
         )
         for ((key, action) in table) assertEquals(action, keyActionFor(key), "key $key")
         for (other in listOf(Key.A, Key.Spacebar, Key.Enter, Key.DirectionLeft, Key.Zero)) assertNull(keyActionFor(other), "key $other")
+    }
+
+    // Regression: on a TV the first Back was spent on a HUD button's focus and the HUD stayed open until a second press.
+    @Test
+    fun `back closes an open overlay in one press and leaves a closed one to the system`() {
+        val c = Controls()
+        c.overlayOpen = true
+        assertTrue(c.back())
+        assertFalse(c.overlayOpen)
+        assertFalse(c.back())
     }
 
     // Regression: Esc must close the overlay before it leaves fullscreen, or one press does two things.

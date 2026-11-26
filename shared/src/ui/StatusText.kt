@@ -30,7 +30,11 @@ internal fun startFailureText(e: Throwable): String =
 private const val GENERIC_START_FAILURE = "Could not start this link"
 
 /** The first-seconds hint: a pointer, with the key where a keyboard is the usual input, else a tap. */
-internal fun controlsHint(hasKeyboard: Boolean): String = if (hasKeyboard) "Click or press H for controls" else "Tap for controls"
+internal fun controlsHint(hasKeyboard: Boolean, isTelevision: Boolean = false): String = when {
+    isTelevision -> "Press Select for controls"
+    hasKeyboard -> "Click or press H for controls"
+    else -> "Tap for controls"
+}
 
 /** How long the status line stays after its text changes, and again at the start of each period. */
 internal const val STATUS_SHOW_MILLIS = 10_000L

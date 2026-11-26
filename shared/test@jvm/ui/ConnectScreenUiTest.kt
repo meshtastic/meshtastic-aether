@@ -9,6 +9,8 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertHeightIsAtLeast
+import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.assertIsNotFocused
 import androidx.compose.ui.test.assertIsNotSelected
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.assertWidthIsAtLeast
@@ -36,12 +38,28 @@ class ConnectScreenUiTest {
         width: Int = 800,
         height: Int = 600,
         chosen: MutableList<LinkChoice> = mutableListOf(),
+        focusPrimary: Boolean = false,
     ) = setContent {
         AmbientTheme {
             Box(Modifier.size(width.dp, height.dp)) {
-                ConnectScreen(chosen::add, pending, failure, LinkChoice.Tcp("node.local", 4403), supportsTcp = true, bluetooth = false)
+                ConnectScreen(chosen::add, pending, failure, LinkChoice.Tcp("node.local", 4403), supportsTcp = true, bluetooth = false, focusPrimary = focusPrimary)
             }
         }
+    }
+
+    // A D-pad user has no pointer to land on the primary button, so a TV starts with it focused and Select connects.
+    @Test
+    fun `on a television the primary button starts focused and elsewhere nothing is`() = runComposeUiTest {
+        show(focusPrimary = true)
+        waitForIdle()
+        onNode(hasClickAction() and hasText("Start the demo")).assertIsFocused()
+    }
+
+    @Test
+    fun `without the television flag the primary button does not take focus`() = runComposeUiTest {
+        show()
+        waitForIdle()
+        onNode(hasClickAction() and hasText("Start the demo")).assertIsNotFocused()
     }
 
     // Regression: editing the host left the countdown running and it connected to the saved link.

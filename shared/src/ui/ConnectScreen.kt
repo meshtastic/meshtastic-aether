@@ -28,6 +28,10 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.withFrameNanos
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -126,7 +130,13 @@ internal fun ConnectScreen(
     modifier: Modifier = Modifier,
     supportsTcp: Boolean = remember { getPlatform().supportsTcp },
     bluetooth: Boolean = remember { bleSupported() },
+    focusPrimary: Boolean = false,
 ) {
+    val primaryFocus = remember { FocusRequester() }
+    LaunchedEffect(Unit) {
+        // The button sits under BoxWithConstraints, which composes during layout, so the first frames may not have it yet.
+        if (focusPrimary) repeat(FOCUS_TRIES) { if (runCatching { primaryFocus.requestFocus() }.getOrDefault(false)) return@LaunchedEffect else withFrameNanos { } }
+    }
     val kinds = availableKinds(supportsTcp, bluetooth)
     val pendingLink = pending?.link
     var host by remember { mutableStateOf(lastTcp?.host ?: DEFAULT_HOST) }
@@ -255,7 +265,7 @@ internal fun ConnectScreen(
         {
             Button(
                 { submit() },
-                Modifier.fillMaxWidth().heightIn(min = MinTouch),
+                Modifier.fillMaxWidth().heightIn(min = MinTouch).focusRequester(primaryFocus),
                 enabled = link != null,
             ) {
                 Text(
@@ -346,3 +356,5 @@ private fun PaneHeading(kind: LinkKind, direct: Boolean) {
     }
     Text(text, style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { heading() })
 }
+
+private const val FOCUS_TRIES = 10

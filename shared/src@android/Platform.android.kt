@@ -1,6 +1,8 @@
 package org.meshtastic.aether
 
+import android.app.UiModeManager
 import android.content.Context
+import android.content.res.Configuration
 import android.os.Build
 import org.meshtastic.aether.ui.KeyValueStore
 import org.meshtastic.aether.ui.MemoryStore
@@ -14,10 +16,15 @@ internal class AndroidPlatform : Platform {
     override val needsTapToStart: Boolean = false
     override val hasKeyboard: Boolean = false
     override val hasSystemBack: Boolean = true
+    override val isTelevision: Boolean = isTelevisionUiMode(AndroidAppContext.context)
     override val autoConnects: Boolean = true
 
     override fun resumeAudio() = Unit
 }
+
+/** The system reports a television UI mode on Android TV, Google TV and Fire TV. */
+private fun isTelevisionUiMode(context: Context?): Boolean =
+    (context?.getSystemService(Context.UI_MODE_SERVICE) as? UiModeManager)?.currentModeType == Configuration.UI_MODE_TYPE_TELEVISION
 
 internal actual fun getPlatform(): Platform = AndroidPlatform()
 

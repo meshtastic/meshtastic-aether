@@ -33,6 +33,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
@@ -238,7 +239,9 @@ internal fun AppRoot(
                     pending = pending,
                     failure = failure,
                     lastTcp = settings.link as? LinkChoice.Tcp,
-                    modifier = Modifier.windowInsetsPadding(WindowInsets.safeDrawing),
+                    modifier = Modifier.windowInsetsPadding(WindowInsets.safeDrawing)
+                        .then(if (platform.isTelevision) Modifier.padding(horizontal = TV_MARGIN, vertical = TV_MARGIN / 2) else Modifier),
+                    focusPrimary = platform.isTelevision,
                 )
 
                 else -> Running(
@@ -362,9 +365,11 @@ private fun Running(
             .pointerHoverIcon(cursorIcon)
             .focusRequester(focus)
             .focusable()
-            .onPreviewKeyEvent {
+            .onPreviewKeyEvent { event ->
                 lastInput = nowMillis()
-                false
+                if (event.key != Key.Back) return@onPreviewKeyEvent false
+                // Down is held back while the HUD is up so only the release acts; with the HUD closed Back is the system's.
+                if (event.type == KeyEventType.KeyUp) controls.back() else controls.overlayOpen
             }
             .onKeyEvent { event ->
                 val action = keyActionFor(event.key) ?: return@onKeyEvent false
@@ -388,7 +393,7 @@ private fun Running(
     ) {
         AmbientScene(engine, Modifier.fillMaxSize())
         StatusLine(engine.status.link, engine.status.error, Modifier.align(Alignment.TopCenter))
-        ControlsHint(platform.hasKeyboard, Modifier.align(Alignment.BottomCenter))
+        ControlsHint(platform.hasKeyboard, platform.isTelevision, Modifier.align(Alignment.BottomCenter))
         if (controls.overlayOpen) {
             StatusOverlay(
                 status = engine.status,
@@ -402,6 +407,7 @@ private fun Running(
                 onToggleFullscreen = onToggleFullscreen,
                 hasKeyboard = platform.hasKeyboard,
                 modifier = Modifier.align(Alignment.TopStart),
+                isTelevision = platform.isTelevision,
             )
         }
     }
@@ -446,9 +452,12 @@ private fun StatusLine(link: LinkState, error: String?, modifier: Modifier = Mod
 
 private class StringHolder(var text: String = "")
 
+/** Extra inset on a television, where the picture edge can be cropped by overscan. */
+private val TV_MARGIN = 48.dp
+
 /** "Click or press H for controls", shown for the first [HINT_SHOW_MS] and then faded out. */
 @Composable
-private fun ControlsHint(hasKeyboard: Boolean, modifier: Modifier = Modifier) {
+private fun ControlsHint(hasKeyboard: Boolean, isTelevision: Boolean, modifier: Modifier = Modifier) {
     var show by remember { mutableStateOf(true) }
     LaunchedEffect(Unit) {
         delay(HINT_SHOW_MS)
@@ -457,7 +466,7 @@ private fun ControlsHint(hasKeyboard: Boolean, modifier: Modifier = Modifier) {
     val alpha by animateFloatAsState(if (show) HINT_ALPHA else 0f, MaterialTheme.motionScheme.slowEffectsSpec())
     if (alpha > 0f) {
         Text(
-            controlsHint(hasKeyboard),
+            controlsHint(hasKeyboard, isTelevision),
             modifier = modifier.windowInsetsPadding(WindowInsets.safeDrawing).padding(bottom = ScreenGutter + 4.dp),
             style = MaterialTheme.typography.bodyLarge,
             color = LocalAmbientPalette.current.text.copy(alpha = alpha),

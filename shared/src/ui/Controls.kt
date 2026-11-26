@@ -21,14 +21,18 @@ internal enum class KeyAction(
     Disconnect,
 }
 
-/** H overlay, F fullscreen, Esc close or leave fullscreen, Up and Down volume, M mute, D disconnect; null for any other key. */
+/**
+ * H overlay, F fullscreen, Esc close or leave fullscreen, Up and Down volume, M mute, D disconnect; null for any other key.
+ * A TV remote has no letters: Select (D-pad center) opens the HUD and Play/Pause mutes. A focused HUD button
+ * consumes Select first, so the HUD's own buttons still work.
+ */
 internal fun keyActionFor(key: Key): KeyAction? = when (key) {
-    Key.H -> KeyAction.ToggleOverlay
+    Key.H, Key.DirectionCenter -> KeyAction.ToggleOverlay
     Key.F -> KeyAction.ToggleFullscreen
     Key.Escape -> KeyAction.Escape
     Key.DirectionUp -> KeyAction.VolumeUp
     Key.DirectionDown -> KeyAction.VolumeDown
-    Key.M -> KeyAction.ToggleMute
+    Key.M, Key.MediaPlayPause -> KeyAction.ToggleMute
     Key.D -> KeyAction.Disconnect
     else -> null
 }
@@ -127,6 +131,17 @@ internal class Controls(volume: Float = 1f) {
             overlayOpen = true
             Result(true, Effect.None)
         }
+    }
+
+    /**
+     * The Back key while the scene is up: closes the HUD and says so, or returns false when there is nothing to close
+     * and the system's own Back (leave the session) applies. A focused HUD control would otherwise spend the first
+     * Back on its focus.
+     */
+    fun back(): Boolean {
+        if (!overlayOpen) return false
+        overlayOpen = false
+        return true
     }
 
     private fun step(delta: Float): Result {

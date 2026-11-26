@@ -37,3 +37,10 @@ svg 192 "$icon" "$tmp/i192.png"
 opaque "$tmp/i192.png" "$web/icon-192.png"
 svg 512 "$icon" "$tmp/i512.png"
 opaque "$tmp/i512.png" "$web/icon-512.png"
+
+tv=$root/androidApp/res/drawable-xhdpi
+mkdir -p "$tv"
+svg 104 "$icon" "$tmp/tv-glyph.png"
+magick -size 320x180 xc:'#0F1017' "$tmp/tv-glyph.png" -gravity west -geometry +20+0 -composite \
+    -fill '#FFFFFF' -font DejaVu-Sans-Bold -pointsize 23 -gravity west -annotate +138-14 'Meshtastic' \
+    -fill '#67EA94' -annotate +138+16 'Aether' "PNG24:$tv/tv_banner.png"

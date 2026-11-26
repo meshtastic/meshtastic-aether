@@ -6,10 +6,13 @@ All notable changes to Meshtastic Aether are documented here. The format is base
 
 ### Fixed
 
+- On a TV the first Back press no longer gets spent on a HUD button's focus: one press closes the HUD.
+- The dither on the background no longer costs a full-screen offscreen pass on weak GPUs (about 3 fps on a Chromecast).
 - Orbs glide to their new places when a node joins or leaves, where they used to jump.
 
 ### Added
 
+- Android TV and Google TV: a leanback launcher entry with a banner, Select to open the HUD, Play/Pause to mute, a focused Connect button, a larger safe margin, and `adb` launch extras (`--es tcp host:port`, `--ez demo true`, `--ez replay true`, `--es look oled`, `--ez ask true`).
 - Desktop: set `AETHER_RECORD_AUDIO=out.wav` to record exactly what the app plays, for demo videos. A `out.wav.start` file holds the wall-clock start in epoch milliseconds.
 - A macOS menu bar with Disconnect, Enter Full Screen, Mute and Minimize that call the same actions as the keys.
 - Android Back closes the HUD, then returns to the connect screen.

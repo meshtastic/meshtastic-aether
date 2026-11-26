@@ -99,6 +99,7 @@ internal fun StatusOverlay(
     onToggleFullscreen: (() -> Unit)?,
     hasKeyboard: Boolean,
     modifier: Modifier = Modifier,
+    isTelevision: Boolean = false,
 ) {
     val motion = MaterialTheme.motionScheme
     val open = controls.overlayOpen
@@ -132,7 +133,7 @@ internal fun StatusOverlay(
             enter = fadeIn(motion.defaultEffectsSpec()),
             exit = fadeOut(motion.slowEffectsSpec()),
         ) {
-            StatusSurface(status, hasKeyboard)
+            StatusSurface(status, hasKeyboard, isTelevision)
         }
 
         AnimatedVisibility(
@@ -177,7 +178,7 @@ internal fun StatusOverlay(
 
 /** Link, nodes, key and section; its text is the same status the title screen words use. */
 @Composable
-private fun StatusSurface(status: EngineStatus, hasKeyboard: Boolean) {
+private fun StatusSurface(status: EngineStatus, hasKeyboard: Boolean, isTelevision: Boolean) {
     val colors = MaterialTheme.colorScheme
     Surface(
         Modifier.padding(ScreenGutter / 2).widthIn(max = MaxContentWidth),
@@ -196,7 +197,11 @@ private fun StatusSurface(status: EngineStatus, hasKeyboard: Boolean) {
             Text("Section: ${status.section}", style = MaterialTheme.typography.bodyLarge)
             status.error?.let { Text("Error: $it", style = MaterialTheme.typography.bodyLarge, color = colors.error) }
             Text(
-                if (hasKeyboard) SHORTCUTS else "Tap to hide",
+                when {
+                    isTelevision -> "Back to hide"
+                    hasKeyboard -> SHORTCUTS
+                    else -> "Tap to hide"
+                },
                 style = MaterialTheme.typography.bodyLarge,
                 color = colors.onSurfaceVariant,
             )

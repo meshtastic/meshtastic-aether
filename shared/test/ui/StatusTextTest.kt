@@ -43,6 +43,8 @@ class StatusTextTest {
         assertEquals("Click or press H for controls", controlsHint(true))
         assertEquals("Tap for controls", controlsHint(false))
         assertFalse("Tap" in controlsHint(true))
+        assertEquals("Press Select for controls", controlsHint(hasKeyboard = false, isTelevision = true))
+        assertEquals("Press Select for controls", controlsHint(hasKeyboard = true, isTelevision = true))
     }
 
     // Regression: the retry line sat at fixed pixels for as long as the link was down (burn-in).

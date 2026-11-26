@@ -29,6 +29,9 @@ import kotlin.math.sqrt
 
 private const val DITHER_SIZE = 96
 
+/** The dither's strength, baked into the tile: a per-draw alpha on the shader brush costs a full-screen offscreen pass on a weak GPU. */
+private const val DITHER_ALPHA = 0.03f
+
 /** Per-pixel noise tile; laid over the gradient at low alpha so projectors and OLEDs do not band. */
 private fun ditherTile(): ImageBitmap {
     val bmp = ImageBitmap(DITHER_SIZE, DITHER_SIZE)
@@ -38,7 +41,7 @@ private fun ditherTile(): ImageBitmap {
     for (y in 0 until DITHER_SIZE) {
         for (x in 0 until DITHER_SIZE) {
             val v = rng.nextDouble().toFloat()
-            paint.color = Color(v, v, v, 1f)
+            paint.color = Color(v, v, v, DITHER_ALPHA)
             canvas.drawRect(Rect(x.toFloat(), y.toFloat(), x + 1f, y + 1f), paint)
         }
     }
@@ -98,7 +101,7 @@ fun AmbientScene(engine: AmbientEngine, modifier: Modifier = Modifier) {
                 end = Offset(size.width * (0.5f - sway), size.height),
             ),
         )
-        drawRect(ditherBrush, alpha = 0.03f)
+        drawRect(ditherBrush)
 
         val cx = size.width / 2
         val cy = size.height / 2
