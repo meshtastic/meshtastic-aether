@@ -15,12 +15,53 @@ class FormTest {
         }
     }
 
+    private fun visible(l: Map<Voice, Float>) = maxOf(l.getValue(Voice.Drone), l.getValue(Voice.Pad), l.getValue(Voice.Shimmer))
+
     @Test
-    fun `some passage within four hours thins to a total level below a tenth`() {
+    fun `some passage within four hours thins to near silence`() {
         for (seed in 1L..10L) {
             val form = Form(seed)
-            val quietest = (0 until hours4 step 30).minOf { Form.total(form.levels(it.toDouble())) }
-            assertTrue(quietest < 0.1f, "seed $seed quietest $quietest")
+            val quietest = (0 until hours4 step 10).minOf { visible(form.levels(it.toDouble())) }
+            assertTrue(quietest < 0.01f, "seed $seed quietest $quietest")
+        }
+    }
+
+    @Test
+    fun `over twenty four hours the visible level stays above the floor except in passages of at most four minutes`() {
+        val floor = 0.1f
+        val dayEnd = 24 * 3600
+        for (seed in 1L..10L) {
+            val form = Form(seed)
+            var runStart = -1
+            var longest = 0
+            var passages = 0
+            for (t in 0..dayEnd step 5) {
+                val low = visible(form.levels(t.toDouble())) < floor
+                if (low && runStart < 0) runStart = t
+                if (!low && runStart >= 0) {
+                    longest = maxOf(longest, t - runStart)
+                    passages++
+                    runStart = -1
+                }
+            }
+            assertTrue(longest <= 240, "seed $seed has a quiet passage of $longest s")
+            assertTrue(passages >= 10, "seed $seed has only $passages quiet passages in a day")
+        }
+    }
+
+    @Test
+    fun `a thin section still sounds a drone and a pad at the peak of the arc`() {
+        for (seed in 1L..40L) {
+            val form = Form(seed)
+            val minutes = form.sectionMinutes(24.0 * 3600).size
+            assertTrue(minutes > 0)
+            for (t in 0 until 24 * 3600 step 60) {
+                val energy = form.energy(t.toDouble())
+                if (energy < 0.9) continue
+                val l = form.levels(t.toDouble())
+                assertTrue(l.getValue(Voice.Drone) > 0.5f, "seed $seed drone ${l.getValue(Voice.Drone)} at $t")
+                assertTrue(l.getValue(Voice.Pad) > 0.2f, "seed $seed pad ${l.getValue(Voice.Pad)} at $t")
+            }
         }
     }
 

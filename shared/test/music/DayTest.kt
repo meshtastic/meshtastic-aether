@@ -1,7 +1,7 @@
 package org.meshtastic.ambient.music
 
 import kotlin.math.abs
-import kotlin.math.ln
+import kotlin.math.pow
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -10,18 +10,13 @@ class DayTest {
     private fun at(day: Int, hour: Int, minute: Int = 0) = Day.at(LocalMoment(day, hour * 60 + minute, 0L))
 
     @Test
-    fun `Sunday midnight rolls into Monday by glide not by jump`() {
-        val sunday = Theory.rootHz(Theory.keySemitones(7).toDouble())
-        val monday = Theory.rootHz(Theory.keySemitones(1).toDouble())
-        assertEquals(sunday, at(7, 23, 50).rootHz, 1e-9)
-        assertEquals(monday, at(1, 0, 10).rootHz, 1e-9)
-        val minutes = (1430..1439).map { Day.at(LocalMoment(7, it, 0L)) } + (0..10).map { Day.at(LocalMoment(1, it, 0L)) }
-        val semitoneRatio = ln(2.0) / 12
-        minutes.zipWithNext().forEach { (a, b) ->
-            assertTrue(abs(ln(b.rootHz / a.rootHz)) < semitoneRatio, "one minute moved a whole semitone")
+    fun `the key is the weekday's for the whole day and steps at midnight`() {
+        val sunday = Theory.C3_HZ * 2.0.pow(5.0 / 12)
+        val monday = Theory.C3_HZ
+        for (minute in 0 until 1440) {
+            assertEquals(sunday, Day.at(LocalMoment(7, minute, 0L)).rootHz, 1e-9, "Sunday minute $minute")
+            assertEquals(monday, Day.at(LocalMoment(1, minute, 0L)).rootHz, 1e-9, "Monday minute $minute")
         }
-        val midnight = at(1, 0, 0).rootHz
-        assertTrue(midnight > minOf(sunday, monday) && midnight < maxOf(sunday, monday))
     }
 
     @Test

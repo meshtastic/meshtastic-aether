@@ -37,11 +37,29 @@ internal class SynthVoice(private val sampleRate: Int, seed: Int) {
     var send = 0f
         private set
 
-    /** Loudness estimate, lower when releasing: stealing takes the lowest. */
-    val stealScore: Float get() = env.level * amp * (if (env.isReleasing) 0.25f else 1f)
+    /** Loudness estimate used to rank sustaining ornaments for stealing. */
+    val loudness: Float get() = env.level * amp
+
+    val isAttacking: Boolean get() = env.isAttacking
+    val isReleasing: Boolean get() = env.isReleasing
+
+    /** True while the voice fades out ahead of a stolen note; it cannot be stolen again. */
+    val isFading: Boolean get() = fading
+
+    /** Drone and Pad are the sustained bed; stealing leaves them until nothing else is left. */
+    val isBed: Boolean get() = active && (kind == Voice.Drone || kind == Voice.Pad)
+
+    /** Frames since the current note started. */
+    var age = 0L
+        private set
+
+    /** Fundamental the voice was asked for; 0 while idle. */
+    val pitchHz: Double get() = if (active) freq else 0.0
 
     private var pending: NoteEvent? = null
     private var fading = false
+    private var fadeGain = 1f
+    private val fadeStep = (1.0 / (sampleRate * FADE_SECONDS)).toFloat()
     private var framesLeft = 0L
     private var freq = 440.0
     private var amp = 0f
@@ -50,14 +68,20 @@ internal class SynthVoice(private val sampleRate: Int, seed: Int) {
     private var burstLength = 1
     private var bellRatio = 3.5
 
-    /** Starts [note] on this voice, fading the current note out over one block first if it is still sounding. */
-    fun begin(note: NoteEvent) {
+    /**
+     * Starts [note] on this voice, fading the current note out over [FADE_SECONDS] first if it is still sounding.
+     * Returns false, leaving the voice untouched, when it is already fading toward another note.
+     */
+    fun begin(note: NoteEvent): Boolean {
+        if (fading) return false
         if (active) {
             pending = note
             fading = true
+            fadeGain = 1f
         } else {
             start(note)
         }
+        return true
     }
 
     private fun start(note: NoteEvent) {
@@ -112,7 +136,6 @@ internal class SynthVoice(private val sampleRate: Int, seed: Int) {
                 env.trigger(min(durSec * 0.35f, 8f), 0.1f, 1f, min(max(durSec * 0.4f, 0.2f), 10f))
                 sine1.reset(0.0)
                 sine2.reset(0.25)
-                sine3.reset(0.5)
                 saw1.reset(0.0)
             }
             Voice.Shimmer -> {
@@ -123,6 +146,7 @@ internal class SynthVoice(private val sampleRate: Int, seed: Int) {
             }
         }
         active = true
+        age = 0L
     }
 
     /** Seconds for the fundamental to fall 60 dB, from the note's length (longer notes ring longer). */
@@ -134,8 +158,6 @@ internal class SynthVoice(private val sampleRate: Int, seed: Int) {
             out.fill(0f, 0, n)
             return
         }
-        val fadeStep = if (fading) 1.0f / n else 0f
-        var fade = 1f
         val sr = sampleRate.toDouble()
         val f = freq / sr
         val tex = clamp(0.35f * brightness + 0.65f * bright, 0f, 1f)
@@ -148,6 +170,7 @@ internal class SynthVoice(private val sampleRate: Int, seed: Int) {
         } else if (kind == Voice.Drone) {
             filter.setFq(clamp((120.0 + 1800.0 * tex + freq) / sr, 0.001, 0.45).toFloat(), 0.7f)
         }
+        var fadeDone = false
         val fmIndex = (0.4f + 4.5f * tex) * (0.3f + 0.7f * amp)
 
         for (i in 0 until n) {
@@ -187,8 +210,7 @@ internal class SynthVoice(private val sampleRate: Int, seed: Int) {
                     s = filter.lowPass(raw) * e * 0.5f
                 }
                 Voice.Drone -> {
-                    val raw = sine1.next(f) * 0.6f + sine2.next(f * ratioUp) * 0.4f + sine3.next(f * 0.5) * 0.4f +
-                        saw1.saw(f) * 0.12f
+                    val raw = sine1.next(f) * 0.6f + sine2.next(f * ratioUp) * 0.4f + saw1.saw(f) * 0.12f
                     s = filter.lowPass(raw) * e * 0.6f
                 }
                 Voice.Shimmer -> {
@@ -198,19 +220,30 @@ internal class SynthVoice(private val sampleRate: Int, seed: Int) {
                 }
             }
             if (fading) {
-                fade -= fadeStep
-                s *= max(fade, 0f)
+                fadeGain -= fadeStep
+                if (fadeGain <= 0f) {
+                    fadeGain = 0f
+                    fadeDone = true
+                }
+                s *= fadeGain
             }
             out[i] = s * amp
         }
+        age += n
         if (fading) {
-            fading = false
-            active = false
-            val p = pending
-            pending = null
-            if (p != null) start(p)
+            if (fadeDone) {
+                fading = false
+                active = false
+                val p = pending
+                pending = null
+                if (p != null) start(p)
+            }
         } else if (env.isIdle) {
             active = false
         }
+    }
+
+    private companion object {
+        const val FADE_SECONDS = 0.005
     }
 }

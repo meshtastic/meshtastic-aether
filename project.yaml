@@ -3,5 +3,5 @@ modules:
   - desktopApp
   - iosApp
   - shared
-  - webApp
   - tools
+  - webApp

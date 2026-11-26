@@ -1,5 +1,6 @@
 package org.meshtastic.ambient.mesh
 
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -87,13 +88,13 @@ class SdkMeshSource internal constructor(
     }
 
     private suspend fun observeNodes(scope: kotlinx.coroutines.CoroutineScope, emit: suspend (MeshEvent) -> Unit) {
-        val watching = HashSet<Long>()
+        val watching = HashMap<Long, Job>()
         suspend fun seen(info: NodeInfo) {
             val num = info.num.toLong() and 0xFFFFFFFFL
             val first = seenThisSession.add(num)
             emit(info.toNodeSeen(first, nowMillis()))
-            if (watching.add(num)) {
-                scope.launch {
+            if (num !in watching) {
+                watching[num] = scope.launch {
                     feed.telemetry(num).collect { t ->
                         t.toEnvironment(num, nowMillis())?.let { emit(it) }
                         if (num == feed.ownNodeNum()) t.toVitals(nowMillis())?.let { emit(it) }
@@ -108,6 +109,7 @@ class SdkMeshSource internal constructor(
                 is NodeChange.Updated -> seen(change.node)
                 is NodeChange.Removed -> {
                     val num = change.nodeId.raw.toLong() and 0xFFFFFFFFL
+                    watching.remove(num)?.cancel()
                     emit(MeshEvent.NodeGone(num, nowMillis()))
                 }
                 else -> Unit

@@ -36,9 +36,10 @@ class Synth(val sampleRate: Int) : NoteSink, BlockRenderer {
 
     private var nowFrame = 0L
 
-    /** Notes dropped because a ring was full or no voice could be taken. */
-    var droppedNotes = 0
-        private set
+    private val dropped = AtomicInt(0)
+
+    /** Notes dropped because a ring was full or no voice could be taken; counted from both the producer and render threads. */
+    val droppedNotes: Int get() = dropped.load()
 
     // Smoothed texture and its targets.
     private var brightness = 0.5f
@@ -56,7 +57,7 @@ class Synth(val sampleRate: Int) : NoteSink, BlockRenderer {
     private var tNoise = noise
     private val tLayer = FloatArray(voiceKinds.size) { 1f }
 
-    private val limiter = SoftLimiter()
+    private val limiter = PeakLimiter(sampleRate)
     private val reverb = Reverb(sampleRate)
     private val ensemble = Ensemble(sampleRate)
     private val shifter = PitchShifter(sampleRate)
@@ -72,6 +73,7 @@ class Synth(val sampleRate: Int) : NoteSink, BlockRenderer {
     private val wetL = FloatArray(MAX_CHUNK)
     private val wetR = FloatArray(MAX_CHUNK)
     private val shifted = FloatArray(2)
+    private val limited = FloatArray(2)
 
     /** Largest absolute master value before the limiter, over everything rendered. */
     internal val peakBeforeLimiter: Float get() = limiter.peakIn
@@ -80,6 +82,12 @@ class Synth(val sampleRate: Int) : NoteSink, BlockRenderer {
     internal val nonFiniteHits: Int get() = limiter.nonFiniteHits
 
     internal val activeVoices: Int get() = voices.count { it.active }
+
+    /** Notes accepted from the rings that are still waiting for their frame. */
+    internal val pendingNoteTotal: Int get() = pendingNoteCount
+
+    /** Pitch of every sounding voice that is not on its way out, in voice order. */
+    internal fun soundingPitches(): DoubleArray = voices.filter { it.active && !it.isFading }.map { it.pitchHz }.toDoubleArray()
 
     internal fun reverbStats(): FloatArray = reverb.stateStats()
 
@@ -93,7 +101,7 @@ class Synth(val sampleRate: Int) : NoteSink, BlockRenderer {
         for (n in output.notes) {
             val tail = noteTail.load()
             if (tail - noteHead.load() >= NOTE_RING) {
-                droppedNotes++
+                countDrop()
                 continue
             }
             noteRing[tail and (NOTE_RING - 1)] = n
@@ -150,7 +158,7 @@ class Synth(val sampleRate: Int) : NoteSink, BlockRenderer {
 
     private fun insertNote(n: NoteEvent) {
         if (pendingNoteCount == PENDING_NOTES) {
-            droppedNotes++
+            countDrop()
             return
         }
         var i = pendingNoteCount
@@ -211,6 +219,13 @@ class Synth(val sampleRate: Int) : NoteSink, BlockRenderer {
         for (i in layer.indices) layer[i] = tLayer[i]
     }
 
+    private fun countDrop() {
+        while (true) {
+            val v = dropped.load()
+            if (dropped.compareAndSet(v, v + 1)) return
+        }
+    }
+
     private fun trigger(note: NoteEvent) {
         var pick = -1
         for (i in voices.indices) {
@@ -220,22 +235,25 @@ class Synth(val sampleRate: Int) : NoteSink, BlockRenderer {
             }
         }
         if (pick < 0) pick = pickVictim()
-        if (pick < 0) {
-            droppedNotes++
-            return
-        }
-        voices[pick].begin(note)
+        if (pick < 0 || !voices[pick].begin(note)) countDrop()
     }
 
-    /** Takes the quietest voice, preferring ones already releasing; a voice already fading out is not taken twice. */
+    /**
+     * Picks the voice to steal, or -1. Never a voice that is attacking or already fading. In order: the oldest releasing
+     * ornament, the quietest other ornament, then (only if no ornament qualifies) the same two choices among the Drone
+     * and Pad bed.
+     */
     private fun pickVictim(): Int {
         var best = -1
-        var bestScore = Float.MAX_VALUE
+        var bestTier = Int.MAX_VALUE
         for (i in voices.indices) {
-            val s = voices[i].stealScore
-            if (s < bestScore) {
-                bestScore = s
+            val v = voices[i]
+            if (v.isFading || v.isAttacking) continue
+            val tier = (if (v.isBed) 2 else 0) + (if (v.isReleasing) 0 else 1)
+            if (tier > bestTier) continue
+            if (tier < bestTier || (if (v.isReleasing) v.age > voices[best].age else v.loudness < voices[best].loudness)) {
                 best = i
+                bestTier = tier
             }
         }
         return best
@@ -303,9 +321,10 @@ class Synth(val sampleRate: Int) : NoteSink, BlockRenderer {
             shifter.process(wetL[i], wetR[i], shifted)
             val l = dryL[i] + padL[i] + wetL[i] * wet + shifted[0] * sh
             val r = dryR[i] + padR[i] + wetR[i] * wet + shifted[1] * sh
+            limiter.process(l * MASTER_GAIN, r * MASTER_GAIN, limited)
             val o = (offset + i) * 2
-            out[o] = limiter.process(l * MASTER_GAIN)
-            out[o + 1] = limiter.process(r * MASTER_GAIN)
+            out[o] = limited[0]
+            out[o + 1] = limited[1]
         }
     }
 
@@ -319,7 +338,7 @@ class Synth(val sampleRate: Int) : NoteSink, BlockRenderer {
         private const val SMOOTH_SECONDS = 2.0f
         private const val INPUT_GAIN = 0.3f
         private const val WET_GAIN = 1.0f
-        private const val MASTER_GAIN = 0.8f
+        private const val MASTER_GAIN = 0.25f
         private const val NOISE_LEVEL = 0.08f
     }
 }

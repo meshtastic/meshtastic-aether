@@ -20,5 +20,8 @@ interface Platform {
 
 expect fun getPlatform(): Platform
 
+/** The local UTC offset in minutes at [epochMillis], from the platform's own time API (the browser has no tz database to load). */
+expect fun localOffsetMinutes(epochMillis: Long): Int
+
 /** A TCP link to a node's port, or null where the target has none. */
 expect fun createTcpTransport(host: String, port: Int): RadioTransport?

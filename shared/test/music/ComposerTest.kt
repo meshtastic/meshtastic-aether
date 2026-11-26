@@ -4,6 +4,7 @@ import org.meshtastic.ambient.mesh.GeoPoint
 import org.meshtastic.ambient.mesh.LinkState
 import org.meshtastic.ambient.mesh.MeshEvent
 import org.meshtastic.ambient.mesh.PacketKind
+import kotlin.math.pow
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotEquals
@@ -95,18 +96,69 @@ class ComposerTest {
     }
 
     @Test
-    fun `two hundred packets in one second never exceed the slot cap and none start after the TTL`() {
+    fun `two hundred packets in one second never exceed the slot cap`() {
         val c = Composer(3L, sr)
         c.advance(0, lookahead, moment(0))
         for (i in 0 until 200) c.onEvent(heard(100L + i, atMs = t0 + i * 5L))
-        val run = c.drive(sr / 4L, 12)
-        val orn = run.notes.filter { it.voice in ornamentVoices }
+        val orn = c.drive(sr / 4L, 12).notes.filter { it.voice in ornamentVoices }
         assertTrue(orn.isNotEmpty())
         assertEquals(Ornaments.SLOT_CAP, maxSounding(orn), "cap should bind in this burst")
-        val lastArrival = sr * 995L / 1000
-        val latest = lastArrival + (Ornaments.TTL_SECONDS * sr).toLong()
-        assertTrue(orn.all { it.atFrame <= latest }, "a note started ${orn.maxOf { it.atFrame } - latest} frames past TTL")
-        assertTrue(orn.size < 200, "thinning should keep ${orn.size} of 200 under the packet count")
+    }
+
+    @Test
+    fun `each note starts within two seconds of its own packet's arrival and never queues for the next burst`() {
+        val c = Composer(3L, sr)
+        c.advance(0, lookahead, moment(0))
+        for (i in 0 until 200) c.onEvent(heard(100L + i, atMs = t0))
+        for (i in 0 until 200) c.onEvent(heard(400L + i, atMs = t0 + 3000))
+        val orn = c.drive(sr / 4L, 12).notes.filter { it.voice in ornamentVoices }
+        val first = orn.filter { it.atFrame < 5L * sr / 2 }
+        val second = orn.filter { it.atFrame >= 5L * sr / 2 }
+        assertTrue(first.isNotEmpty() && second.isNotEmpty())
+        assertTrue(first.all { it.atFrame <= 2L * sr }, "a first burst note started at ${first.maxOf { it.atFrame }}")
+        assertTrue(second.all { it.atFrame <= 5L * sr }, "a second burst note started at ${second.maxOf { it.atFrame }}")
+    }
+
+    /** Ornament notes of a steady stream, and how long after the call that scheduled it each one starts. */
+    private class Stream(val notes: MutableList<NoteEvent> = ArrayList(), val waits: MutableList<Double> = ArrayList())
+
+    private fun Composer.drivePackets(perSecond: Int, seconds: Int, kind: PacketKind, hops: Int? = null): Stream {
+        advance(0, lookahead, moment(0))
+        val notes = Stream()
+        val total = perSecond * seconds
+        var n = 0
+        var f = step
+        while (f < (seconds + 4L) * sr) {
+            val until = t0 + f * 1000 / sr
+            while (n < total && t0 + n * 1000L / perSecond <= until) {
+                onEvent(heard(1000L + n, kind, atMs = t0 + n * 1000L / perSecond, hops = hops))
+                n++
+            }
+            for (note in advance(f, lookahead, moment(f)).notes.filter { it.voice in ornamentVoices }) {
+                notes.notes += note
+                notes.waits += (note.atFrame - f) / sr.toDouble()
+            }
+            f += step
+        }
+        return notes
+    }
+
+    @Test
+    fun `a slow trickle of packets is not thinned and every packet sounds its note and one echo`() {
+        val stream = Composer(3L, sr).drivePackets(10, 10, PacketKind.Routing)
+        assertEquals(2 * 100, stream.notes.size)
+    }
+
+    @Test
+    fun `a sustained storm is thinned to a sample that keeps sounding every second rather than dropped past a limit`() {
+        val stream = Composer(3L, sr).drivePackets(100, 10, PacketKind.Routing, hops = 0)
+        val notes = stream.notes
+        for (second in 1..9) {
+            val inSecond = notes.count { it.atFrame in (second * sr.toLong())..((second + 1) * sr.toLong() - 1) }
+            assertTrue(inSecond >= 5, "second $second sounded $inSecond notes")
+        }
+        assertTrue(notes.size < 450, "nothing was thinned: ${notes.size} notes for 1000 packets")
+        assertTrue(stream.waits.average() < 1.0, "notes waited ${stream.waits.average()} s: the slot queue is pinned at its TTL")
     }
 
     @Test
@@ -120,12 +172,16 @@ class ComposerTest {
     }
 
     @Test
-    fun `a packet gets only the single hop echo count for unknown distance`() {
-        val c = Composer(7L, sr)
-        c.advance(0, lookahead, moment(0))
-        c.onEvent(heard(42L, atMs = t0))
-        val orn = c.drive(sr / 4L, 6).notes.filter { it.voice in ornamentVoices }
-        assertEquals(1 + Ornaments.echoesFor(null, false), orn.size)
+    fun `a packet at unknown distance gets one echo while a direct one gets none and a far one two`() {
+        fun notesFor(hops: Int?): Int {
+            val c = Composer(7L, sr)
+            c.advance(0, lookahead, moment(0))
+            c.onEvent(heard(42L, atMs = t0, hops = hops))
+            return c.drive(sr / 4L, 6).notes.count { it.voice in ornamentVoices }
+        }
+        assertEquals(1, notesFor(0))
+        assertEquals(2, notesFor(null))
+        assertEquals(3, notesFor(8))
     }
 
     @Test
@@ -163,18 +219,81 @@ class ComposerTest {
     }
 
     @Test
-    fun `a text message triggers a chord change and a bell phrase`() {
+    fun `a text message triggers a bell phrase now and a chord change once forty five seconds have passed`() {
         val c = Composer(11L, sr)
         val before = c.drive(0, 20)
         val chordBefore = c.chord
-        assertEquals(chordBefore, c.chord)
         c.onEvent(heard(9L, PacketKind.Text, atMs = t0 + 20_000))
-        val after = c.drive(20L * sr, 6)
-        assertNotEquals(chordBefore.rootStep, c.chord.rootStep)
-        assertTrue(after.notes.count { it.voice == Voice.Bell } >= 3)
+        val phrase = c.drive(20L * sr, 6)
+        assertEquals(chordBefore.rootStep, c.chord.rootStep, "the chord changed inside forty five seconds of the last one")
+        assertTrue(phrase.notes.count { it.voice == Voice.Bell } >= 3)
         assertTrue(before.notes.none { it.voice == Voice.Bell })
-        val textures = after.controls.filterIsInstance<ControlEvent.SetTexture>()
-        assertTrue(textures.isNotEmpty())
+        val after = c.drive(26L * sr, 44)
+        assertNotEquals(chordBefore.rootStep, c.chord.rootStep)
+        assertTrue(after.controls.filterIsInstance<ControlEvent.SetTexture>().isNotEmpty())
+    }
+
+    private fun Composer.driveTexts(seconds: Int, everyMs: Long, from: (Long) -> LocalMoment = ::moment): Pair<Run, List<Long>> {
+        val run = Run()
+        val changes = ArrayList<Long>()
+        var fed = t0
+        var f = 0L
+        while (f < seconds.toLong() * sr) {
+            val now = from(f).epochMillis
+            while (fed + everyMs <= now) {
+                fed += everyMs
+                onEvent(heard(9L, PacketKind.Text, atMs = fed))
+            }
+            val before = chord
+            val out = advance(f, lookahead, from(f))
+            run.notes += out.notes
+            run.controls += out.controls
+            if (chord !== before) changes += out.controls.minOf { it.atFrame }
+            f += step
+        }
+        return run to changes
+    }
+
+    private val bedVoices = setOf(Voice.Drone, Voice.Pad, Voice.Shimmer)
+
+    @Test
+    fun `thirty texts in one minute never leave more than one chord sounding at any frame`() {
+        val (run, changes) = Composer(21L, sr).driveTexts(60, 2000)
+        assertTrue(changes.size in 1..2, "chord changed at $changes")
+        val bed = run.notes.filter { it.voice in bedVoices }
+        assertEquals(1, maxSounding(bed.filter { it.voice == Voice.Drone }))
+        for (change in changes) {
+            val spanning = bed.filter { it.atFrame < change && it.atFrame + it.durationFrames > change }
+            assertTrue(spanning.isEmpty(), "${spanning.size} notes of the old chord sound past the change at $change")
+        }
+        assertTrue(maxSounding(bed) <= 9, "${maxSounding(bed)} bed notes sound at once")
+    }
+
+    @Test
+    fun `texts every second change the chord at most once in forty five seconds but still bend the piece`() {
+        val (_, changes) = Composer(22L, sr).driveTexts(300, 1000)
+        assertTrue(changes.size >= 4, "chord changed only at $changes")
+        changes.zipWithNext().forEach { (a, b) -> assertTrue(b - a >= 45L * sr, "changes ${(b - a) / sr.toDouble()} s apart") }
+    }
+
+    @Test
+    fun `the day's key changes once and only on a chord boundary with no glide`() {
+        val sunday = Theory.C3_HZ * 2.0.pow(5.0 / 12)
+        val monday = Theory.C3_HZ
+        fun at(f: Long): LocalMoment {
+            val minutes = 1435 + (f / sr) / 60
+            val epoch = t0 + f * 1000 / sr
+            return if (minutes < 1440) LocalMoment(7, minutes.toInt(), epoch) else LocalMoment(1, (minutes - 1440).toInt(), epoch)
+        }
+        val (run, changes) = Composer(23L, sr).driveTexts(15 * 60, Long.MAX_VALUE / 4, ::at)
+        val textures = run.controls.filterIsInstance<ControlEvent.SetTexture>()
+        assertTrue(textures.all { it.texture.rootHz == sunday || it.texture.rootHz == monday }, "a glide value reached the synth")
+        val firstMonday = textures.first { it.texture.rootHz == monday }.atFrame
+        assertTrue(textures.filter { it.atFrame >= firstMonday }.all { it.texture.rootHz == monday }, "the key went back")
+        assertTrue(firstMonday in 300L * sr..321L * sr, "key changed at ${firstMonday / sr.toDouble()} s, midnight is 300 s")
+        assertTrue(firstMonday in changes, "the key changed away from a chord change")
+        val spanning = run.notes.filter { it.voice in bedVoices && it.atFrame < firstMonday && it.atFrame + it.durationFrames > firstMonday }
+        assertTrue(spanning.isEmpty(), "${spanning.size} Sunday notes sound into Monday")
     }
 
     @Test
@@ -283,5 +402,74 @@ class ComposerTest {
             listOf(t.texture.brightness, t.texture.reverbSize, t.texture.reverbWet, t.texture.detune, t.texture.shimmer, t.texture.noise)
                 .forEach { assertTrue(!it.isNaN() && it in 0f..1f) }
         }
+    }
+
+    private fun firstTexture(c: Composer, epoch: Long): Texture =
+        c.advance(0, lookahead, LocalMoment(3, 600, epoch)).controls.filterIsInstance<ControlEvent.SetTexture>().first().texture
+
+    private fun temp(node: Long, c: Float, at: Long) = MeshEvent.Environment(node, c, null, null, null, null, at)
+
+    @Test
+    fun `weather is the median across nodes rather than the last node to report`() {
+        val three = Composer(24L, sr)
+        three.onEvent(temp(3L, 20f, t0))
+        three.onEvent(temp(1L, 10f, t0 + 1000))
+        three.onEvent(temp(2L, 30f, t0 + 2000))
+        val one = Composer(24L, sr)
+        one.onEvent(temp(9L, 10f, t0))
+        one.onEvent(temp(9L, 30f, t0 + 1000))
+        one.onEvent(temp(9L, 20f, t0 + 2000))
+        assertEquals(firstTexture(one, t0 + 3000).brightness, firstTexture(three, t0 + 3000).brightness, 1e-6f)
+    }
+
+    @Test
+    fun `a node that has not reported for an hour drops out of the weather median`() {
+        val min = 60_000L
+        val two = Composer(25L, sr)
+        two.onEvent(temp(1L, 30f, t0))
+        two.onEvent(temp(2L, 10f, t0 + 30 * min))
+        val one = Composer(25L, sr)
+        one.onEvent(temp(1L, 30f, t0))
+        one.onEvent(temp(1L, 10f, t0 + 30 * min))
+        assertEquals(firstTexture(one, t0 + 75 * min).brightness, firstTexture(two, t0 + 75 * min).brightness, 1e-6f)
+    }
+
+    @Test
+    fun `bed notes carry a fixed velocity and the form level reaches the synth only through the layer levels`() {
+        val run = Composer(2L, sr).drive(0, 3600)
+        assertEquals(1, run.notes.filter { it.voice == Voice.Drone }.map { it.velocity }.toSet().size)
+        assertTrue(run.notes.filter { it.voice == Voice.Shimmer }.map { it.velocity }.toSet().size <= 1)
+        assertTrue(run.notes.filter { it.voice == Voice.Pad }.map { it.velocity }.toSet().size <= 3)
+        val textures = run.controls.filterIsInstance<ControlEvent.SetTexture>().map { it.texture }
+        assertTrue(textures.all { it.layerLevels.keys == bedVoices }, "ornament voices must not be scaled by the form")
+        assertTrue(textures.map { it.layerLevels.getValue(Voice.Drone) }.toSet().size > 10)
+    }
+
+    @Test
+    fun `ornaments sound at their own velocity even where the form has gone silent`() {
+        val seed = 31L
+        val form = Form(seed)
+        val tRest = (0 until 3 * 3600 step 5).first { Form.visible(form.levels(it.toDouble())) < 0.001f }
+        val f = tRest * sr.toLong()
+        val c = Composer(seed, sr)
+        c.advance(f, lookahead, moment(f))
+        c.onEvent(heard(77L, atMs = moment(f).epochMillis))
+        val mallet = c.drive(f + step, 3).notes.first { it.voice == Voice.Mallet }
+        assertEquals(0.55f, mallet.velocity, 1e-6f)
+        assertTrue(c.drive(f + 4L * sr, 20).controls.filterIsInstance<ControlEvent.SetTexture>().all { it.texture.layerLevels.keys == bedVoices })
+    }
+
+    @Test
+    fun `the shimmer plays in the pad's register not two octaves above it`() {
+        val seed = (1L..30L).first { s -> Form(s).let { form -> (0 until 4 * 3600 step 10).any { form.levels(it.toDouble()).getValue(Voice.Shimmer) > 0.3f } } }
+        val form = Form(seed)
+        val tSec = (0 until 4 * 3600 step 10).first { form.levels(it.toDouble()).getValue(Voice.Shimmer) > 0.3f }
+        val f = tSec.toLong() * sr
+        val c = Composer(seed, sr)
+        val run = c.drive(f, 180)
+        val shimmer = run.notes.filter { it.voice == Voice.Shimmer }
+        assertTrue(shimmer.isNotEmpty(), "no shimmer note near second $tSec for seed $seed")
+        val padPitches = run.notes.filter { it.voice == Voice.Pad }.map { it.pitchHz }.toSet()
+        assertTrue(shimmer.all { it.pitchHz in padPitches }, "shimmer ${shimmer.map { it.pitchHz }} vs pads $padPitches")
     }
 }

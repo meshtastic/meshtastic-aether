@@ -15,6 +15,7 @@ internal class Adsr(private val sampleRate: Int) {
 
     val isIdle: Boolean get() = stage == IDLE
     val isReleasing: Boolean get() = stage == RELEASE
+    val isAttacking: Boolean get() = stage == ATTACK
 
     private fun coefFor(seconds: Float): Float =
         exp(ln(0.001) / (maxOf(seconds, 0.001f) * sampleRate)).toFloat()

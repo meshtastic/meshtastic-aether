@@ -22,9 +22,9 @@ class HarmonyTest {
     }
 
     @Test
-    fun `voices that do not hold move by at most two scale steps`() {
-        for (seed in 1L..5L) run(Mode.Dorian, seed, 300).zipWithNext().forEach { (a, b) ->
-            a.voicing.zip(b.voicing).forEach { (x, y) -> assertTrue(abs(x - y) <= 2, "moved $x to $y") }
+    fun `every voice either holds or moves exactly one scale step`() {
+        for (mode in Mode.entries) for (seed in 1L..5L) run(mode, seed, 300).zipWithNext().forEach { (a, b) ->
+            a.voicing.zip(b.voicing).forEach { (x, y) -> assertTrue(abs(x - y) <= 1, "${mode.name} seed $seed moved $x to $y") }
         }
     }
 
@@ -59,9 +59,9 @@ class HarmonyTest {
     }
 
     @Test
-    fun `voicing stays within three octaves over a long progression`() {
-        run(Mode.Aeolian, 9L, 2000).forEach { chord ->
-            chord.voiceSemitones.forEach { assertTrue(it in -5..40, "drifted to $it") }
+    fun `voicing stays within three octaves over a long progression in every mode`() {
+        for (mode in Mode.entries) for (seed in 1L..4L) run(mode, seed, 1500).forEach { chord ->
+            chord.voiceSemitones.forEach { assertTrue(it in -5..40, "${mode.name} seed $seed drifted to $it") }
         }
     }
 }

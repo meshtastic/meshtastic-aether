@@ -39,5 +39,5 @@ interface NoteSink {
     fun schedule(output: ComposerOutput)
 }
 
-/** Wall-clock view the composer needs; [dayOfWeek] is 1 = Monday .. 7 = Sunday. Built by the app from kotlinx-datetime. */
+/** Wall-clock view the composer needs; [dayOfWeek] is 1 = Monday .. 7 = Sunday. Built by the app from the platform UTC offset. */
 data class LocalMoment(val dayOfWeek: Int, val minuteOfDay: Int, val epochMillis: Long)

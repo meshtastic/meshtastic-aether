@@ -2,26 +2,33 @@
 
 package org.meshtastic.ambient.audio
 
-// UNVERIFIED: written against the AVFoundation Kotlin/Native bindings; not built on Linux.
+// UNVERIFIED: written against the AVFoundation Kotlin/Native bindings; not built or run (no Apple toolchain on Linux).
 
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.get
 import kotlinx.cinterop.set
+import kotlin.concurrent.AtomicInt
+import kotlin.concurrent.AtomicLong
 import kotlin.concurrent.Volatile
 import platform.AVFAudio.AVAudioEngine
+import platform.AVFAudio.AVAudioEngineConfigurationChangeNotification
 import platform.AVFAudio.AVAudioFormat
 import platform.AVFAudio.AVAudioPCMBuffer
 import platform.AVFAudio.AVAudioPlayerNode
 import platform.AVFAudio.AVAudioSession
 import platform.AVFAudio.AVAudioSessionCategoryPlayback
+import platform.AVFAudio.AVAudioSessionInterruptionNotification
+import platform.AVFAudio.AVAudioSessionRouteChangeNotification
 import platform.AVFAudio.setActive
+import platform.Foundation.NSNotificationCenter
 import platform.Foundation.NSThread
-import platform.darwin.DISPATCH_TIME_FOREVER
-import platform.darwin.dispatch_semaphore_create
-import platform.darwin.dispatch_semaphore_signal
-import platform.darwin.dispatch_semaphore_wait
+import platform.darwin.NSObject
+import kotlinx.cinterop.autoreleasepool
 
-private const val BUFFERS_IN_FLIGHT = 6L
+private const val BLOCK_FRAMES = 1024
+private const val BUFFERS_IN_FLIGHT = 12
+private const val POOL_SIZE = BUFFERS_IN_FLIGHT + 1
+private const val WAIT_SECONDS = 0.005
 
 actual fun createAudioSink(): AudioSink = IosAudioSink()
 
@@ -32,6 +39,9 @@ class IosAudioSink : AudioSink {
     override val sampleRate: Int = engine.outputNode.outputFormatForBus(0u).sampleRate.toInt().takeIf { it > 0 } ?: 48_000
 
     @Volatile private var running = false
+    private val outstanding = AtomicInt(0)
+    private val playedFrames = AtomicLong(0L)
+    private val observers = ArrayList<NSObject>()
 
     override fun start(renderer: BlockRenderer) {
         if (running) return
@@ -49,38 +59,74 @@ class IosAudioSink : AudioSink {
         engine.startAndReturnError(null)
         player.play()
         running = true
-        val pump = BlockPump(renderer)
-        val interleaved = FloatArray(PUMP_BLOCK_FRAMES * 2)
-        val slots = dispatch_semaphore_create(BUFFERS_IN_FLIGHT)
+        outstanding.value = 0
+        playedFrames.value = 0L
+        observeRestarts()
+
+        val pump = BlockPump(renderer, BLOCK_FRAMES)
+        val interleaved = FloatArray(BLOCK_FRAMES * 2)
+        // Pooled so the loop allocates nothing; one more than the in-flight cap so a free buffer always exists.
+        val pool = Array(POOL_SIZE) {
+            AVAudioPCMBuffer(pCMFormat = format, frameCapacity = BLOCK_FRAMES.toUInt()).also { it.frameLength = BLOCK_FRAMES.toUInt() }
+        }
         NSThread.detachNewThreadWithBlock {
+            NSThread.setThreadPriority(1.0)
+            var next = 0
             while (running) {
-                pump.renderFloat(interleaved, PUMP_BLOCK_FRAMES)
-                val buffer = AVAudioPCMBuffer(pCMFormat = format, frameCapacity = PUMP_BLOCK_FRAMES.toUInt())
-                buffer.frameLength = PUMP_BLOCK_FRAMES.toUInt()
-                val channels = buffer.floatChannelData!!
-                val left = channels[0]!!
-                val right = channels[1]!!
-                for (i in 0 until PUMP_BLOCK_FRAMES) {
-                    left[i] = interleaved[i * 2]
-                    right[i] = interleaved[i * 2 + 1]
+                if (outstanding.value >= BUFFERS_IN_FLIGHT) {
+                    NSThread.sleepForTimeInterval(WAIT_SECONDS)
+                    continue
                 }
-                dispatch_semaphore_wait(slots, DISPATCH_TIME_FOREVER)
-                if (!running) break
-                player.scheduleBuffer(buffer, completionHandler = { dispatch_semaphore_signal(slots) })
+                autoreleasepool {
+                    pump.renderFloat(interleaved, BLOCK_FRAMES)
+                    val buffer = pool[next]
+                    next = (next + 1) % POOL_SIZE
+                    val channels = buffer.floatChannelData!!
+                    val left = channels[0]!!
+                    val right = channels[1]!!
+                    for (i in 0 until BLOCK_FRAMES) {
+                        left[i] = interleaved[i * 2]
+                        right[i] = interleaved[i * 2 + 1]
+                    }
+                    outstanding.incrementAndGet()
+                    player.scheduleBuffer(buffer, completionHandler = {
+                        playedFrames.addAndGet(BLOCK_FRAMES.toLong())
+                        outstanding.decrementAndGet()
+                    })
+                }
             }
         }
     }
 
+    /** Interruptions (calls, Siri), route changes and engine reconfiguration stop the engine; bring it back. */
+    private fun observeRestarts() {
+        val center = NSNotificationCenter.defaultCenter
+        for (name in listOf(
+            AVAudioSessionInterruptionNotification,
+            AVAudioSessionRouteChangeNotification,
+            AVAudioEngineConfigurationChangeNotification,
+        )) {
+            observers += center.addObserverForName(name, null, null) { _ -> restartEngine() }
+        }
+    }
+
+    private fun restartEngine() {
+        if (!running) return
+        AVAudioSession.sharedInstance().setActive(true, null)
+        if (!engine.running) engine.startAndReturnError(null)
+        if (!player.playing) player.play()
+    }
+
     override fun stop() {
         running = false
+        val center = NSNotificationCenter.defaultCenter
+        observers.forEach { center.removeObserver(it) }
+        observers.clear()
         player.stop()
         engine.stop()
         engine.detachNode(player)
     }
 
-    override fun playbackFrame(): Long {
-        val nodeTime = player.lastRenderTime ?: return 0L
-        val playerTime = player.playerTimeForNodeTime(nodeTime) ?: return 0L
-        return playerTime.sampleTime.coerceAtLeast(0L)
-    }
+    /** Frames whose buffers have finished playing; a coarse 1024-frame clock, never ahead of the speaker. */
+    override fun playbackFrame(): Long = playedFrames.value
 }

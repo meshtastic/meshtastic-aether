@@ -8,7 +8,7 @@ apply:
 dependencies:
   - $compose.runtime
   - $compose.foundation
-  - $compose.material3
+  - $libs.compose.material3
   - $compose.ui
   - $compose.components.resources
   - $compose.preview
@@ -16,7 +16,6 @@ dependencies:
   - $libs.androidx.lifecycle.viewmodel.compose
   - $libs.androidx.lifecycle.runtime.compose
   - $libs.kotlinx.coroutines.core
-  - $libs.kotlinx.datetime
   - $libs.meshtastic.sdk.core
   - $libs.meshtastic.sdk.transport.websocket
 

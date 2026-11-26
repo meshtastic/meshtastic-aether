@@ -14,4 +14,9 @@ class WasmPlatform : Platform {
 
 actual fun getPlatform(): Platform = WasmPlatform()
 
+@JsFun("(ms) => -new Date(ms).getTimezoneOffset()")
+private external fun jsOffsetMinutes(ms: Double): Int
+
+actual fun localOffsetMinutes(epochMillis: Long): Int = jsOffsetMinutes(epochMillis.toDouble())
+
 actual fun createTcpTransport(host: String, port: Int): RadioTransport? = null

@@ -1,5 +1,6 @@
 package org.meshtastic.ambient.synth
 
+import kotlin.math.abs
 import kotlin.math.log10
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -99,5 +100,30 @@ class ReverbTest {
         assertEquals(0f, stats[1], "subnormal count")
         assertTrue(stats[0] > 1.0e-21f, "state peak ${stats[0]} means the floor is gone")
         assertTrue(stats[0] < 1.0e-9f, "state peak ${stats[0]} should be only the floor")
+    }
+
+    private fun firstChannelDifference(rate: Int): Int {
+        val reverb = Reverb(rate)
+        reverb.setRt60(0.1)
+        val n = 6000
+        val input = FloatArray(n)
+        input[0] = 1f
+        val l = FloatArray(n)
+        val r = FloatArray(n)
+        reverb.process(input, l, r, n)
+        for (i in 0 until n) if (abs(l[i] - r[i]) > 1.0e-9f) return i
+        return -1
+    }
+
+    // Regression: a different network (Freeverb combs or a swapped tank) still passes the tail-length tests. With the loop
+    // feedback effectively off the two channels share the four input allpasses and split only at the first tank allpass:
+    // 1653 samples at 32 kHz on the left against 1913 on the right in the Clouds source (reverb.h), one sample less
+    // because the tail read is len - 1 behind the write.
+    @Test
+    fun `left and right outputs part at the first Clouds tank allpass of 1653 samples`() {
+        val at32 = firstChannelDifference(32000)
+        assertTrue(at32 in 1650..1655, "channels first differ at $at32 samples")
+        val at48 = firstChannelDifference(48000)
+        assertTrue(at48 in 2477..2483, "at 48 kHz the channels first differ at $at48 samples, expected 1653 x 1.5")
     }
 }

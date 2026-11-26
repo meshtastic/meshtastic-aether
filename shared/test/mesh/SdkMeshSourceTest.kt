@@ -5,6 +5,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.currentTime
 import kotlinx.coroutines.test.runCurrent
@@ -176,5 +177,63 @@ class SdkMeshSourceTest {
         val seen = got.filterIsInstance<MeshEvent.NodeSeen>().single()
         assertEquals(null, seen.name)
         assertEquals(null, seen.position)
+    }
+
+    private fun nodeInfo(num: Int) = NodeInfo.Builder().also { it.num = num }.build()
+
+    private fun TestScope.connected(feed: FakeFeed, got: MutableList<MeshEvent>) {
+        val source = SdkMeshSource(feed, 0L) { currentTime }
+        backgroundScope.launch { source.events.collect { got += it } }
+        runCurrent()
+        feed.state.value = ConnectionState.Connected
+        runCurrent()
+    }
+
+    @Test
+    fun `a node announced twice has one telemetry collector so one reading is one event`() = runTest {
+        val feed = FakeFeed()
+        val got = ArrayList<MeshEvent>()
+        connected(feed, got)
+        feed.nodeFlow.emit(NodeChange.Added(nodeInfo(0x42)))
+        runCurrent()
+        feed.nodeFlow.emit(NodeChange.Updated(nodeInfo(0x42), emptySet()))
+        runCurrent()
+        feed.telemetryFlows.getValue(0x42L).emit(envTelemetry(20f, 50f, 1000f))
+        runCurrent()
+        assertEquals(1, got.filterIsInstance<MeshEvent.Environment>().size, got.toString())
+    }
+
+    @Test
+    fun `telemetry from a removed node no longer reaches the stream`() = runTest {
+        val feed = FakeFeed()
+        val got = ArrayList<MeshEvent>()
+        connected(feed, got)
+        feed.nodeFlow.emit(NodeChange.Added(nodeInfo(0x42)))
+        runCurrent()
+        val flow = feed.telemetryFlows.getValue(0x42L)
+        assertEquals(1, flow.subscriptionCount.value)
+        feed.nodeFlow.emit(NodeChange.Removed(NodeId(0x42)))
+        runCurrent()
+        assertEquals(0, flow.subscriptionCount.value, "collector still subscribed")
+        flow.emit(envTelemetry(20f, 50f, 1000f))
+        runCurrent()
+        assertTrue(got.none { it is MeshEvent.Environment }, got.toString())
+        assertTrue(got.any { it is MeshEvent.NodeGone })
+    }
+
+    @Test
+    fun `a node that returns after removal is watched again`() = runTest {
+        val feed = FakeFeed()
+        val got = ArrayList<MeshEvent>()
+        connected(feed, got)
+        feed.nodeFlow.emit(NodeChange.Added(nodeInfo(0x42)))
+        runCurrent()
+        feed.nodeFlow.emit(NodeChange.Removed(NodeId(0x42)))
+        runCurrent()
+        feed.nodeFlow.emit(NodeChange.Added(nodeInfo(0x42)))
+        runCurrent()
+        feed.telemetryFlows.getValue(0x42L).emit(envTelemetry(20f, 50f, 1000f))
+        runCurrent()
+        assertEquals(1, got.filterIsInstance<MeshEvent.Environment>().size, got.toString())
     }
 }

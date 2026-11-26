@@ -229,30 +229,123 @@ class DspBlocksTest {
         assertTrue(up > same * 5.0, "1 kHz $up 500 Hz $same")
     }
 
-    // Regression: a limiter that no longer bounds its output lets the sum of voices clip the converter.
+    // Regression: a limiter without look-ahead overshoots on a sudden onset and one that colors quiet signals distorts the bed.
     @Test
-    fun `the soft limiter is transparent when quiet and never exceeds one`() {
-        val lim = SoftLimiter()
-        assertEquals(0.5f, lim.process(0.5f))
-        assertEquals(-0.3f, lim.process(-0.3f))
-        var x = 0f
-        var last = 0f
-        while (x < 1000f) {
-            val y = lim.process(x)
-            assertTrue(y <= 1.0f && y >= last, "input $x gave $y after $last")
-            last = y
-            x += 0.37f
+    fun `the limiter passes a signal under its threshold unchanged apart from the delay`() {
+        val lim = PeakLimiter(rate)
+        val input = tone(220.0, rate / 2).map { it * 0.8f }
+        val pair = FloatArray(2)
+        val out = FloatArray(input.size)
+        for (i in input.indices) {
+            lim.process(input[i], -input[i], pair)
+            out[i] = pair[0]
+            assertEquals(-pair[0], pair[1], 0f)
         }
-        assertEquals(-lim.process(7f), lim.process(-7f))
-        assertTrue(lim.process(50f) > 0.99f)
+        val delay = lim.latencyFrames
+        assertTrue(delay in (rate / 1000)..(rate / 200), "latency $delay frames is not a few milliseconds")
+        for (i in delay until input.size) assertEquals(input[i - delay], out[i], 1.0e-6f, "frame $i")
     }
 
     @Test
-    fun `the soft limiter silences non-finite input and counts it`() {
-        val lim = SoftLimiter()
-        assertEquals(0f, lim.process(Float.NaN))
-        assertEquals(0f, lim.process(Float.POSITIVE_INFINITY))
+    fun `the limiter holds a sudden full scale onset and sustained overload at or under one`() {
+        val lim = PeakLimiter(rate)
+        val pair = FloatArray(2)
+        var peak = 0f
+        for (i in 0 until rate) {
+            val x = when {
+                i < 1000 -> 0.1f * sin(i * 0.05).toFloat()
+                i == 1000 -> 40f
+                i < 20000 -> 6f * sin(i * 0.05).toFloat()
+                else -> 0.2f * sin(i * 0.05).toFloat()
+            }
+            lim.process(x, 0.5f * x, pair)
+            peak = maxOf(peak, abs(pair[0]), abs(pair[1]))
+        }
+        assertTrue(peak <= 1.0f, "output peak $peak")
+        assertTrue(peak > 0.8f, "output peak $peak means the limiter squashed the signal instead of holding it")
+    }
+
+    // Regression: a hard gain step at the onset is itself a click; the gain must ramp down over the look-ahead.
+    @Test
+    fun `the limiter ramps its gain down instead of stepping at an onset`() {
+        val lim = PeakLimiter(rate)
+        val pair = FloatArray(2)
+        val input = FloatArray(4000) { if (it < 1000) 0.5f else 5f }
+        val gain = FloatArray(input.size)
+        for (i in input.indices) {
+            lim.process(input[i], 0f, pair)
+            gain[i] = if (i >= lim.latencyFrames) pair[0] / input[i - lim.latencyFrames] else 1f
+        }
+        var maxStep = 0f
+        for (i in 1 until gain.size) maxStep = maxOf(maxStep, abs(gain[i] - gain[i - 1]))
+        assertTrue(maxStep < 0.05f, "largest gain step per sample $maxStep")
+        assertTrue(gain[3999] > 0.17f && gain[3999] < 0.19f, "settled gain ${gain[3999]} where 0.9 / 5 = 0.18 is expected")
+    }
+
+    @Test
+    fun `the limiter returns to unity gain shortly after an overload`() {
+        val lim = PeakLimiter(rate)
+        val pair = FloatArray(2)
+        for (i in 0 until 4000) lim.process(if (i % 2 == 0) 8f else -8f, 0f, pair)
+        val quiet = tone(300.0, rate)
+        var last = 0f
+        var lastIn = 0f
+        for (i in 0 until rate) {
+            lim.process(quiet[i] * 0.3f, 0f, pair)
+            if (i == rate - 1) {
+                last = pair[0]
+                lastIn = quiet[i - lim.latencyFrames] * 0.3f
+            }
+        }
+        assertEquals(lastIn, last, 1.0e-3f)
+    }
+
+    @Test
+    fun `the limiter silences non-finite input and counts it`() {
+        val lim = PeakLimiter(rate)
+        val pair = FloatArray(2)
+        lim.process(Float.NaN, Float.POSITIVE_INFINITY, pair)
+        assertEquals(0f, pair[0])
+        assertEquals(0f, pair[1])
         assertEquals(2, lim.nonFiniteHits)
+    }
+
+    // Regression: a Float sweep phase drifts from the true position, the shifted pitch wanders over a long session.
+    @Test
+    fun `the pitch shifter sweep phase after two hundred thousand frames matches exact arithmetic`() {
+        val shifter = PitchShifter(44100)
+        shifter.ratio = 1.5f
+        val pair = FloatArray(2)
+        val frames = 200000
+        repeat(frames) { shifter.process(0f, 0f, pair) }
+        val window = 1024.0 * 44100 / 32000
+        val x = 0.5 * frames / window
+        val expected = 1.0 - (x - kotlin.math.floor(x))
+        assertEquals(expected, shifter.phase, 1.0e-7)
+    }
+
+    // Regression: a steal fade of one block clicks; it must last about five milliseconds whatever the block size.
+    @Test
+    fun `a stolen voice fades out over about five milliseconds`() {
+        val rate = 32000
+        val voice = SynthVoice(rate, 77)
+        val out = FloatArray(16)
+        voice.begin(note(org.meshtastic.ambient.music.Voice.Mallet, 0, 300.0, 1f, 20.0))
+        repeat(200) { voice.render(16, out, 0.5f, 0.2f) }
+        assertTrue(voice.begin(note(org.meshtastic.ambient.music.Voice.Bell, 0, 700.0, 1f, 2.0)))
+        assertTrue(voice.isFading)
+        assertTrue(!voice.begin(note(org.meshtastic.ambient.music.Voice.Bell, 0, 900.0, 1f, 2.0)), "a fading voice took a second note")
+        var frames = 0
+        var prev = Float.MAX_VALUE
+        while (voice.isFading) {
+            voice.render(16, out, 0.5f, 0.2f)
+            frames += 16
+            assertTrue(frames < rate / 10, "never finished fading")
+            prev = out[15]
+        }
+        assertTrue(frames in (rate * 4 / 1000)..(rate * 6 / 1000 + 16), "fade took $frames frames")
+        assertEquals(700.0, voice.pitchHz, 1.0e-9)
+        assertTrue(abs(prev) < 0.05f, "still loud at the end of the fade: $prev")
     }
 
     @Test

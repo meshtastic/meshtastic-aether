@@ -3,7 +3,6 @@ package org.meshtastic.ambient.visual
 import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.test.runTest
-import kotlinx.datetime.TimeZone
 import org.meshtastic.ambient.mesh.LinkState
 import org.meshtastic.ambient.mesh.MeshEvent
 import org.meshtastic.ambient.mesh.PacketKind
@@ -21,15 +20,26 @@ class SessionSupportTest {
     private fun millis(iso: String) = Instant.parse(iso).toEpochMilliseconds()
 
     @Test
-    fun `sunday 23 59 UTC is sunday in UTC and monday just after midnight in Berlin`() {
+    fun `sunday 23 59 UTC is sunday at offset zero and monday just after midnight at plus one hour`() {
         val ms = millis("2026-11-22T23:59:00Z")
-        val utc = localMoment(ms, TimeZone.UTC)
+        val utc = localMoment(ms, 0)
         assertEquals(7, utc.dayOfWeek)
         assertEquals(23 * 60 + 59, utc.minuteOfDay)
-        val berlin = localMoment(ms, TimeZone.of("Europe/Berlin"))
+        val berlin = localMoment(ms, 60)
         assertEquals(1, berlin.dayOfWeek)
         assertEquals(59, berlin.minuteOfDay)
         assertEquals(ms, berlin.epochMillis)
+    }
+
+    @Test
+    fun `the epoch is a thursday and a negative offset steps back across midnight`() {
+        val epoch = localMoment(0L, 0)
+        assertEquals(4, epoch.dayOfWeek)
+        assertEquals(0, epoch.minuteOfDay)
+        val monday = millis("2026-11-23T00:30:00Z")
+        val west = localMoment(monday, -60)
+        assertEquals(7, west.dayOfWeek)
+        assertEquals(23 * 60 + 30, west.minuteOfDay)
     }
 
     @Test

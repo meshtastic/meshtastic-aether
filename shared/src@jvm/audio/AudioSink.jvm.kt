@@ -39,9 +39,16 @@ class JvmAudioSink : AudioSink {
         thread = Thread({
             while (running) {
                 pump.renderPcm16Bytes(bytes, PUMP_BLOCK_FRAMES)
-                l.write(bytes, 0, bytes.size)
+                var offset = 0
+                while (running && offset < bytes.size) {
+                    offset = advanceWrite(offset, bytes.size, l.write(bytes, offset, bytes.size - offset))
+                    if (offset == WRITE_FAILED) {
+                        running = false
+                        return@Thread
+                    }
+                }
             }
-        }, "ambient-audio").apply { isDaemon = true; start() }
+        }, "ambient-audio").apply { isDaemon = true; priority = Thread.MAX_PRIORITY; start() }
     }
 
     @Synchronized

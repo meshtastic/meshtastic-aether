@@ -15,4 +15,6 @@ class AndroidPlatform : Platform {
 
 actual fun getPlatform(): Platform = AndroidPlatform()
 
+actual fun localOffsetMinutes(epochMillis: Long): Int = java.util.TimeZone.getDefault().getOffset(epochMillis) / 60_000
+
 actual fun createTcpTransport(host: String, port: Int): RadioTransport? = TcpTransport(host, port)

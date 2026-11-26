@@ -41,41 +41,37 @@ private external fun setIntervalJs(f: () -> Unit, ms: Int): Int
 @JsFun("(id) => clearInterval(id)")
 private external fun clearIntervalJs(id: Int)
 
-private var current: WebAudioSink? = null
+/** The context made inside the first gesture; the sink adopts it so audio is never created outside one. */
+private var gestureContext: AudioContext? = null
 
 /** Browsers keep the context suspended until a gesture; call this from a click or key handler. */
 fun resumeAudioFromGesture() {
-    current?.resumeFromGesture()
+    val ctx = gestureContext ?: newAudioContext().also { gestureContext = it }
+    ctx.resume()
 }
 
-actual fun createAudioSink(): AudioSink = WebAudioSink().also { current = it }
+actual fun createAudioSink(): AudioSink = WebAudioSink(gestureContext?.also { gestureContext = null } ?: newAudioContext())
 
-class WebAudioSink : AudioSink {
-    private val ctx: AudioContext = newAudioContext()
+class WebAudioSink internal constructor(private val ctx: AudioContext) : AudioSink {
     override val sampleRate: Int = ctx.sampleRate.toInt()
 
     private var timer = -1
     private var pump: BlockPump? = null
     private val floats = FloatArray(CHUNK_FRAMES * 2)
-    private var nextStart = 0.0
-    private var originTime = 0.0
-
-    fun resumeFromGesture() {
-        ctx.resume()
-    }
+    private val scheduler = ChunkScheduler(sampleRate, CHUNK_FRAMES)
 
     override fun start(renderer: BlockRenderer) {
         if (timer >= 0) return
+        ctx.resume()
         pump = BlockPump(renderer)
-        originTime = ctx.currentTime + 0.05
-        nextStart = originTime
+        scheduler.begin(ctx.currentTime)
         timer = setIntervalJs({ fill() }, TICK_MS)
         fill()
     }
 
     private fun fill() {
         val p = pump ?: return
-        while (nextStart < ctx.currentTime + AHEAD_SECONDS) {
+        while (scheduler.needsChunk(ctx.currentTime, AHEAD_SECONDS)) {
             p.renderFloat(floats, CHUNK_FRAMES)
             val buf = ctx.createBuffer(2, CHUNK_FRAMES, sampleRate.toDouble())
             val left = buf.getChannelData(0)
@@ -87,8 +83,7 @@ class WebAudioSink : AudioSink {
             val src = ctx.createBufferSource()
             src.buffer = buf
             src.connect(ctx.destination)
-            src.start(nextStart)
-            nextStart += CHUNK_FRAMES.toDouble() / sampleRate
+            src.start(scheduler.claim(ctx.currentTime))
         }
     }
 
@@ -97,11 +92,7 @@ class WebAudioSink : AudioSink {
         timer = -1
         pump = null
         ctx.close()
-        if (current === this) current = null
     }
 
-    override fun playbackFrame(): Long {
-        val played = ((ctx.currentTime - originTime) * sampleRate).toLong()
-        return if (timer < 0 || played < 0) 0L else played
-    }
+    override fun playbackFrame(): Long = if (timer < 0) 0L else scheduler.playedFrames(ctx.currentTime)
 }

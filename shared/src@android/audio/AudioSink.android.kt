@@ -4,6 +4,7 @@ import android.media.AudioAttributes
 import android.media.AudioFormat
 import android.media.AudioManager
 import android.media.AudioTrack
+import android.os.Process
 
 private const val LOOKAHEAD_MS = 250
 
@@ -45,9 +46,18 @@ class AndroidAudioSink : AudioSink {
         val pump = BlockPump(renderer)
         val buf = FloatArray(PUMP_BLOCK_FRAMES * 2)
         thread = Thread({
+            Process.setThreadPriority(Process.THREAD_PRIORITY_URGENT_AUDIO)
             while (running) {
                 pump.renderFloat(buf, PUMP_BLOCK_FRAMES)
-                t.write(buf, 0, buf.size, AudioTrack.WRITE_BLOCKING)
+                var offset = 0
+                while (running && offset < buf.size) {
+                    // A negative result is an AudioTrack error (dead object, invalid operation): stop the pump.
+                    offset = advanceWrite(offset, buf.size, t.write(buf, offset, buf.size - offset, AudioTrack.WRITE_BLOCKING))
+                    if (offset == WRITE_FAILED) {
+                        running = false
+                        return@Thread
+                    }
+                }
             }
         }, "ambient-audio").apply { isDaemon = true; start() }
     }

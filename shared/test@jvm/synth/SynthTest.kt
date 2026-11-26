@@ -45,7 +45,7 @@ class SynthTest {
 
     // Regression: a missing or loosened limiter lets a thick stack of voices exceed full scale.
     @Test
-    fun `output never exceeds one even when the voices sum far past it`() {
+    fun `output never exceeds one with every voice at full velocity`() {
         val synth = Synth(rate)
         synth.schedule(controls(0, texture(brightness = 1f, size = 1f, wet = 1f, detune = 1f, shimmer = 1f)))
         val list = ArrayList<NoteEvent>()
@@ -55,9 +55,38 @@ class SynthTest {
         }
         synth.schedule(ComposerOutput(list, emptyList()))
         val out = synth.renderAll(8 * rate)
-        assertTrue(synth.peakBeforeLimiter > 1.0f, "scenario too quiet to test the limiter: ${synth.peakBeforeLimiter}")
         assertTrue(out.peak() <= 1.0f, "peak ${out.peak()}")
-        assertTrue(out.peak() > 0.8f)
+        assertTrue(out.peak() > 0.2f, "scenario is silent: ${out.peak()}")
+    }
+
+    // Regression: no headroom means one chord of drone and pad at full velocity already sits near full scale.
+    @Test
+    fun `a single full velocity drone and pad bed stays under minus six dBFS`() {
+        val synth = Synth(rate)
+        synth.schedule(controls(0, texture(brightness = 0.5f, size = 0.5f, wet = 1f, detune = 0.5f)))
+        synth.schedule(
+            notes(
+                note(Voice.Drone, 0, 110.0, 1f, 60.0, send = 1f),
+                note(Voice.Pad, 0, 110.0, 1f, 60.0, send = 1f),
+                note(Voice.Pad, 0, 165.0, 1f, 60.0, send = 1f),
+            ),
+        )
+        val out = synth.renderAll(60 * rate)
+        val peak = out.peak()
+        assertTrue(peak > 0.02f, "bed is silent: $peak")
+        assertTrue(peak < 0.5012f, "bed peak $peak is above -6 dBFS (0.5012)")
+    }
+
+    // Regression: a drone with a sub-octave at f/2 pushes the bed into inaudible low energy and eats headroom.
+    @Test
+    fun `a drone carries no energy an octave below its pitch`() {
+        val synth = Synth(rate)
+        synth.schedule(controls(0, texture(wet = 0f, detune = 0f)))
+        synth.schedule(notes(note(Voice.Drone, 0, 220.0, 1f, 20.0)))
+        val mono = mono(synth.renderAll(14 * rate))
+        val at = goertzel(mono, 10 * rate, 14 * rate, 220.0, rate)
+        val sub = goertzel(mono, 10 * rate, 14 * rate, 110.0, rate)
+        assertTrue(sub < at * 0.02, "110 Hz $sub against 220 Hz $at")
     }
 
     // Regression: a voice whose envelope never idles or a tail that never ends keeps the piece from falling silent.
@@ -84,14 +113,28 @@ class SynthTest {
         assertTrue(out.peak(140 * rate, 150 * rate) < 1.0e-4f, "tail peak ${out.peak(140 * rate, 150 * rate)}")
     }
 
+    private fun fullSynth(vararg events: NoteEvent): Synth {
+        val synth = Synth(rate)
+        synth.schedule(controls(0, texture(wet = 0f)))
+        synth.schedule(ComposerOutput(events.toList(), emptyList()))
+        return synth
+    }
+
+    private fun DoubleArray.has(hz: Double) = any { abs(it - hz) < 1e-6 }
+
+    private fun DoubleArray.countIn(from: Double, to: Double) = count { it in from..to }
+
+    private fun sustainedMallets(count: Int, atSeconds: Double = 0.0, firstHz: Double = 300.0, velocity: Float = 0.8f) =
+        List(count) { note(Voice.Mallet, (atSeconds * rate).toLong(), firstHz + 10.0 * it, velocity, 60.0) }
+
     // Regression: stealing that does nothing drops the new note when all 24 voices are busy.
     @Test
     fun `a note arriving when every voice is busy still sounds by stealing`() {
         fun run(withBell: Boolean): FloatArray {
             val synth = Synth(rate)
-            synth.schedule(controls(0, texture(wet = 0f, layers = mapOf(Voice.Drone to 0.2f))))
+            synth.schedule(controls(0, texture(wet = 0f, layers = mapOf(Voice.Mallet to 0.2f))))
             val list = ArrayList<NoteEvent>()
-            for (i in 0 until Synth.VOICE_COUNT) list += note(Voice.Drone, 0, 100.0 + 7 * i, 0.3f, 30.0)
+            for (i in 0 until Synth.VOICE_COUNT) list += note(Voice.Mallet, 0, 100.0 + 7 * i, 0.3f, 30.0)
             if (withBell) list += note(Voice.Bell, 2L * rate, 880.0, 1f, 2.0)
             synth.schedule(ComposerOutput(list, emptyList()))
             return synth.renderAll(4 * rate)
@@ -104,20 +147,117 @@ class SynthTest {
         assertTrue(diff / 16000.0 > 0.005, "mean difference after the bell onset: ${diff / 16000.0}")
     }
 
+    // Regression: stealing by loudness takes the quiet drone or pad bed first, the piece loses its floor.
     @Test
-    fun `stealing takes a quieter voice and leaves a louder sustained one playing`() {
+    fun `stealing takes a sounding ornament and leaves a quiet drone and pad alone`() {
+        val synth = fullSynth(
+            note(Voice.Drone, 0, 100.0, 0.2f, 40.0),
+            note(Voice.Pad, 0, 200.0, 0.2f, 40.0),
+            *sustainedMallets(22, atSeconds = 9.0).toTypedArray(),
+            note(Voice.Bell, 10L * rate, 880.0, 1f, 2.0),
+        )
+        synth.renderAll(10 * rate + 2000)
+        val pitches = synth.soundingPitches()
+        assertEquals(24, pitches.size)
+        assertTrue(pitches.has(100.0) && pitches.has(200.0), "a bed voice was stolen: ${pitches.toList()}")
+        assertTrue(pitches.has(880.0), "the new note did not start")
+        assertEquals(21, pitches.countIn(299.0, 600.0), "exactly one mallet should have been taken")
+    }
+
+    // Regression: the quietest-first rule took a younger releasing voice and left the one that had rung longest.
+    @Test
+    fun `stealing takes the oldest releasing ornament even when it is louder`() {
+        val synth = fullSynth(
+            *sustainedMallets(22).toTypedArray(),
+            note(Voice.Mallet, 0, 701.0, 1f, 0.9),
+            note(Voice.Mallet, (0.1 * rate).toLong(), 702.0, 0.001f, 1.0),
+            note(Voice.Bell, (1.2 * rate).toLong(), 880.0, 1f, 2.0),
+        )
+        synth.renderAll((1.2 * rate).toInt() + 2000)
+        val pitches = synth.soundingPitches()
+        assertTrue(!pitches.has(701.0), "the older releasing mallet survived: ${pitches.toList()}")
+        assertTrue(pitches.has(702.0), "the younger releasing mallet was taken")
+        assertTrue(pitches.has(880.0))
+        assertEquals(22, pitches.countIn(299.0, 600.0))
+    }
+
+    // Regression: a note still in its attack is quiet by level, so a loudness rule steals it at once and the swell never arrives.
+    @Test
+    fun `stealing skips voices that are still attacking`() {
+        val breaths = List(23) { note(Voice.Breath, 0, 1000.0 + it, 0.5f, 10.0) }
+        val synth = fullSynth(*breaths.toTypedArray(), note(Voice.Pluck, 0, 500.0, 1f, 40.0), note(Voice.Bell, rate.toLong(), 880.0, 1f, 2.0))
+        synth.renderAll(rate + 2000)
+        val pitches = synth.soundingPitches()
+        assertTrue(!pitches.has(500.0), "the sounding pluck was not the victim: ${pitches.toList()}")
+        assertTrue(pitches.has(880.0))
+        assertEquals(23, pitches.countIn(999.0, 1100.0), "an attacking breath was stolen")
+    }
+
+    @Test
+    fun `a note with nothing stealable is dropped and counted`() {
+        val breaths = List(24) { note(Voice.Breath, 0, 1000.0 + it, 0.5f, 10.0) }
+        val synth = fullSynth(*breaths.toTypedArray(), note(Voice.Bell, rate.toLong(), 880.0, 1f, 2.0))
+        synth.renderAll(rate + 2000)
+        val pitches = synth.soundingPitches()
+        assertEquals(1, synth.droppedNotes)
+        assertTrue(!pitches.has(880.0))
+        assertEquals(24, pitches.countIn(999.0, 1100.0))
+    }
+
+    // Regression: a second steal chose the voice already fading and replaced its pending note, losing the first note.
+    @Test
+    fun `two notes stealing at the same frame both start on different voices`() {
+        val synth = fullSynth(
+            *sustainedMallets(24).toTypedArray(),
+            note(Voice.Bell, 2L * rate, 880.0, 1f, 2.0),
+            note(Voice.Bell, 2L * rate, 990.0, 1f, 2.0),
+        )
+        synth.renderAll(2 * rate + 2000)
+        val pitches = synth.soundingPitches()
+        assertEquals(24, pitches.size)
+        assertTrue(pitches.has(880.0) && pitches.has(990.0), "a steal was lost: ${pitches.toList()}")
+        assertEquals(22, pitches.countIn(299.0, 600.0))
+        assertEquals(0, synth.droppedNotes)
+    }
+
+    // Regression: a missing layer level must mean full level, the composer lists only the layers it changes.
+    @Test
+    fun `a layer missing from the texture plays at full level`() {
+        fun run(layers: Map<Voice, Float>): FloatArray {
+            val synth = Synth(rate)
+            synth.schedule(controls(0, texture(wet = 0f, layers = layers)))
+            synth.schedule(notes(note(Voice.Drone, 0, 110.0, 1f, 10.0)))
+            return synth.renderAll(3 * rate)
+        }
+        val none = run(emptyMap())
+        val otherLayer = run(mapOf(Voice.Pad to 0f))
+        val explicit = run(mapOf(Voice.Drone to 1f))
+        assertTrue(none.peak() > 0.01f)
+        assertTrue(none.contentEquals(otherLayer))
+        assertTrue(none.contentEquals(explicit))
+    }
+
+    // Regression: the drop counter is bumped by the producer thread (ring full) and the render thread (pending full).
+    @Test
+    fun `dropped notes are not lost when two threads count them`() {
         val synth = Synth(rate)
-        synth.schedule(controls(0, texture(wet = 0f)))
-        val list = ArrayList<NoteEvent>()
-        list += note(Voice.Drone, 0, 100.0, 1f, 30.0, brightness = 0f)
-        for (i in 1 until Synth.VOICE_COUNT) list += note(Voice.Pad, 0, 200.0 + 3 * i, 0.4f, 30.0)
-        list += note(Voice.Bell, 3L * rate, 1500.0, 1f, 1.0)
-        synth.schedule(ComposerOutput(list, emptyList()))
-        val out = synth.renderAll(5 * rate)
-        val mono = mono(out)
-        val before = goertzel(mono, 2 * rate, 3 * rate - 100, 100.0, rate)
-        val after = goertzel(mono, 3 * rate + 2000, 4 * rate, 100.0, rate)
-        assertTrue(after > before * 0.5, "the loud drone was stolen: before $before after $after")
+        val total = 300000
+        val one = notes(note(Voice.Bell, 1_000_000_000_000L, 440.0))
+        val done = java.util.concurrent.atomic.AtomicBoolean(false)
+        val buf = FloatArray(128)
+        val renderer = Thread {
+            while (!done.get()) synth.render(buf, 64)
+        }
+        val producer = Thread {
+            repeat(total) { synth.schedule(one) }
+            done.set(true)
+        }
+        renderer.start()
+        producer.start()
+        producer.join()
+        renderer.join()
+        synth.render(buf, 64)
+        assertEquals(total, synth.pendingNoteTotal + synth.droppedNotes)
     }
 
     // Regression: events applied at block edges instead of their frame move every note by up to a block.

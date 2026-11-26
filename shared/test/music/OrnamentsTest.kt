@@ -77,6 +77,14 @@ class OrnamentsTest {
     }
 
     @Test
+    fun `echo repeats grow with distance from none when direct to two at the farthest`() {
+        assertEquals(0, Ornaments.echoesFor(0, false))
+        assertEquals(1, Ornaments.echoesFor(null, false))
+        assertEquals(2, Ornaments.echoesFor(8, false))
+        assertEquals(2, Ornaments.echoesFor(40, false))
+    }
+
+    @Test
     fun `unknown SNR gives the middle velocity and the range is limited`() {
         val lo = Ornaments.velocityFor(-20f)
         val hi = Ornaments.velocityFor(10f)

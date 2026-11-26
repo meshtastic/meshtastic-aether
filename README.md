@@ -18,7 +18,7 @@ iOS builds only on a Mac: `./kotlin build -m iosApp`.
 ## Listen without a radio
 
 ```sh
-./kotlin run -m tools -- render-wav sparse 1 /tmp/sparse.wav   # silent | sparse | busy, hours, output
+./kotlin run -m tools -- sparse 1 /tmp/sparse.wav   # silent | sparse | busy, hours, output
 ./kotlin run -m tools -- analyze /tmp/sparse.wav               # per-window peak, RMS, clipping, centroid
 ```
 
