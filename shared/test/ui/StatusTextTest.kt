@@ -44,4 +44,26 @@ class StatusTextTest {
         assertEquals("Tap for controls", controlsHint(false))
         assertFalse("Tap" in controlsHint(true))
     }
+
+    // Regression: the retry line sat at fixed pixels for as long as the link was down (burn-in).
+    @Test
+    fun `the status line shows 10 s after a change then 10 s each minute`() {
+        assertTrue(statusLineVisible(0))
+        assertTrue(statusLineVisible(9_999))
+        assertFalse(statusLineVisible(10_000))
+        assertFalse(statusLineVisible(59_999))
+        assertTrue(statusLineVisible(60_000))
+        assertTrue(statusLineVisible(69_999))
+        assertFalse(statusLineVisible(70_000))
+        assertTrue(statusLineVisible(600_000))
+        assertFalse(statusLineVisible(-1))
+        val visibleSeconds = (0 until 600).count { statusLineVisible(it * 1_000L) }
+        assertEquals(100, visibleSeconds)
+    }
+
+    @Test
+    fun `the status line moves each period and returns after four`() {
+        assertEquals(listOf(0, 1, 2, 3, 0), (0..4).map { statusLineShiftSteps(it * 60_000L + 5_000) })
+        assertEquals(statusLineShiftSteps(0), statusLineShiftSteps(59_999))
+    }
 }

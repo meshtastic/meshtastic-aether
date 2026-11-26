@@ -1,8 +1,12 @@
+@file:OptIn(ExperimentalMaterial3ExpressiveApi::class)
+
 package org.meshtastic.aether.theme
 
 import androidx.compose.material3.ColorScheme
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.LocalContentColor
-import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.MaterialExpressiveTheme
+import androidx.compose.material3.MotionScheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -134,12 +138,12 @@ private val OLED_NIGHT = AmbientPalette(
 
 val LocalAmbientPalette = staticCompositionLocalOf { PaletteChoice.Standard.palette }
 
-/** Material theme with the standards' dark scheme, and the chosen [AmbientPalette] for the scene. */
+/** Expressive Material theme with the standards' dark scheme and the calm standard motion scheme, and the chosen [AmbientPalette] for the scene. */
 @Composable
 fun AmbientTheme(choice: PaletteChoice = PaletteChoice.Standard, content: @Composable () -> Unit) {
     val scheme = ambientColorScheme()
     CompositionLocalProvider(LocalAmbientPalette provides choice.palette) {
-        MaterialTheme(colorScheme = scheme) {
+        MaterialExpressiveTheme(colorScheme = scheme, motionScheme = MotionScheme.standard()) {
             // Plain Text outside a Surface would take the default content color, black, and vanish on the dark field.
             CompositionLocalProvider(LocalContentColor provides scheme.onSurface, content = content)
         }

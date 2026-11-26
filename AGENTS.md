@@ -43,14 +43,25 @@ This project uses the [Kotlin Toolchain](https://kotlin-toolchain.org/) (a dedic
 - `shared/src/music`: the pure, deterministic `Composer` (theory, harmony, form, day, weather, ornaments); mesh activity, SNR and channel utilization come from `MeshMood`, not a separate crowd model. It schedules by sample frame.
 - `shared/src/synth`: pure Kotlin DSP; `Synth` renders `NoteEvent`s and `Texture` changes to stereo float blocks.
 - `shared/src/audio`: `AudioSink` plus the block pump; `shared/src@<platform>/audio` holds the per-platform output.
-- `shared/src/ui`: `AmbientEngine` (owns the clock, composer, synth and sink; each tick carries `composer.params()` to the scene and the overlay's Drivers panel; feeds `Coverage` and logs its line), connect screen, controls, overlay, settings.
+- `shared/src/ui`: `AmbientEngine` (owns the clock, composer, synth and sink; each tick carries `composer.params()` to the scene and the overlay's Drivers panel; feeds `Coverage` and logs its line), connect screen, controls, the HUD overlay, settings.
 - `shared/src/visual`: scene model and drawing, driven by the engine's events and the sink's playback frame.
 - `shared/src/log`: `Log` with a file sink on desktop, logcat on Android.
 - Apps: `desktopApp`, `androidApp`, `iosApp`, `webApp`. Tools: `tools` (offline render and analyze), `blescan` (Bluetooth scan check).
 
 The contracts `MeshEvent.kt`, `NoteEvent.kt` and `AudioSink.kt` change only on purpose, with every consumer updated.
 
-Launch flags: `--demo`, `--replay`, `--tcp host[:port]`, `--fullscreen`, `--look standard|projector|oled` (`shared/src/ui/LaunchArgs.kt`). Volume and mute persist in `Settings`; the master fades in over 3 s each session.
+Launch flags: `--demo`, `--replay`, `--tcp host[:port]`, `--ask`, `--fullscreen`, `--look standard|projector|oled` (`shared/src/ui/LaunchArgs.kt`); `--ask` shows the connect screen and ignores the saved link and any `--demo`, `--replay` or `--tcp`. Volume and mute persist in `Settings`; the master fades in over 3 s each session.
+
+## UI rules
+
+- Material3 is `org.jetbrains.compose.material3:material3:1.12.0-alpha03` in `libs.versions.toml`, because the Expressive APIs are public only in the 1.12 line, which pairs with Compose 1.12.2; 1.9.0 had them internal. Bump it with Compose, never alone.
+- Expressive opt-ins are file-level (`@file:OptIn(ExperimentalMaterial3ExpressiveApi::class)`), never in a build flag.
+- The theme is `MaterialExpressiveTheme` with `MotionScheme.standard()`: no overshoot, and the toolbar keeps its standard colors so a saturated slab never burns in.
+- UI colors come from `MaterialTheme` roles, never hardcoded values; only the scene reads `LocalAmbientPalette`.
+- Compose UI tests live in `shared/test@jvm` (`runComposeUiTest`), and no check may need them on wasm. A running session animates forever, so a test cannot wait for it to go idle: test the pieces (`HostCommands`, the chooser, the countdown) on their own.
+- Host menus and Back call `AppCommands` and the shared key path (`perform`), never their own copies of an action, so the two-press disconnect and the haptics apply everywhere.
+- The desktop app runs on JetBrains Runtime (`settings.jvm.jdk.distributions: [jetbrains]` in `desktopApp/module.yaml`); libraries, tests and Android use the Toolchain default.
+- The HUD is hidden while idle: it draws nothing until opened and closes itself after 15 s (60 s with Drivers open).
 
 ## Commands
 

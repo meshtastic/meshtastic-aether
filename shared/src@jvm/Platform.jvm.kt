@@ -10,6 +10,7 @@ internal class JVMPlatform : Platform {
     override val lookaheadMillis: Int = 400
     override val needsTapToStart: Boolean = false
     override val hasKeyboard: Boolean = true
+    override val hasSystemBack: Boolean = false
     override val autoConnects: Boolean = true
 
     override fun resumeAudio() = Unit

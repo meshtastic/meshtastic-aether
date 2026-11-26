@@ -168,7 +168,7 @@ The scene is full screen, dark and on the shared clock.
 - Packets: a ripple from the sender's orb when its note sounds, colored by articulation and sized by SNR; hop echoes as fainter rings; encrypted traffic as a faint haze.
 - Renderer: plain Compose Canvas on every target. Skia runtime shaders (Skiko `RuntimeEffect` on desktop, iOS and web; `RuntimeShader` on Android 33 and later) are an optional enhancement for the background.
 - Burn-in: the field drifts slowly and dims at night. OLED screens are the real risk; most projectors are not.
-- A hidden overlay (tap, click or `H`) shows link state, node count, key, mode and section, volume, palette, the Drivers panel and a disconnect button. Fullscreen is available on desktop, and keep-awake runs on every target.
+- A hidden HUD (tap, click or `H`) shows a status card with link state, node count, key and section, and a floating toolbar with mute, volume, look, the Drivers panel, fullscreen and a two-press disconnect. It follows Material 3 Expressive with the standard motion scheme, so nothing overshoots. Fullscreen is available on desktop, and keep-awake runs on every target.
 
 ## Project shape
 

@@ -12,6 +12,7 @@ dependencies:
   - $compose.runtime
   - $compose.foundation
   - $libs.compose.material3
+  - $libs.compose.ui.backhandler
   - $compose.ui
   - $libs.kotlinx.coroutines.core
   - $libs.meshtastic.sdk.core

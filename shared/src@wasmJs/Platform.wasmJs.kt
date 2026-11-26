@@ -13,6 +13,7 @@ internal class WasmPlatform : Platform {
     override val lookaheadMillis: Int = 1200
     override val needsTapToStart: Boolean = true
     override val hasKeyboard: Boolean = true
+    override val hasSystemBack: Boolean = false
     override val autoConnects: Boolean = false
 
     override fun resumeAudio() = resumeAudioFromGesture()

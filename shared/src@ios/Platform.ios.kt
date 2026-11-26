@@ -16,6 +16,7 @@ internal class IOSPlatform : Platform {
     override val lookaheadMillis: Int = 400
     override val needsTapToStart: Boolean = false
     override val hasKeyboard: Boolean = false
+    override val hasSystemBack: Boolean = false
     override val autoConnects: Boolean = true
 
     override fun resumeAudio() = Unit

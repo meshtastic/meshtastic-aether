@@ -64,4 +64,26 @@ class LaunchArgsTest {
         assertEquals(PaletteChoice.OledNight, resolveLook(PaletteChoice.OledNight, PaletteChoice.Standard, fullscreenLaunch = true))
         assertEquals(PaletteChoice.Projector, resolveLook(PaletteChoice.Projector, null, fullscreenLaunch = false))
     }
+
+    // Regression: a saved link reconnected on launch with no way to pick another radio.
+    @Test
+    fun `ask is read with or without other flags and defaults off`() {
+        assertTrue(parseLaunchArgs(arrayOf("--ask")).ask)
+        assertTrue(parseLaunchArgs(arrayOf("--fullscreen", "--ask", "--look", "oled")).ask)
+        assertEquals(false, parseLaunchArgs(arrayOf("--demo")).ask)
+        assertTrue(parseLaunchArgs(arrayOf("--ask", "--tcp", "host:70000")).ask)
+        assertTrue(parseLaunchArgs(arrayOf("--ask", "--tcp", "node.local")).ask)
+        assertTrue(parseLaunchArgs(arrayOf("--ask", "--look", "neon")).ask)
+    }
+
+    @Test
+    fun `the countdown link is dropped by ask a launch link an error or a tap first platform`() {
+        val saved = LinkChoice.Tcp("node.local", 4403)
+        assertEquals(saved, autoConnectLink(saved, ask = false, autoConnects = true, hasLaunchLink = false, hasLaunchError = false))
+        assertNull(autoConnectLink(saved, ask = true, autoConnects = true, hasLaunchLink = false, hasLaunchError = false))
+        assertNull(autoConnectLink(saved, ask = false, autoConnects = false, hasLaunchLink = false, hasLaunchError = false))
+        assertNull(autoConnectLink(saved, ask = false, autoConnects = true, hasLaunchLink = true, hasLaunchError = false))
+        assertNull(autoConnectLink(saved, ask = false, autoConnects = true, hasLaunchLink = false, hasLaunchError = true))
+        assertNull(autoConnectLink(null, ask = false, autoConnects = true, hasLaunchLink = false, hasLaunchError = false))
+    }
 }

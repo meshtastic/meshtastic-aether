@@ -20,6 +20,9 @@ internal interface Platform {
     /** Whether a hardware keyboard is the usual input; decides whether hints name keys or only say tap. */
     val hasKeyboard: Boolean
 
+    /** True where the system has its own Back control (Android); Escape and the HUD close are enough elsewhere. */
+    val hasSystemBack: Boolean
+
     /** Whether the app may reconnect to the saved link on launch; false where a tap is needed first anyway. */
     val autoConnects: Boolean
 

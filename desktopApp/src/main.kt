@@ -4,14 +4,21 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.graphics.toComposeImageBitmap
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyShortcut
 import androidx.compose.ui.input.pointer.PointerIcon
+import androidx.compose.ui.unit.DpSize
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.MenuBar
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.WindowPlacement
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import org.meshtastic.aether.log.Log
+import org.meshtastic.aether.ui.AppCommands
 import org.meshtastic.aether.ui.parseLaunchArgs
 import java.awt.Cursor
+import java.awt.Dimension
 import java.awt.Point
 import java.awt.Taskbar
 import java.awt.Toolkit
@@ -22,6 +29,12 @@ private const val ICON_RESOURCE = "icon.png"
 private const val ICON_TAG = "icon"
 
 private const val CURSOR_SIZE = 16
+
+private val INITIAL_SIZE = DpSize(1000.dp, 700.dp)
+private const val MIN_WIDTH = 640
+private const val MIN_HEIGHT = 480
+
+private val isMac = "mac" in System.getProperty("os.name").orEmpty().lowercase()
 
 /** A fully transparent cursor: the app shows it after a few idle seconds so a projector shows no pointer. */
 private fun blankCursor(): Cursor =
@@ -42,8 +55,7 @@ private fun loadIcon(): BufferedImage? = try {
 /** On macOS the dock shows the process icon, which a window icon does not set. */
 private fun setDockIcon(icon: BufferedImage) {
     try {
-        if ("mac" in System.getProperty("os.name").orEmpty().lowercase() &&
-            Taskbar.isTaskbarSupported() && Taskbar.getTaskbar().isSupported(Taskbar.Feature.ICON_IMAGE)
+        if (isMac && Taskbar.isTaskbarSupported() && Taskbar.getTaskbar().isSupported(Taskbar.Feature.ICON_IMAGE)
         ) {
             Taskbar.getTaskbar().iconImage = icon
         }
@@ -59,8 +71,15 @@ fun main(args: Array<String>) {
     icon?.let(::setDockIcon)
     val windowIcon = icon?.let { BitmapPainter(it.toComposeImageBitmap()) }
     application {
-        val state = rememberWindowState(placement = if (launch.fullscreen) WindowPlacement.Fullscreen else WindowPlacement.Floating)
+        val state = rememberWindowState(
+            placement = if (launch.fullscreen) WindowPlacement.Fullscreen else WindowPlacement.Floating,
+            size = INITIAL_SIZE,
+        )
         val hidden = remember { PointerIcon(blankCursor()) }
+        val toggleFullscreen = {
+            state.placement = if (state.placement == WindowPlacement.Fullscreen) WindowPlacement.Floating else WindowPlacement.Fullscreen
+        }
+        val commands = remember { AppCommands() }
         Window(
             onCloseRequest = {
                 KeepAwake.stop()
@@ -70,6 +89,25 @@ fun main(args: Array<String>) {
             icon = windowIcon,
             state = state,
         ) {
+            window.minimumSize = Dimension(MIN_WIDTH, MIN_HEIGHT)
+            if (isMac) {
+                MenuBar {
+                    Menu("File") {
+                        Item("Disconnect", enabled = commands.sessionRunning, onClick = commands::disconnect)
+                    }
+                    Menu("View") {
+                        Item(
+                            if (state.placement == WindowPlacement.Fullscreen) "Exit Full Screen" else "Enter Full Screen",
+                            shortcut = KeyShortcut(Key.F, ctrl = true, meta = true),
+                            onClick = toggleFullscreen,
+                        )
+                        Item(if (commands.muted) "Unmute" else "Mute", enabled = commands.sessionRunning, onClick = commands::toggleMute)
+                    }
+                    Menu("Window") {
+                        Item("Minimize", shortcut = KeyShortcut(Key.M, meta = true), onClick = { state.isMinimized = true })
+                    }
+                }
+            }
             App(
                 initialLink = launch.link,
                 startupError = launch.error,
@@ -77,9 +115,9 @@ fun main(args: Array<String>) {
                 hiddenCursor = hidden,
                 look = launch.look,
                 launchedFullscreen = launch.fullscreen,
-                onToggleFullscreen = {
-                    state.placement = if (state.placement == WindowPlacement.Fullscreen) WindowPlacement.Floating else WindowPlacement.Fullscreen
-                },
+                ask = launch.ask,
+                commands = commands,
+                onToggleFullscreen = toggleFullscreen,
             )
         }
     }

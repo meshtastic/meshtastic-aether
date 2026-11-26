@@ -31,3 +31,19 @@ private const val GENERIC_START_FAILURE = "Could not start this link"
 
 /** The first-seconds hint: a pointer, with the key where a keyboard is the usual input, else a tap. */
 internal fun controlsHint(hasKeyboard: Boolean): String = if (hasKeyboard) "Click or press H for controls" else "Tap for controls"
+
+/** How long the status line stays after its text changes, and again at the start of each period. */
+internal const val STATUS_SHOW_MILLIS = 10_000L
+
+/** The status line returns for [STATUS_SHOW_MILLIS] each period, counted from the last change. */
+internal const val STATUS_PERIOD_MILLIS = 60_000L
+
+private const val STATUS_SHIFT_POSITIONS = 4
+
+/** Whether the status line shows [sinceChangeMillis] after its text last changed: the first 10 s, then 10 s of each minute. */
+internal fun statusLineVisible(sinceChangeMillis: Long): Boolean =
+    sinceChangeMillis >= 0 && sinceChangeMillis % STATUS_PERIOD_MILLIS < STATUS_SHOW_MILLIS
+
+/** Which of four vertical positions the line takes in the period containing [sinceChangeMillis], so it never repeats pixels back to back. */
+internal fun statusLineShiftSteps(sinceChangeMillis: Long): Int =
+    ((sinceChangeMillis.coerceAtLeast(0) / STATUS_PERIOD_MILLIS) % STATUS_SHIFT_POSITIONS).toInt()

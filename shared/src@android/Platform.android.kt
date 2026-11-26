@@ -13,6 +13,7 @@ internal class AndroidPlatform : Platform {
     override val lookaheadMillis: Int = 400
     override val needsTapToStart: Boolean = false
     override val hasKeyboard: Boolean = false
+    override val hasSystemBack: Boolean = true
     override val autoConnects: Boolean = true
 
     override fun resumeAudio() = Unit

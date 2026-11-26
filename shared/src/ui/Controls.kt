@@ -2,6 +2,7 @@ package org.meshtastic.aether.ui
 
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.input.key.Key
@@ -35,9 +36,54 @@ internal fun keyActionFor(key: Key): KeyAction? = when (key) {
 /** Something the host or the app must do after a key; [Controls] only changes its own state. */
 internal enum class Effect { None, ToggleFullscreen, Disconnect }
 
+/** How long the second Disconnect press may follow the first. */
+internal const val DISCONNECT_CONFIRM_MILLIS = 3_000L
+
+/**
+ * The two-press guard on Disconnect, shared by the button and the D key: the first press arms it and shows a hint, a
+ * second within [DISCONNECT_CONFIRM_MILLIS] confirms. Time is passed in, so it tests without a clock.
+ */
+internal class DisconnectConfirm {
+    private var armedAt by mutableLongStateOf(NOT_ARMED)
+
+    /** True from the first press until it is confirmed or expires; drives the hint. */
+    val armed: Boolean get() = armedAt != NOT_ARMED
+
+    /** A press at [nowMillis]: true when it confirms an armed press, false when it only arms (or re-arms after expiry). */
+    fun press(nowMillis: Long): Boolean {
+        val first = armedAt
+        if (first != NOT_ARMED && nowMillis - first in 0 until DISCONNECT_CONFIRM_MILLIS) {
+            armedAt = NOT_ARMED
+            return true
+        }
+        armedAt = nowMillis
+        return false
+    }
+
+    /** Drops the armed state, after the window passed or the HUD went away. */
+    fun clear() {
+        armedAt = NOT_ARMED
+    }
+
+    private companion object {
+        const val NOT_ARMED = Long.MIN_VALUE
+    }
+}
+
 /** The viewer's controls: overlay, volume and mute. Plain state, so a key table can be tested without a window. */
 internal class Controls(volume: Float = 1f) {
     var overlayOpen by mutableStateOf(false)
+
+    val disconnect = DisconnectConfirm()
+
+    /** Keyboard or screen-reader focus is inside the HUD; the auto-hide timer waits. */
+    var focusWithin by mutableStateOf(false)
+
+    /** A pointer is down on a HUD control; the auto-hide timer waits. */
+    var pressed by mutableStateOf(false)
+
+    /** Whether the viewer is using a HUD control right now. */
+    val held: Boolean get() = focusWithin || pressed
 
     /** Whether the overlay lists the mesh-driven parameters; shown only while the overlay is. */
     var driversOpen by mutableStateOf(false)
@@ -52,9 +98,10 @@ internal class Controls(volume: Float = 1f) {
 
     /**
      * Applies [action]. [fullscreen] is whether the host is fullscreen now and [canFullscreen] whether it has a switch;
-     * the result says what the caller must do and, through [consumed], whether the key was used.
+     * the result says what the caller must do and, through [consumed], whether the key was used. [now] times the
+     * Disconnect confirmation; its first press opens the overlay so the hint is on screen.
      */
-    fun apply(action: KeyAction, fullscreen: Boolean, canFullscreen: Boolean): Result = when (action) {
+    fun apply(action: KeyAction, fullscreen: Boolean, canFullscreen: Boolean, now: Long = nowMillis()): Result = when (action) {
         KeyAction.ToggleOverlay -> {
             overlayOpen = !overlayOpen
             Result(true, Effect.None)
@@ -74,7 +121,12 @@ internal class Controls(volume: Float = 1f) {
             muted = !muted
             Result(true, Effect.None)
         }
-        KeyAction.Disconnect -> Result(true, Effect.Disconnect)
+        KeyAction.Disconnect -> if (disconnect.press(now)) {
+            Result(true, Effect.Disconnect)
+        } else {
+            overlayOpen = true
+            Result(true, Effect.None)
+        }
     }
 
     private fun step(delta: Float): Result {
@@ -100,6 +152,9 @@ internal fun fadeIn(elapsedMillis: Long, rampMillis: Long = FADE_IN_MILLIS): Flo
 private const val OVERLAY_IDLE_MILLIS = 15_000L
 private const val DRIVERS_IDLE_MILLIS = 60_000L
 
-/** Whether the overlay should close: no input for 15 s, or for 60 s while the Drivers panel is open for reading. */
-internal fun overlayExpired(idleMillis: Long, driversOpen: Boolean): Boolean =
-    idleMillis >= if (driversOpen) DRIVERS_IDLE_MILLIS else OVERLAY_IDLE_MILLIS
+/**
+ * Whether the overlay should close: no input for 15 s, or for 60 s while the Drivers panel is open for reading; never
+ * while a control is [held] (focused or pressed).
+ */
+internal fun overlayExpired(idleMillis: Long, driversOpen: Boolean, held: Boolean = false): Boolean =
+    !held && idleMillis >= if (driversOpen) DRIVERS_IDLE_MILLIS else OVERLAY_IDLE_MILLIS

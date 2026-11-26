@@ -17,7 +17,7 @@ The score and the instruments are synthesized in pure Kotlin on every target, wi
 
 ```sh
 ./kotlin run -m desktopApp                      # desktop
-./kotlin run -m desktopApp -- --fullscreen      # also: --demo, --replay, --tcp host[:port], --look standard|projector|oled
+./kotlin run -m desktopApp -- --fullscreen      # also: --demo, --replay, --tcp host[:port], --ask, --look standard|projector|oled
 ./kotlin run -m webApp                          # browser; tap to start audio
 ./kotlin run -m androidApp                      # device or emulator
 ./kotlin run -m iosApp                          # Mac only
@@ -28,29 +28,60 @@ The `./kotlin` wrapper downloads the Kotlin Toolchain on first use. [`CONTRIBUTI
 
 ## Connect
 
-- Demo: a scripted five-minute mesh, no node needed (`--demo`).
-- TCP: host and port on the connect screen, or `--tcp host[:port]` on desktop (the port defaults to 4403).
-- Bluetooth: the connect screen scans and lists nodes; pick one. Not on web.
-- WebSocket: under Advanced, a `ws://` or `wss://` address.
-- Saved link: desktop, Android and iOS remember the last demo, TCP or WebSocket link and reconnect after a 5 s countdown that can be canceled. A Bluetooth pick and `--replay` are not saved and leave the saved link as it was.
-- An unreachable host shows `Can't reach host:port - retrying` in the status line, and the raw error goes to the log.
+The connect screen opens on a connected group of toggle buttons that picks one link type at a time: Demo, Network (TCP), Bluetooth and WebSocket. A target lists only the types it supports: Network is desktop, Android and iOS, and Bluetooth is not on web. The group opens on Demo, or on the type of the saved link.
+
+- Demo: a scripted five-minute mesh, no node needed. The button reads Start the demo, and `--demo` does the same at launch.
+- Network: a host field and a port field (digits only; a blank port means 4403), then Connect over TCP. `--tcp host[:port]` connects at launch on desktop.
+- Bluetooth: Scan for Bluetooth radios lists each node by name, the last five characters of its address and a signal word (Strong, Good, Fair, Weak or Signal unknown). Tapping a radio connects, so this pane has no connect button.
+- WebSocket: a `ws://` or `wss://` address, then Connect over WebSocket.
+- A connect button stays disabled while its fields are invalid, and the field says why. The Go key on the keyboard submits from the TCP port and the WebSocket address.
+- An unreachable host shows `Can't reach host:port - retrying` in the status line, and the raw error goes to the log. A link that fails to start shows its reason on the connect screen.
+
+Desktop, Android and iOS remember the last demo, TCP or WebSocket link. On the next launch a banner reads `Connecting to host:port in N s` (or `Starting the demo in N s`) over a wavy progress bar that fills across 5 s, with Connect now and Cancel. Connect now starts whatever the screen shows, and it is absent while the fields are invalid or Bluetooth is selected. Cancel stops the countdown, and so does any edit to a field or any change of link type. A Bluetooth pick and `--replay` are not saved and leave the saved link as it was.
+
+`--ask` shows the connect screen with no countdown: it ignores the saved link and any `--demo`, `--replay` or `--tcp` on the same command line. A bad `--tcp` or `--look` value shows its error and starts no link.
+
+The layout follows the window width. Under 600 dp it is one column with the connect button pinned to the bottom. From 600 to 839 dp the column is capped at 560 dp and the host and port fields sit side by side. At 840 dp and wider, or in a window shorter than 480 dp, it splits into two panes: the glyph, name, tagline and countdown banner on one side, and a card with the link types and fields on the other.
 
 ## Controls
 
-Click or tap the scene to show the overlay (link, node count, key, mode, section, volume, palette, Drivers). It hides after 15 s without input (60 s while Drivers is open) and scrolls when it is taller than the window. The pointer hides after 3 s idle.
+Click or tap the scene, or press H, to show the HUD. It is hidden while the piece plays and draws nothing until opened. The pointer hides after 3 s without movement, and for the first 8 s a faint line reads `Click or press H for controls` (`Tap for controls` without a keyboard).
+
+The HUD has a status card at the top left (link, node count, key and mode, section, any error, and the shortcut line where a keyboard is the usual input) and a floating toolbar at the bottom center. The toolbar holds, in order:
+
+- Mute: a toggle that shows a speaker, or a crossed speaker while muted. It takes focus when the HUD opens.
+- Volume: a slider. Moving it unmutes.
+- Look: three radio buttons for Standard, Projector and OLED night, the selected one filled.
+- Drivers: a toggle that lists each mesh-driven parameter with its live value and driver. The panel sits at the right on windows 840 dp and wider, and above the toolbar (up to half the window height) on narrower ones.
+- Fullscreen: only where the host has a switch (desktop).
+- Disconnect: the power glyph, in the error color.
+
+Under 600 dp the toolbar splits into two rows, volume and look above the actions. With a keyboard each button shows a tooltip with its name.
+
+The HUD hides after 15 s without input, or 60 s while Drivers is open, and it waits while a control is focused or pressed or a screen reader is on.
+
+Disconnect takes two presses within 3 s, from the toolbar button or the D key. The first press tints the button with the error container, shows `Press Disconnect again within 3 seconds` above the toolbar and, for the key, opens the HUD. The second press ends the session and returns to the connect screen with no countdown. After 3 s the first press lapses.
+
+Haptics fire where the device has them: a confirmed Disconnect plays a confirm tick, and a mute change plays a toggle-on or toggle-off tick, whether it came from the button, the M key or the slider.
 
 Volume and mute are remembered, and each session ramps the master from silence over 3 s. `--look` picks the palette for that launch (Standard, Projector or OLED night). With `--fullscreen` and no saved choice the look is Projector, otherwise Standard.
 
-Status wording: Connecting, Listening (warming up), Connected, Demo mesh, Replaying a capture, Link lost.
+A small status line at the top center names a link that is not settled: Connecting, Listening (warming up), `Link lost - retrying`, or the open error. It shows for 10 s after its text changes, then for 10 s at the start of each minute, at one of four heights in turn so it never sits on the same pixels. The HUD names every state: Connecting, Listening, Connected, Demo mesh, Replaying a capture, Link lost.
 
 | Key | Action |
 | --- | --- |
-| H | overlay |
+| H | HUD |
 | F | fullscreen (desktop) |
 | M | mute |
 | Up, Down | volume |
-| D | disconnect |
-| Esc | close overlay, leave fullscreen |
+| D | disconnect (press twice within 3 s) |
+| Esc | close the HUD, else leave fullscreen |
+
+On macOS the menu bar mirrors the keys: File has Disconnect, View has Enter Full Screen (Ctrl+Cmd+F) and Mute or Unmute, and Window has Minimize. Disconnect and Mute are enabled while a session runs, and Disconnect asks for the same second press as the D key. Windows and Linux draw no menu bar over the picture. On Android, Back closes the HUD, then returns from the scene to the connect screen, then leaves the app.
+
+## Design
+
+The UI follows Material 3 Expressive with the standard motion scheme. The piece is calm, so motion never overshoots: the expressive scheme's springs bounce, and the standard scheme settles without it. The toolbar uses the standard floating-toolbar colors, because the vibrant ones fill a wide slab with saturated green that would burn into an OLED screen or a projector left on for days. Components still use the Expressive shapes: connected toggle buttons, a floating toolbar, wavy progress and a loading indicator. Colors come from Material roles on the standards' dark scheme. The theme is dark-only, which waives the standards' light theme and dynamic color (see Branding).
 
 ## Mesh-driven parameters
 
@@ -62,7 +93,7 @@ The mesh turns parameters in three layers, and every parameter holds its neutral
 
 The clock skeleton stays under the mesh: weekday picks the key, and time of day picks the mode and register, with the hour chime, dawn and dusk, the night dim and the long form.
 
-The palette is about 15 instruments, 8 scales (never Locrian) and 4 tempo bands. The Drivers button in the overlay lists each parameter with its live value, unit and the signal driving it, or a plain note such as `holding 8.0 deg - no wind reports` when its signal has no data. The demo sweeps these inputs in five minutes, including a pressure fall that reverses the rotation once per session.
+The palette is about 15 instruments, 8 scales (never Locrian) and 4 tempo bands. The Drivers button in the HUD lists each parameter with its live value, unit and the signal driving it, or a plain note such as `holding 8.0 deg - no wind reports` when its signal has no data. The demo sweeps these inputs in five minutes, including a pressure fall that reverses the rotation once per session.
 
 [`docs/mesh-driven-parameters.md`](docs/mesh-driven-parameters.md) has the instruments, scales, signals, mappings and rotation rules.
 
@@ -93,7 +124,7 @@ The render tool runs the simulated mesh through the composer and synth offline. 
 - Headless over ssh: the desktop app needs a display, so use the render tool to produce a WAV file instead.
 - Bluetooth permission: Android asks for Bluetooth scan and connect permission on the first scan, and without it the scan does not start and the log says so. macOS and Linux need Bluetooth enabled and permitted for the terminal or app.
 - Silent on web: browsers block audio until a gesture, so tap the start screen.
-- No sound on desktop: check M (mute) and the volume in the overlay.
+- No sound on desktop: check M (mute) and the volume in the HUD.
 
 ## Verified on
 

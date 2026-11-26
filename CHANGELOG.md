@@ -6,6 +6,9 @@ All notable changes to Meshtastic Aether are documented here. The format is base
 
 ### Added
 
+- A macOS menu bar with Disconnect, Enter Full Screen, Mute and Minimize that call the same actions as the keys.
+- Android Back closes the HUD, then returns to the connect screen.
+- The desktop app runs on JetBrains Runtime.
 - A slow generative piece of music and visuals that plays on its own and is shaped by live Meshtastic traffic: packets are ornaments, nodes are voices, and mesh activity is the crowd. The app only listens and sends nothing to the mesh.
 - Desktop (JVM), Android, iOS and web (Wasm) targets on a shared Kotlin Multiplatform codebase, built with the Kotlin Toolchain.
 - Links to a node over TCP, Bluetooth (not on web) and WebSocket, plus a scripted demo mesh and a replay of a bundled capture. Desktop, Android and iOS remember the last demo, TCP or WebSocket link and reconnect after a cancelable countdown.
@@ -17,4 +20,11 @@ All notable changes to Meshtastic Aether are documented here. The format is base
 - Launch flags `--demo`, `--replay`, `--tcp host[:port]`, `--fullscreen` and `--look standard|projector|oled` on desktop.
 - A local log with a session summary every minute and a coverage line that counts which telemetry fields the mesh reports.
 - The `tools` module renders the simulated mesh to a WAV file and analyzes it, and the `blescan` module scans for nodes over Bluetooth.
+- A Material 3 Expressive connect screen: a connected group of link types (Demo, Network, Bluetooth, WebSocket) with one pane at a time, inline field errors and a Bluetooth scan with a loading indicator.
+- A countdown banner on the connect screen with a wavy progress bar, Connect now and Cancel; any edit to a field or change of link type cancels it.
+- Connect screen layouts for the compact, medium and expanded window widths, with two panes on wide or short windows.
+- A floating-toolbar HUD with mute, volume, look, Drivers, fullscreen and Disconnect, tooltips with a keyboard, and haptic ticks for mute and a confirmed Disconnect.
+- Disconnect asks for a second press within 3 seconds, from the toolbar button or the D key.
+- Launch flag `--ask` shows the connect screen and ignores the saved link and any `--demo`, `--replay` or `--tcp`.
+- A status line that shows for 10 seconds after its text changes and for 10 seconds each minute, stepping down one of four heights so it never sits on the same pixels.
 - App icons for Android, iOS, desktop and web with branded launch backgrounds, and the in-app glyph and tagline.

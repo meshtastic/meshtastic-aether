@@ -17,7 +17,7 @@ internal fun paramValueText(p: ParamInfo): String = if (p.unit.isEmpty()) p.valu
 /** What moves the parameter with its own reading, or why it holds its neutral value. */
 internal fun paramDriverText(p: ParamInfo): String = p.driverText
 
-/** One row per mesh-driven parameter: name, live value and unit, and the signal driving it. The overlay around it scrolls. */
+/** One row per mesh-driven parameter: name, live value and unit, and the signal driving it. The surface around it scrolls; every row is body text of 16 sp. */
 @Composable
 internal fun DriversPanel(rows: List<ParamInfo>, modifier: Modifier = Modifier) {
     val colors = MaterialTheme.colorScheme
@@ -28,12 +28,12 @@ internal fun DriversPanel(rows: List<ParamInfo>, modifier: Modifier = Modifier) 
         for (p in rows) {
             Column {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text(p.name, style = MaterialTheme.typography.bodyMedium, color = colors.onSurface)
-                    Text(paramValueText(p), style = MaterialTheme.typography.bodyMedium, color = colors.onSurface)
+                    Text(p.name, style = MaterialTheme.typography.bodyLarge, color = colors.onSurface)
+                    Text(paramValueText(p), style = MaterialTheme.typography.bodyLarge, color = colors.onSurface)
                 }
                 Text(
                     paramDriverText(p),
-                    style = MaterialTheme.typography.bodySmall,
+                    style = MaterialTheme.typography.bodyLarge,
                     color = if (p.driver == null) colors.onSurfaceVariant else colors.primary,
                 )
             }

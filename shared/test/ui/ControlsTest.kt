@@ -41,13 +41,52 @@ class ControlsTest {
     }
 
     @Test
-    fun `h toggles the overlay and d asks to disconnect`() {
+    fun `h toggles the overlay`() {
         val c = Controls()
         c.apply(KeyAction.ToggleOverlay, false, false)
         assertTrue(c.overlayOpen)
         c.apply(KeyAction.ToggleOverlay, false, false)
         assertFalse(c.overlayOpen)
-        assertEquals(Effect.Disconnect, c.apply(KeyAction.Disconnect, false, false).effect)
+    }
+
+    // Regression: one stray D ended the installation; the brief now asks for a second press within 3 s.
+    @Test
+    fun `one d does not disconnect and a second within three seconds does`() {
+        val c = Controls()
+        val first = c.apply(KeyAction.Disconnect, false, false, now = 10_000)
+        assertEquals(Effect.None, first.effect)
+        assertTrue(first.consumed)
+        assertTrue(c.disconnect.armed)
+        assertTrue(c.overlayOpen)
+        assertEquals(Effect.Disconnect, c.apply(KeyAction.Disconnect, false, false, now = 12_999).effect)
+        assertFalse(c.disconnect.armed)
+    }
+
+    // Regression: a confirmation window that never closed would turn a press an hour later into a disconnect.
+    @Test
+    fun `a second d at three seconds or later only arms again`() {
+        val c = Controls()
+        c.apply(KeyAction.Disconnect, false, false, now = 0)
+        assertEquals(Effect.None, c.apply(KeyAction.Disconnect, false, false, now = 3_000).effect)
+        assertEquals(Effect.Disconnect, c.apply(KeyAction.Disconnect, false, false, now = 4_000).effect)
+    }
+
+    @Test
+    fun `clearing the confirmation makes the next press a first press`() {
+        val confirm = DisconnectConfirm()
+        assertFalse(confirm.press(0))
+        confirm.clear()
+        assertFalse(confirm.armed)
+        assertFalse(confirm.press(1_000))
+        assertTrue(confirm.press(1_500))
+    }
+
+    // Regression: a clock step backwards must not read as a confirmation.
+    @Test
+    fun `a press earlier than the armed one does not confirm`() {
+        val confirm = DisconnectConfirm()
+        confirm.press(5_000)
+        assertFalse(confirm.press(4_000))
     }
 
     @Test
@@ -111,5 +150,26 @@ class ControlsTest {
         assertFalse(overlayExpired(59_999, driversOpen = true))
         assertTrue(overlayExpired(60_000, driversOpen = true))
         assertFalse(overlayExpired(0, driversOpen = false))
+    }
+
+    // The HUD must not close under a hand on a control, however long the viewer rests there.
+    @Test
+    fun `a held control keeps the overlay open at any idle time`() {
+        assertFalse(overlayExpired(10 * 60_000L, driversOpen = false, held = true))
+        assertFalse(overlayExpired(10 * 60_000L, driversOpen = true, held = true))
+        assertTrue(overlayExpired(15_000, driversOpen = false, held = false))
+    }
+
+    @Test
+    fun `held is true while focus is inside or a pointer is down`() {
+        val c = Controls()
+        assertFalse(c.held)
+        c.focusWithin = true
+        assertTrue(c.held)
+        c.focusWithin = false
+        c.pressed = true
+        assertTrue(c.held)
+        c.pressed = false
+        assertFalse(c.held)
     }
 }

@@ -43,7 +43,7 @@ git push --force-with-lease
 |---|---|
 | Kotlin Toolchain | pinned by the `./kotlin` wrapper (`kotlin.bat` on Windows), which downloads the toolchain and its JRE on first use; no separate install |
 | Kotlin, Compose Multiplatform | pinned in `common.module-template.yaml` |
-| Dependency versions | `libs.versions.toml` |
+| Dependency versions | `libs.versions.toml`; Material3 is an alpha of the 1.12 line because the Expressive APIs are public only there, so bump it together with Compose |
 | Android SDK | only to build or run `androidApp`, with `ANDROID_HOME` set |
 | Xcode | on macOS, only for `iosApp` and the iOS targets |
 | Browser | only to run `webApp`; a gesture starts the audio |
