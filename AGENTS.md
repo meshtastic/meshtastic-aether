@@ -13,7 +13,9 @@ Run `./kotlin --help` to see the available commands, or `./kotlin <command> --he
 - The render loop allocates nothing and injects a tiny noise floor into feedback paths against denormals.
 - Reverb is the Clouds topology (modulated Dattorro, 10-30 s tails), never Freeverb.
 - No Locrian; weekday picks the key, time of day picks mode brightness, density, register and decay.
-- One ornament timbre family (Bell, Mallet, Pluck); portnum only changes articulation. Encrypted traffic is a pitchless Breath. `hopsTaken == null` means unknown distance, not direct.
+- A node's role picks the instrument family and its hardware model picks the voice within it (about 15 instruments); packet kind only changes articulation. Encrypted traffic is a pitchless Breath. `hopsTaken == null` means unknown distance, not direct.
+- Mesh-driven parameters follow `docs/specs/2026-11-25-mesh-driven-parameters.md`: neutral values equal the old constants, rotation is integrated state with comfort caps, and the clock skeleton (weekday key, time-of-day mode, hour chime, night dim, Form arc) stays.
+- Check a wasm run by its `ERROR` lines as well as `Passed` and `Failed`: the browser runner stops a run at 30 s, so keep long renders in `shared/test@jvm`.
 - Real captures stay local (`captures/` is ignored); committed fixtures are synthetic.
 - Conventional commits, no attribution trailers, GPL-3.0-or-later.
 
@@ -22,10 +24,11 @@ Run `./kotlin --help` to see the available commands, or `./kotlin <command> --he
 `MeshSource` -> `Composer` -> `Synth` -> `AudioSink`. `visual` and `ui` read the engine; nothing flows back.
 
 - `shared/src/mesh`: `MeshEvent` and the sources (SDK, simulated, demo, replay) plus the packet, payload and telemetry mappers. Nothing downstream sees a protobuf.
+- `shared/src/mood`: `MeshMood` folds events into slow, self-normalized signals and the rotation target; `ParamValues` is the immutable result (value, unit and driver per parameter) that the composer, scene and overlay read. Neutral equals today's constants.
 - `shared/src/music`: the pure, deterministic `Composer` (theory, harmony, form, day, weather, ornaments, crowd). It schedules by sample frame.
 - `shared/src/synth`: pure Kotlin DSP; `Synth` renders `NoteEvent`s and `Texture` changes to stereo float blocks.
 - `shared/src/audio`: `AudioSink` plus the block pump; `shared/src@<platform>/audio` holds the per-platform output.
-- `shared/src/ui`: `AmbientEngine` (owns the clock, composer, synth and sink), connect screen, controls, overlay, settings.
+- `shared/src/ui`: `AmbientEngine` (owns the clock, composer, synth and sink; each tick carries `composer.params()` to the scene and the overlay's Drivers panel; feeds `Coverage` and logs its line), connect screen, controls, overlay, settings.
 - `shared/src/visual`: scene model and drawing, driven by the engine's events and the sink's playback frame.
 - `shared/src/log`: `Log` with a file sink on desktop, logcat on Android.
 - Apps: `desktopApp`, `androidApp`, `iosApp`, `webApp`. Tools: `tools` (offline render and analyze), `blescan` (Bluetooth scan check).

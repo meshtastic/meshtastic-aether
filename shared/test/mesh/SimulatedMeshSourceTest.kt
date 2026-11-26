@@ -158,6 +158,84 @@ class SimulatedMeshSourceTest {
         assertTrue(routes.all { it.nodes.first() == src.self.num && it.nodes.drop(1).all { n -> n in known } && it.nodes.size >= 2 })
     }
 
+    @Test
+    fun `nodes announce a role and hardware from the fixed mixes and routers are the minority`() = runTest {
+        val src = SimulatedMeshSource(31L, nodeCount = 200) { currentTime }
+        val seen = run(src, 1_000L).filterIsInstance<MeshEvent.NodeSeen>()
+        assertEquals(200, seen.size)
+        assertTrue(seen.all { it.role in SIM_ROLES.map { r -> r.first } && it.hardware in SIM_HARDWARE.map { h -> h.first } })
+        val roles = seen.groupingBy { it.role }.eachCount()
+        assertTrue(roles.size >= 5, "roles $roles")
+        assertTrue((roles["CLIENT"] ?: 0) > 70, "CLIENT ${roles["CLIENT"]} of 200 against a weight of 52 percent")
+        assertTrue((roles["ROUTER"] ?: 0) < (roles["CLIENT"] ?: 0))
+        assertTrue(seen.mapNotNull { it.hardware }.toSet().size >= 6)
+        assertTrue(seen.mapNotNull { it.position }.all { it.altitudeM != null && it.altitudeM!! in 0..2000 })
+    }
+
+    @Test
+    fun `Health arrives for many nodes with battery drain voltage and growing uptime`() = runTest {
+        val src = SimulatedMeshSource(32L, nodeCount = 60) { currentTime }
+        val health = run(src, 12 * HOUR).filterIsInstance<MeshEvent.Health>()
+        val known = src.nodes.map { it.num }.toSet()
+        assertTrue(health.all { it.node in known && it.batteryPct != null && it.voltage != null && it.uptimeSeconds != null })
+        assertTrue(health.map { it.node }.toSet().size > 50, "only ${health.map { it.node }.toSet().size} nodes reported")
+        val powered = health.filter { it.batteryPct == 101 }
+        val cell = health.filter { it.batteryPct != 101 }
+        assertTrue(powered.isNotEmpty() && cell.isNotEmpty())
+        assertTrue(powered.all { it.voltage!! in 4.8f..5.2f })
+        // a lithium cell reads 3.3 V empty to 4.2 V full, plus 10 mV of noise
+        assertTrue(cell.all { it.batteryPct!! in 3..100 && it.voltage!! in 3.29f..4.21f })
+        for ((_, list) in health.groupBy { it.node }) {
+            assertTrue(list.zipWithNext().all { (a, b) -> b.uptimeSeconds!! > a.uptimeSeconds!! && b.batteryPct!! <= a.batteryPct!! })
+        }
+        assertTrue(health.groupBy { it.node }.values.any { it.size >= 20 }, "a node should report about every 30 minutes")
+    }
+
+    @Test
+    fun `Stats for self count every packet heard before it and never run backwards`() = runTest {
+        val src = SimulatedMeshSource(33L, nodeCount = 40) { currentTime }
+        val ev = run(src, 6 * HOUR)
+        var heard = 0L
+        var stats = 0
+        var last: MeshEvent.Stats? = null
+        for (e in ev) {
+            if (e is MeshEvent.PacketHeard) heard++
+            if (e is MeshEvent.Stats) {
+                stats++
+                assertEquals(heard, e.rxTotal, "rxTotal against packets heard so far")
+                assertTrue(e.rxDupe!! <= e.rxTotal!! && e.rxBad!! <= e.rxTotal!!)
+                assertTrue(e.noiseFloorDbm!! in -125..-95 && e.numTotal == 41 && e.numOnline!! in 1..41)
+                if (last != null) assertTrue(e.uptimeSeconds!! > last.uptimeSeconds!! && e.rxDupe!! >= last.rxDupe!!)
+                last = e
+            }
+        }
+        assertTrue(stats >= 10, "stats events $stats")
+    }
+
+    @Test
+    fun `some environment nodes report wind with gust above speed above lull`() = runTest {
+        val env = run(SimulatedMeshSource(34L, nodeCount = 100) { currentTime }, 6 * HOUR).filterIsInstance<MeshEvent.Environment>()
+        val wind = env.filter { it.windMps != null }
+        assertTrue(wind.isNotEmpty(), "no wind reports")
+        assertTrue(wind.map { it.node }.toSet().size < env.map { it.node }.toSet().size)
+        assertTrue(wind.all { it.windDirectionDeg!! in 0f..360f && it.windGustMps!! >= it.windMps!! && it.windMps!! >= it.windLullMps!! && it.windLullMps!! >= 0f })
+        assertTrue(env.filter { it.windMps == null }.all { it.windDirectionDeg == null && it.windGustMps == null && it.windLullMps == null })
+    }
+
+    @Test
+    fun `packets carry payload sizes and channels and only text has a length`() = runTest {
+        val heard = run(SimulatedMeshSource(35L, nodeCount = 60) { currentTime }, 12 * HOUR).filterIsInstance<MeshEvent.PacketHeard>()
+        val text = heard.filter { it.kind == PacketKind.Text }
+        assertTrue(text.size > 20 && heard.size > 200)
+        assertTrue(text.all { it.textLength!! in 4..200 && it.payloadBytes == it.textLength })
+        assertTrue(heard.filter { it.kind != PacketKind.Text }.all { it.textLength == null })
+        assertTrue(heard.all { it.payloadBytes!! in 2..200 })
+        assertTrue(heard.filter { it.kind == PacketKind.Encrypted }.all { it.channel == null })
+        val channels = heard.filter { it.kind != PacketKind.Encrypted }.map { it.channel }
+        assertTrue(channels.all { it in 0..3 } && channels.toSet().size >= 3)
+        assertTrue(channels.count { it == 0 } * 2 > channels.size, "channel 0 is the primary and most used")
+    }
+
     private fun MeshEvent.shifted(by: Long): MeshEvent = when (this) {
         is MeshEvent.PacketHeard -> copy(atMillis = atMillis + by)
         is MeshEvent.NodeSeen -> copy(atMillis = atMillis + by)
@@ -168,6 +246,8 @@ class SimulatedMeshSourceTest {
         is MeshEvent.Self -> copy(atMillis = atMillis + by)
         is MeshEvent.Neighbors -> copy(atMillis = atMillis + by)
         is MeshEvent.Route -> copy(atMillis = atMillis + by)
+        is MeshEvent.Health -> copy(atMillis = atMillis + by)
+        is MeshEvent.Stats -> copy(atMillis = atMillis + by)
     }
 
     private fun MeshEvent.kindKey(): String = when (this) {
@@ -180,5 +260,7 @@ class SimulatedMeshSourceTest {
         is MeshEvent.Self -> "S$node"
         is MeshEvent.Neighbors -> "B$node"
         is MeshEvent.Route -> "R${nodes.joinToString(",")}"
+        is MeshEvent.Health -> "H$node"
+        is MeshEvent.Stats -> "T"
     }
 }

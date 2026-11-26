@@ -17,6 +17,8 @@ internal fun MeshEvent.shifted(by: Long): MeshEvent = when (this) {
     is MeshEvent.Self -> copy(atMillis = atMillis + by)
     is MeshEvent.Neighbors -> copy(atMillis = atMillis + by)
     is MeshEvent.Route -> copy(atMillis = atMillis + by)
+    is MeshEvent.Health -> copy(atMillis = atMillis + by)
+    is MeshEvent.Stats -> copy(atMillis = atMillis + by)
 }
 
 /**

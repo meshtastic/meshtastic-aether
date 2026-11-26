@@ -37,6 +37,10 @@ internal class SynthVoice(private val sampleRate: Int, seed: Int) {
     var send = 0f
         private set
 
+    /** True when the note stands for a mesh node (an ornament), false for the bed. */
+    var fromNode = false
+        private set
+
     /** Loudness estimate used to rank sustaining ornaments for stealing. */
     val loudness: Float get() = env.level * amp
 
@@ -67,6 +71,7 @@ internal class SynthVoice(private val sampleRate: Int, seed: Int) {
     private var burstLeft = 0
     private var burstLength = 1
     private var bellRatio = 3.5
+    private var gain = 1f
 
     /**
      * Starts [note] on this voice, fading the current note out over [FADE_SECONDS] first if it is still sounding.
@@ -97,6 +102,8 @@ internal class SynthVoice(private val sampleRate: Int, seed: Int) {
         panLeft = cos(angle)
         panRight = sin(angle)
         send = clamp(note.reverbSend, 0f, 1f)
+        fromNode = note.node != null
+        gain = 1f
         filter.reset()
         when (kind) {
             Voice.Bell -> {
@@ -144,6 +151,61 @@ internal class SynthVoice(private val sampleRate: Int, seed: Int) {
                 sine2.reset(0.3)
                 sine3.reset(0.6)
             }
+            Voice.Marimba -> {
+                env.trigger(0.001f, 0.1f, 1f, 0.2f)
+                modal.configure(freq, MARIMBA_STRUCTURE, bright * 0.8f, ring60For(durSec * MARIMBA_RING_PER_NOTE, 0.15f, 2.5f), 0.14f, 10)
+                startBurst(0.003, 600.0 + 3500.0 * bright)
+            }
+            Voice.Vibes -> {
+                env.trigger(0.001f, 0.1f, 1f, 0.4f)
+                modal.configure(freq, 0.2f, bright * 0.7f, ring60For(durSec * VIBES_RING_PER_NOTE, 0.5f, 12f), 0.25f, 6)
+                startBurst(0.004, 500.0 + 2500.0 * bright)
+                sine1.reset(0.0)
+            }
+            Voice.Kalimba -> {
+                env.trigger(0.001f, 0.1f, 1f, 0.2f)
+                modal.configure(freq, KALIMBA_STRUCTURE, bright * 0.8f, ring60For(durSec * KALIMBA_RING_PER_NOTE, 0.3f, 4f), 0.3f, 4)
+                startBurst(0.002, 900.0 + 5000.0 * bright)
+                gain = 1.4f
+            }
+            Voice.Gong -> {
+                env.trigger(0.02f, 0.1f, 1f, 0.6f)
+                modal.configure(freq, 0.7f, 0.6f + 0.4f * bright, ring60For(durSec * GONG_RING_PER_NOTE, 2f, 20f), 0.35f, 16)
+                startBurst(0.02, 300.0 + 3000.0 * bright)
+                gain = 0.5f
+            }
+            Voice.Glass -> {
+                env.trigger(0.003f, clamp(durSec * 1.1f, 0.4f, 30f), 0f, 0.4f)
+                sine1.reset(0.0)
+                sine2.reset(0.0)
+                sine3.reset(0.0)
+            }
+            Voice.Harp -> {
+                env.trigger(0.001f, 0.1f, 1f, 0.3f)
+                string.configure(freq, 0f, bright, clamp(0.5f + 0.08f * durSec, 0.5f, 0.95f))
+                excitationFilter.reset()
+                excitationFilter.setFq(((1000.0 + 9000.0 * bright) / sr).toFloat(), 0.7f)
+                burstLength = max(2, (sr / freq).toInt())
+                burstLeft = burstLength
+            }
+            Voice.Bowed -> {
+                env.trigger(clamp(durSec * 0.25f, 0.05f, 0.4f), 0.1f, 1f, clamp(durSec * 0.4f, 0.15f, 3f))
+                saw1.reset(0.0)
+                sine1.reset(0.0)
+            }
+            Voice.Choir -> {
+                env.trigger(min(durSec * 0.35f, 2f), 0.1f, 1f, min(max(durSec * 0.5f, 0.3f), 4f))
+                saw1.reset(0.0)
+                saw2.reset(0.33)
+                saw3.reset(0.66)
+                excitationFilter.reset()
+                excitationFilter.setFq((CHOIR_FORMANT_HZ / sr).toFloat(), 3f)
+            }
+            Voice.Sub -> {
+                env.trigger(0.03f, 0.1f, 1f, clamp(durSec * 0.4f, 0.2f, 3f))
+                sine1.reset(0.0)
+                sine2.reset(0.0)
+            }
         }
         active = true
         age = 0L
@@ -151,6 +213,17 @@ internal class SynthVoice(private val sampleRate: Int, seed: Int) {
 
     /** Seconds for the fundamental to fall 60 dB, from the note's length (longer notes ring longer). */
     private fun ring60For(durSec: Float): Float = clamp(durSec, 0.15f, 20f)
+
+    private fun ring60For(seconds: Float, lo: Float, hi: Float): Float = clamp(seconds, lo, hi)
+
+    /** Arms a noise burst of [seconds] low-passed at [cutoffHz] to strike the modal bank or string. */
+    private fun startBurst(seconds: Double, cutoffHz: Double) {
+        val sr = sampleRate.toDouble()
+        excitationFilter.reset()
+        excitationFilter.setFq((cutoffHz / sr).toFloat(), 0.7f)
+        burstLength = max(2, (sr * seconds).toInt())
+        burstLeft = burstLength
+    }
 
     /** Writes [n] mono samples to [out]; [brightness] and [detune] are the smoothed texture values. */
     fun render(n: Int, out: FloatArray, brightness: Float, detune: Float) {
@@ -169,6 +242,10 @@ internal class SynthVoice(private val sampleRate: Int, seed: Int) {
             filter.setFq(clamp(((350.0 + 6500.0 * tex * tex) + freq * 2.0) / sr, 0.001, 0.45).toFloat(), 0.8f)
         } else if (kind == Voice.Drone) {
             filter.setFq(clamp((120.0 + 1800.0 * tex + freq) / sr, 0.001, 0.45).toFloat(), 0.7f)
+        } else if (kind == Voice.Bowed) {
+            filter.setFq(clamp((300.0 + 3500.0 * tex + freq * 2.0) / sr, 0.001, 0.45).toFloat(), 0.9f)
+        } else if (kind == Voice.Choir) {
+            filter.setFq(clamp((500.0 + 4000.0 * tex + freq * 2.0) / sr, 0.001, 0.45).toFloat(), 0.8f)
         }
         var fadeDone = false
         val fmIndex = (0.4f + 4.5f * tex) * (0.3f + 0.7f * amp)
@@ -186,15 +263,16 @@ internal class SynthVoice(private val sampleRate: Int, seed: Int) {
                     s = fm1.next(f, bellRatio, idx) * 0.5f + fm2.next(f * 2.76, 1.0, idx * 0.5f) * 0.18f * e
                     s *= 1.0f * e
                 }
-                Voice.Mallet -> {
+                Voice.Mallet, Voice.Marimba, Voice.Vibes, Voice.Kalimba, Voice.Gong -> {
                     var ex = 0f
                     if (burstLeft > 0) {
                         ex = rng.nextSigned() * (burstLeft.toFloat() / burstLength)
                         burstLeft--
                     }
-                    s = modal.process(excitationFilter.lowPass(ex) * 3.5f) * e
+                    s = modal.process(excitationFilter.lowPass(ex) * 3.5f) * e * gain
+                    if (kind == Voice.Vibes) s *= 1f - VIBES_TREMOLO_DEPTH * (0.5f + 0.5f * sine1.next(VIBES_TREMOLO_HZ / sr))
                 }
-                Voice.Pluck -> {
+                Voice.Pluck, Voice.Harp -> {
                     var ex = 0f
                     if (burstLeft > 0) {
                         ex = rng.nextSigned()
@@ -217,6 +295,21 @@ internal class SynthVoice(private val sampleRate: Int, seed: Int) {
                     val raw = sine1.next(f * 2.0) * 0.5f + sine2.next(f * 3.0 * ratioUp) * 0.3f +
                         sine3.next(f * 4.0 * ratioDown) * 0.2f
                     s = raw * e * 0.35f
+                }
+                Voice.Glass -> {
+                    val raw = sine1.next(f) * 0.6f + sine2.next(f * 2.32) * 0.25f * e + sine3.next(f * 4.25) * 0.12f * e * e
+                    s = raw * e
+                }
+                Voice.Bowed -> {
+                    val raw = saw1.saw(f * (1.0 + BOW_VIBRATO_DEPTH * sine1.next(BOW_VIBRATO_HZ / sr)))
+                    s = filter.lowPass(raw) * e * 0.5f
+                }
+                Voice.Choir -> {
+                    val raw = (saw1.saw(f * CHOIR_DETUNE) + saw2.saw(f) + saw3.saw(f / CHOIR_DETUNE)) * 0.33f
+                    s = (filter.lowPass(raw) + 0.5f * excitationFilter.bandPass(raw)) * e * 0.5f
+                }
+                Voice.Sub -> {
+                    s = (sine1.next(f) * 0.8f + sine2.next(f * 2.0) * 0.15f) * e
                 }
             }
             if (fading) {
@@ -245,5 +338,17 @@ internal class SynthVoice(private val sampleRate: Int, seed: Int) {
 
     private companion object {
         const val FADE_SECONDS = 0.005
+        const val MARIMBA_STRUCTURE = 0.45f
+        const val MARIMBA_RING_PER_NOTE = 0.5f
+        const val VIBES_RING_PER_NOTE = 1.6f
+        const val VIBES_TREMOLO_HZ = 5.0
+        const val VIBES_TREMOLO_DEPTH = 0.25f
+        const val KALIMBA_STRUCTURE = 0.85f
+        const val KALIMBA_RING_PER_NOTE = 0.8f
+        const val GONG_RING_PER_NOTE = 3f
+        const val BOW_VIBRATO_HZ = 5.2
+        const val BOW_VIBRATO_DEPTH = 0.004
+        const val CHOIR_DETUNE = 1.0035
+        const val CHOIR_FORMANT_HZ = 900.0
     }
 }

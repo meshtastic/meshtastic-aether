@@ -31,7 +31,13 @@ private fun MeshPacket.heard(kind: PacketKind, nowMillis: Long, ownNode: Long?):
     to = toNode(),
     relayByte = relayOrNull(),
     toUs = ownNode != null && toNode() == ownNode,
+    payloadBytes = decoded?.payload?.size ?: encrypted?.size,
+    textLength = decoded?.takeIf { it.portnum == PortNum.TEXT_MESSAGE_APP }?.payload?.utf8()?.codePointCount(),
+    channel = if (decoded != null) channel else null,
 )
+
+/** Characters as a reader counts them: a surrogate pair is one. */
+private fun String.codePointCount(): Int = length - count { it.isLowSurrogate() }
 
 /** Maps packets that carry a decoded payload; an undecoded packet belongs to [RawFrameMapper]. */
 internal object PacketMapper {

@@ -39,7 +39,7 @@ private class RadioClientFeed(private val client: RadioClient) : SdkFeed {
 
 /**
  * Live mesh through the SDK. After every `Connected` the source emits state-only events
- * (`NodeSeen`, `Environment`, `Vitals`, `Self`) and no `PacketHeard`, `Neighbors` or `Route` for [warmUpMillis], because the
+ * (`NodeSeen`, `Environment`, `Health`, `Vitals`, `Stats`, `Self`) and no `PacketHeard`, `Neighbors` or `Route` for [warmUpMillis], because the
  * node snapshot and retained handshake packets flush at that point.
  */
 internal class SdkMeshSource internal constructor(
@@ -112,7 +112,11 @@ internal class SdkMeshSource internal constructor(
                 watching[num] = scope.launch {
                     feed.telemetry(num).collect { t ->
                         t.toEnvironment(num, nowMillis())?.let { emit(it) }
-                        if (num == feed.ownNodeNum()) t.toVitals(nowMillis())?.let { emit(it) }
+                        t.toHealth(num, nowMillis())?.let { emit(it) }
+                        if (num == feed.ownNodeNum()) {
+                            t.toVitals(nowMillis())?.let { emit(it) }
+                            t.toStats(nowMillis())?.let { emit(it) }
+                        }
                     }
                 }
             }

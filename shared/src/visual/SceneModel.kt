@@ -5,6 +5,11 @@ import org.meshtastic.ambient.mesh.LinkState
 import org.meshtastic.ambient.mesh.MeshEvent
 import org.meshtastic.ambient.mesh.PacketKind
 import org.meshtastic.ambient.mesh.resolveRelay
+import org.meshtastic.ambient.mood.ParamValues
+import org.meshtastic.ambient.mood.RotationIntegrator
+import org.meshtastic.ambient.mood.RotationState
+import org.meshtastic.ambient.mood.RotationTarget
+import org.meshtastic.ambient.mood.RotationTargets
 import org.meshtastic.ambient.music.NoteEvent
 import org.meshtastic.ambient.music.Ornaments
 import org.meshtastic.ambient.music.Rng
@@ -40,19 +45,94 @@ class Orb internal constructor(val node: Long, var name: String?, internal var p
     internal var notePulseFrame = NEVER
     internal var notePulseStrength = 0f
 
+    /** Device role and hardware names from the last [MeshEvent.NodeSeen] that carried them. */
+    var role: String? = null
+        internal set
+    var hardware: String? = null
+        internal set
+
+    /** Health from [MeshEvent.Health]; null until reported. */
+    var batteryPct: Int? = null
+        internal set
+    var voltage: Float? = null
+        internal set
+    var uptimeSeconds: Long? = null
+        internal set
+
+    /** Smoothed RSSI of the packets heard from this node in dBm; null until one carried it. */
+    var rssi: Double? = null
+        internal set
+
+    /** Core radius and opacity multipliers from the role (1.0 when unknown). */
+    var coreSize = 1.0
+        internal set
+    var coreAlpha = 1.0
+        internal set
+
+    /** Halo tint offset in degrees from the hardware model (0 when unknown). */
+    var haloHueDegrees = 0
+        internal set
+
+    /** Halo size multiplier from uptime and brightness multiplier from voltage (1.0 when unknown). */
+    var haloScale = 1.0
+        internal set
+    var brightness = 1.0
+        internal set
+
+    /** Brightness multiplier of the low-battery flicker now, 1.0 when not flickering; see [EventLook.flickerFactor]. */
+    var flicker = 1.0
+        internal set
+
+    /** Eased layout z offset from signal strength and altitude; negative is toward the camera. */
+    var zOffset = 0.0
+        internal set
+    internal var flickerPhase = 0.0
+
     companion object {
         internal const val NEVER = Long.MIN_VALUE
     }
 }
 
-/** A ring from an orb. [echo] 0 is the packet itself, 1.. are the hop echoes, fainter and later. */
+/**
+ * A ring from an orb. [echo] 0 is the packet itself, 1.. are the hop echoes, fainter and later. The rest are the
+ * packet's own attributes, already reduced to bounded drawing values by [EventLook]; each is neutral when absent.
+ */
 class Ripple internal constructor(
     val node: Long,
     val startFrame: Long,
     val kind: PacketKind,
     val strength: Float,
     val echo: Int,
-)
+    val viaMqtt: Boolean = false,
+    payloadBytes: Int? = null,
+    textLength: Int? = null,
+    channel: Int? = null,
+) {
+    val widthTrim: Double = EventLook.payloadWidthTrim(payloadBytes)
+    val ringCount: Int = EventLook.ringCount(kind, textLength)
+    val hueDegrees: Int = EventLook.channelHueDegrees(channel)
+    val style: RingStyle = EventLook.ringStyle(kind)
+    val coolMix: Float = EventLook.mqttMix(viaMqtt)
+}
+
+/** A clock that advances by `dt / scale`: changing [scale] changes the rate and never moves the value, so no phase read from it jumps. */
+internal class PhaseClock {
+    var scale = 1.0
+        set(value) {
+            field = if (value.isFinite()) value.coerceIn(MIN_SCALE, MAX_SCALE) else 1.0
+        }
+    var seconds = 0.0
+        private set
+
+    fun advance(dtSeconds: Double) {
+        seconds += dtSeconds / scale
+    }
+
+    companion object {
+        const val MIN_SCALE = 0.25
+        const val MAX_SCALE = 4.0
+    }
+}
 
 /** Our own node: fixed at the scene centre, never an orb, and never named on screen. */
 class Anchor internal constructor(val node: Long) {
@@ -76,7 +156,17 @@ class Edge internal constructor(val a: Long, val b: Long, internal var refreshed
 
 private class PendingNote(val dueFrame: Long, val node: Long, val strength: Float)
 
-private class Pending(val dueFrame: Long, val node: Long, val kind: PacketKind, val strength: Float, val echo: Int)
+private class Pending(
+    val dueFrame: Long,
+    val node: Long,
+    val kind: PacketKind,
+    val strength: Float,
+    val echo: Int,
+    val viaMqtt: Boolean = false,
+    val payloadBytes: Int? = null,
+    val textLength: Int? = null,
+    val channel: Int? = null,
+)
 
 /**
  * The scene as pure state on the audio clock: nothing here reads a wall clock or a canvas. The caller feeds events
@@ -126,6 +216,41 @@ class SceneModel(private val sampleRate: Int) {
     private var padTarget = 0.0
     private var anchorPhase = 0.0
 
+    /** The mesh-driven parameters the scene is easing toward; the engine sets them with [onParams]. */
+    var params: ParamValues = ParamValues.NEUTRAL
+        private set
+
+    private val integrator = RotationIntegrator()
+    private var easedPeriod = RotationTargets.NEUTRAL_PERIOD_SECONDS
+    private var easedTilt = RotationTargets.NEUTRAL_TILT_DEGREES
+    private var easedWobble = RotationTargets.NEUTRAL_WOBBLE_DEGREES
+    private var impulse = 0.0
+
+    /** The integrated rotation as of the last [update]: yaw is the unwrapped angle, pitch is tilt plus wobble. */
+    var rotation = RotationState(0.0, 2 * PI / RotationTargets.NEUTRAL_PERIOD_SECONDS, 0.0, 0.0, 1)
+        private set
+
+    private val cloudClock = PhaseClock()
+    private val driftClock = PhaseClock()
+    private val orbBreathClock = PhaseClock()
+
+    /** Multipliers on the period of the cloud breathing, the orb drift and the orb breath; 1.0 is today's. Changing one never jumps its phase. */
+    var cloudBreathPeriodScale: Double
+        get() = cloudClock.scale
+        set(value) { cloudClock.scale = value }
+    var driftPeriodScale: Double
+        get() = driftClock.scale
+        set(value) { driftClock.scale = value }
+    var orbBreathPeriodScale: Double
+        get() = orbBreathClock.scale
+        set(value) { orbBreathClock.scale = value }
+
+    /** Anchor ring breath period scale; the linked and unlinked periods are multiplied by it. */
+    var anchorPeriodScale = 1.0
+        set(value) {
+            field = if (value.isFinite()) value.coerceIn(PhaseClock.MIN_SCALE, PhaseClock.MAX_SCALE) else 1.0
+        }
+
     private val orbMap = LinkedHashMap<Long, Orb>()
     private val pending = ArrayList<Pending>()
     private val active = ArrayList<Ripple>()
@@ -163,11 +288,21 @@ class SceneModel(private val sampleRate: Int) {
                 val orb = orbMap.getOrPut(e.node) { Orb(e.node, null, null).also { it.seenFrame = lastFrame } }
                 orb.name = e.name
                 orb.position = e.position
+                e.role?.let { r -> orb.role = r; orb.coreSize = EventLook.coreSize(r); orb.coreAlpha = EventLook.coreAlpha(r) }
+                e.hardware?.let { h -> orb.hardware = h; orb.haloHueDegrees = EventLook.hardwareHueDegrees(h) }
                 dirty = true
+            }
+            is MeshEvent.Health -> if (e.node != selfNode) {
+                val orb = orbMap.getOrPut(e.node) { Orb(e.node, null, null).also { it.seenFrame = lastFrame; dirty = true } }
+                if (e.batteryPct != null) orb.batteryPct = e.batteryPct
+                if (e.voltage != null) orb.voltage = e.voltage
+                if (e.uptimeSeconds != null) orb.uptimeSeconds = e.uptimeSeconds
+                orb.brightness = EventLook.brightness(orb.voltage, orb.batteryPct)
+                orb.haloScale = EventLook.haloScale(orb.uptimeSeconds)
             }
             is MeshEvent.NodeGone -> if (orbMap.remove(e.node) != null) dirty = true
             is MeshEvent.PacketHeard -> if (!warming) enqueue(e, dueFrame)
-            is MeshEvent.Environment, is MeshEvent.Vitals -> Unit
+            is MeshEvent.Environment, is MeshEvent.Vitals, is MeshEvent.Stats -> Unit
             is MeshEvent.Self -> {
                 selfNode = e.node
                 anchor = Anchor(e.node)
@@ -184,6 +319,11 @@ class SceneModel(private val sampleRate: Int) {
         val node = note.node ?: return
         pendingNotes += PendingNote(dueFrame, node, note.velocity.coerceIn(0f, 1f))
         if (pendingNotes.size > MAX_PENDING) pendingNotes.removeAt(0)
+    }
+
+    /** Sets the parameters the rotation eases toward; the picture never jumps to them. */
+    fun onParams(p: ParamValues) {
+        params = p
     }
 
     /** Shifts the background hue toward the texture's key and brightness and the field's breathing toward its pad level. */
@@ -249,11 +389,14 @@ class SceneModel(private val sampleRate: Int) {
             orbMap[e.from] = Orb(e.from, null, null).also { it.seenFrame = lastFrame }
             dirty = true
         }
-        add(Pending(dueFrame, e.from, e.kind, strength, 0))
+        e.rssi?.let { r ->
+            orbMap[e.from]?.let { o -> o.rssi = o.rssi?.let { prev -> prev + (r - prev) * RSSI_SMOOTHING } ?: r.toDouble() }
+        }
+        add(Pending(dueFrame, e.from, e.kind, strength, 0, e.viaMqtt, e.payloadBytes, e.textLength, e.channel))
         if (e.from != selfNode) packetPulses(e, dueFrame, strength)
         for (k in 1..Ornaments.echoesFor(e.hopsTaken, e.viaMqtt)) {
             val at = dueFrame + (Ornaments.ECHO_DELAY_SECONDS * k * sampleRate).toLong()
-            add(Pending(at, e.from, e.kind, strength * 0.5f, k))
+            add(Pending(at, e.from, e.kind, strength * 0.5f, k, e.viaMqtt, e.payloadBytes, e.textLength, e.channel))
         }
     }
 
@@ -271,7 +414,13 @@ class SceneModel(private val sampleRate: Int) {
         padLevel += (padTarget - padLevel) * (1 - exp(-dtSeconds / PAD_TAU_SECONDS))
         val satTarget = if (linked) 1.0 else UNLINKED_SATURATION
         saturation += (satTarget - saturation) * (1 - exp(-dtSeconds / SATURATION_TAU_SECONDS))
-        anchorPhase = (anchorPhase + 2 * PI * dtSeconds / (if (linked) ANCHOR_PERIOD_SECONDS else UNLINKED_ANCHOR_PERIOD_SECONDS)).mod(2 * PI)
+        anchorPhase = (anchorPhase + 2 * PI * dtSeconds /
+            ((if (linked) ANCHOR_PERIOD_SECONDS else UNLINKED_ANCHOR_PERIOD_SECONDS) * anchorPeriodScale)).mod(2 * PI)
+        cloudClock.advance(dtSeconds)
+        driftClock.advance(dtSeconds)
+        orbBreathClock.advance(dtSeconds)
+        stepRotation(dtSeconds)
+        stepOrbLooks(dtSeconds)
 
         var i = 0
         while (i < pending.size) {
@@ -311,13 +460,45 @@ class SceneModel(private val sampleRate: Int) {
         if (dirty) layout()
     }
 
+    private fun stepRotation(dtSeconds: Double) {
+        val p = params
+        val ease = 1 - exp(-dtSeconds / PARAM_EASE_SECONDS)
+        val period = if (p.rotationPeriodSeconds.isFinite()) p.rotationPeriodSeconds.coerceAtLeast(RotationTargets.MIN_PERIOD_SECONDS) else easedPeriod
+        easedPeriod = exp(ln(easedPeriod) + (ln(period) - ln(easedPeriod)) * ease)
+        if (p.tiltDegrees.isFinite()) easedTilt += (p.tiltDegrees - easedTilt) * ease
+        if (p.wobbleDegrees.isFinite()) easedWobble += (p.wobbleDegrees - easedWobble) * ease
+        impulse *= exp(-dtSeconds / IMPULSE_TAU_SECONDS)
+        val strength = if (p.drivers.rotationDirection != null) 1.0 else 0.0
+        rotation = integrator.step(
+            dtSeconds,
+            RotationTarget(easedPeriod, p.rotationDirection, easedTilt, easedWobble, impulse, strength),
+        )
+    }
+
+    private fun stepOrbLooks(dtSeconds: Double) {
+        val ease = 1 - exp(-dtSeconds / DEPTH_EASE_SECONDS)
+        val refAltitude = origin?.altitudeM
+        for (o in orbMap.values) {
+            val target = EventLook.rssiDepthBias(o.rssi) + EventLook.altitudeLift(o.position?.altitudeM, refAltitude)
+            o.zOffset += (target - o.zOffset) * ease
+            val hz = EventLook.flickerHz(o.batteryPct)
+            if (hz > 0.0) {
+                o.flickerPhase = EventLook.advanceFlicker(o.flickerPhase, hz, dtSeconds)
+                o.flicker = EventLook.flickerFactor(o.batteryPct, o.flickerPhase)
+            } else {
+                o.flicker = 1.0
+            }
+        }
+    }
+
     private fun spawn(p: Pending) {
         if (p.kind == PacketKind.Encrypted) {
             haze = (haze + HAZE_STEP).coerceAtMost(1.0)
             return
         }
         orbMap[p.node]?.lastActiveFrame = p.dueFrame
-        active += Ripple(p.node, p.dueFrame, p.kind, p.strength, p.echo)
+        if (p.echo == 0) impulse = (impulse + PACKET_IMPULSE).coerceAtMost(1.0)
+        active += Ripple(p.node, p.dueFrame, p.kind, p.strength, p.echo, p.viaMqtt, p.payloadBytes, p.textLength, p.channel)
         if (active.size > MAX_RIPPLES) active.removeAt(0)
     }
 
@@ -339,10 +520,13 @@ class SceneModel(private val sampleRate: Int) {
     }
 
     /** Slow breathing of an orb, 0.85..1.0, each at its own period and phase from the node number. */
-    fun breath(node: Long, tSeconds: Double): Double {
+    fun breath(node: Long): Double {
         val period = BREATH_MIN_PERIOD + BREATH_PERIOD_SPREAD * unit(Rng.mix(node + 3))
-        return 0.925 + 0.075 * sin(2 * PI * tSeconds / period + phase(node, 4))
+        return 0.925 + 0.075 * sin(2 * PI * orbBreathClock.seconds / period + phase(node, 4))
     }
+
+    /** Multiplier near 1.0 for every coordinate of the cloud: 3 percent over a minute, from its own phase accumulator. */
+    val cloudBreath: Double get() = CloudMotion.breathing(2 * PI * cloudClock.seconds / CloudMotion.BREATH_PERIOD_SECONDS)
 
     /** The anchor ring's breath 0..1: a calm 8 s cycle while linked, a slower, longer one while not. */
     val anchorBreath: Double get() = 0.5 + 0.5 * sin(anchorPhase)
@@ -359,11 +543,11 @@ class SceneModel(private val sampleRate: Int) {
         ((lastFrame - p.startFrame).toDouble() / (p.endFrame - p.startFrame).coerceAtLeast(1L)).coerceIn(0.0, 1.0)
 
     /** Slow drift of an orb around its laid-out place, in unit-disc units; the whole field wanders against burn-in. */
-    fun driftX(node: Long, tSeconds: Double): Double = DRIFT * sin(tSeconds * 0.037 + phase(node, 1))
+    fun driftX(node: Long): Double = DRIFT * sin(driftClock.seconds * 0.037 + phase(node, 1))
 
-    fun driftY(node: Long, tSeconds: Double): Double = DRIFT * cos(tSeconds * 0.029 + phase(node, 2))
+    fun driftY(node: Long): Double = DRIFT * cos(driftClock.seconds * 0.029 + phase(node, 2))
 
-    fun driftZ(node: Long, tSeconds: Double): Double = DRIFT * sin(tSeconds * 0.033 + phase(node, 5))
+    fun driftZ(node: Long): Double = DRIFT * sin(driftClock.seconds * 0.033 + phase(node, 5))
 
     private fun layout() {
         dirty = false
@@ -463,6 +647,15 @@ class SceneModel(private val sampleRate: Int) {
         const val HOP_SECONDS = 0.4
         const val TRAVEL_SECONDS = 0.8
         private const val PULSE_LINGER_SECONDS = 0.5
+
+        /** Time constant of the scene's easing toward the mesh-driven rotation parameters. */
+        private const val PARAM_EASE_SECONDS = 10.0
+
+        /** Each packet adds this much (of 1.0) to the rotation impulse, which decays with [IMPULSE_TAU_SECONDS]. */
+        const val PACKET_IMPULSE = 0.2
+        private const val IMPULSE_TAU_SECONDS = 10.0
+        private const val RSSI_SMOOTHING = 0.3
+        private const val DEPTH_EASE_SECONDS = 5.0
 
         private const val HAZE_TAU_SECONDS = 8.0
         private const val HAZE_STEP = 0.12

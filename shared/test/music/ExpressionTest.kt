@@ -59,7 +59,7 @@ class ExpressionTest {
     // Regression: pads were transposed by a fractional octave while drone and bells were not, so pads sat out of tune with them.
     @Test
     fun `every pad pitch is a chord tone of the key at every minute of the day`() {
-        val c = Composer(7L, sr)
+        val c = malletComposer(7L, sr)
         val key = key()
         val padPitches = ArrayList<Pair<Int, Double>>()
         var frame = 0L
@@ -82,7 +82,7 @@ class ExpressionTest {
     // Regression: the register must move by whole octaves, once at night and once at dawn, never wander.
     @Test
     fun `the pad register is down an octave at night and normal by day and flips rarely`() {
-        val c = Composer(8L, sr)
+        val c = malletComposer(8L, sr)
         val key = key()
         val shifts = ArrayList<Pair<Int, Int>>()
         var frame = 0L
@@ -119,7 +119,7 @@ class ExpressionTest {
 
     @Test
     fun `a lone packet in a quiet mesh plays its node's whole motif at its rhythm`() {
-        val c = Composer(3L, sr)
+        val c = malletComposer(3L, sr)
         c.advance(0, lookahead, moment(0))
         c.onEvent(heard(4242L, atMs = t0 + 100))
         val notes = c.drive(step, 8).filter { it.voice == Voice.Mallet }.sortedBy { it.atFrame }
@@ -135,7 +135,7 @@ class ExpressionTest {
 
     @Test
     fun `a busy mesh plays one note per packet and no motif`() {
-        val c = Composer(3L, sr)
+        val c = malletComposer(3L, sr)
         c.advance(0, lookahead, moment(0))
         for (i in 0 until 14) c.onEvent(heard(900L + i, atMs = t0 + i))
         val notes = c.drive(step, 8).filter { it.voice == Voice.Mallet }
@@ -145,7 +145,7 @@ class ExpressionTest {
 
     @Test
     fun `memory bells replay fragments of the recent nodes' motifs and carry their node`() {
-        val c = Composer(13L, sr)
+        val c = malletComposer(13L, sr)
         c.advance(0, lookahead, moment(0))
         c.onEvent(heard(555L, atMs = t0 + 100))
         c.drive(step, 4)
@@ -161,7 +161,7 @@ class ExpressionTest {
 
     @Test
     fun `an echo through a relay carries the relay's node and the rest the source`() {
-        val c = Composer(24L, sr)
+        val c = malletComposer(24L, sr)
         c.advance(0, lookahead, moment(0))
         val source = 1000L
         val relay = 2000L
@@ -182,7 +182,7 @@ class ExpressionTest {
 
     @Test
     fun `the nearest known node answers a packet a third or fifth up two to four seconds later`() {
-        val c = Composer(5L, sr)
+        val c = malletComposer(5L, sr)
         c.advance(0, lookahead, moment(0))
         c.know(1L, home)
         c.know(2L, far)
@@ -204,7 +204,7 @@ class ExpressionTest {
 
     @Test
     fun `answers come at most once every twenty seconds`() {
-        val c = Composer(5L, sr)
+        val c = malletComposer(5L, sr)
         c.advance(0, lookahead, moment(0))
         c.know(1L, home)
         c.know(3L, near)
@@ -221,13 +221,13 @@ class ExpressionTest {
     @Test
     fun `with no positions the resolved relay answers and with no neighbor nobody does`() {
         val relay = 2000L
-        val c = Composer(5L, sr)
+        val c = malletComposer(5L, sr)
         c.advance(0, lookahead, moment(0))
         c.know(1L)
         c.know(relay)
         c.onEvent(heard(1L, atMs = t0 + 100, relay = (relay and 0xFF).toInt()))
         assertEquals(1, answers(c.drive(step, 12), relay).filter { it.velocity == 0.3f }.size)
-        val alone = Composer(5L, sr)
+        val alone = malletComposer(5L, sr)
         alone.advance(0, lookahead, moment(0))
         alone.onEvent(heard(1L, atMs = t0 + 100))
         assertTrue(alone.drive(step, 12).none { it.voice == Voice.Bell && it.velocity == 0.3f })
@@ -238,7 +238,7 @@ class ExpressionTest {
     }.sortedBy { it.atFrame }
 
     private fun crossing(seed: Long, fromMinute: Int, toMinute: Int, frame: Long = 10L * sr): List<NoteEvent> {
-        val c = Composer(seed, sr)
+        val c = malletComposer(seed, sr)
         val out = ArrayList<NoteEvent>()
         out += c.advance(frame, lookahead, moment(frame, fromMinute)).notes
         var f = frame + step
@@ -288,7 +288,7 @@ class ExpressionTest {
         stepMs: Long,
         feed: (Composer, Int, Long) -> Unit,
     ): List<NoteEvent> {
-        val c = Composer(seed, sr)
+        val c = malletComposer(seed, sr)
         val out = ArrayList<NoteEvent>()
         for (i in 0 until calls) {
             val ms = t0 + i * stepMs
@@ -339,7 +339,7 @@ class ExpressionTest {
 
     @Test
     fun `a node first seen this session adds a soft pad voice for the session up to three`() {
-        val c = Composer(12L, sr)
+        val c = malletComposer(12L, sr)
         c.connected()
         c.advance(0, lookahead, moment(0))
         for (n in 100L..104L) c.know(n, first = true)
@@ -360,7 +360,7 @@ class ExpressionTest {
 
     @Test
     fun `a node silent for an hour gets one falling dyad of chord tones and speaking again re-arms it`() {
-        val c = Composer(14L, sr)
+        val c = malletComposer(14L, sr)
         c.advance(0, lookahead, moment(0))
         c.know(9L)
         c.onEvent(heard(9L, atMs = t0))
@@ -380,7 +380,7 @@ class ExpressionTest {
 
     @Test
     fun `a node never heard this session gets no farewell`() {
-        val c = Composer(14L, sr)
+        val c = malletComposer(14L, sr)
         c.advance(0, lookahead, moment(0))
         c.know(9L)
         val notes = c.advance(10L * sr, lookahead, moment(10L * sr, epoch = t0 + 3 * 3600_000L)).notes
@@ -390,7 +390,7 @@ class ExpressionTest {
     @Test
     fun `section labels count the form's sections and name its energy`() {
         val seed = 21L
-        val c = Composer(seed, sr)
+        val c = malletComposer(seed, sr)
         val form = Form(seed)
         val bounds = form.sectionMinutes(6 * 3600.0).runningFold(0.0) { a, m -> a + m * 60 }.drop(1)
         for (t in 0 until 6 * 3600 step 37) {

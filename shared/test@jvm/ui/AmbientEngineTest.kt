@@ -18,6 +18,7 @@ import kotlinx.coroutines.test.runTest
 import org.meshtastic.ambient.audio.AudioSink
 import org.meshtastic.ambient.audio.BlockRenderer
 import org.meshtastic.ambient.mesh.GeoPoint
+import org.meshtastic.ambient.mood.ParamValues
 import org.meshtastic.ambient.mesh.LinkState
 import org.meshtastic.ambient.mesh.MeshEvent
 import org.meshtastic.ambient.mesh.MeshSource
@@ -197,5 +198,27 @@ class AmbientEngineTest {
         e.dismissError()
         assertNull(e.status.error)
         job.cancel()
+    }
+
+    // Regression: the engine computed the composer's params but never gave them to the scene or the overlay.
+    @Test
+    fun `the engine hands the mood's parameters to the scene and the overlay`() = runTest {
+        val source = flow {
+            emit(MeshEvent.Link(LinkState.Connected, base))
+            emit(MeshEvent.Self(0x0A0000FFL, "Home", GeoPoint(45.0, -93.0), base))
+            while (true) {
+                delay(2_000)
+                emit(MeshEvent.PacketHeard(0x0A000101L, PacketKind.Position, 3f, -90, 1, false, base + currentTime))
+            }
+        }
+        val e = engine(FakeSink(), source)
+        val job = launch { e.run() }
+        runCurrent()
+        advanceTimeBy(300)
+        assertEquals(ParamValues.NEUTRAL, e.scene.params, "no packets yet: neutral")
+        advanceTimeBy(30_000)
+        job.cancel()
+        assertEquals("activity", e.status.params.drivers.rotationSpeed, "overlay row names its driver")
+        assertEquals(e.status.params, e.scene.params, "scene and overlay see the same values")
     }
 }

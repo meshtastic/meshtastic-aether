@@ -1,5 +1,6 @@
 package org.meshtastic.ambient.visual
 
+import org.meshtastic.ambient.mood.RotationState
 import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.hypot
@@ -110,18 +111,25 @@ class ProjectionTest {
     }
 
     @Test
-    fun `yaw makes one revolution in ten minutes and pitch peaks at eight degrees after a quarter period`() {
-        assertEquals(2 * PI, CloudMotion.yaw(600.0), eps)
-        assertEquals(PI, CloudMotion.yaw(300.0), eps)
-        assertEquals(8.0 * PI / 180.0, CloudMotion.pitch(22.5), eps)
-        assertEquals(-8.0 * PI / 180.0, CloudMotion.pitch(67.5), eps)
-        assertEquals(0.0, CloudMotion.pitch(45.0), eps)
+    fun `the rotation overload turns by the yaw and leans by tilt plus wobble`() {
+        val a = Projection()
+        val b = Projection()
+        val yaw = 0.7
+        a.update(RotationState(yaw, 0.01, 0.1, 0.05, 1), d)
+        b.update(yaw, 0.15, d)
+        val pa = Projected()
+        val pb = Projected()
+        a.project(0.3, -0.2, 0.5, pa)
+        b.project(0.3, -0.2, 0.5, pb)
+        assertEquals(pb.x, pa.x, eps)
+        assertEquals(pb.y, pa.y, eps)
+        assertEquals(pb.depth, pa.depth, eps)
     }
 
     @Test
     fun `the cloud breathes three percent over sixty seconds`() {
-        assertEquals(1.03, CloudMotion.breathing(15.0), eps)
-        assertEquals(0.97, CloudMotion.breathing(45.0), eps)
+        assertEquals(1.03, CloudMotion.breathing(PI / 2), eps)
+        assertEquals(0.97, CloudMotion.breathing(3 * PI / 2), eps)
         assertEquals(1.0, CloudMotion.breathing(0.0), eps)
     }
 

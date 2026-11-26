@@ -2,17 +2,22 @@ package org.meshtastic.ambient.music
 
 import kotlin.math.pow
 
-/** The six modes in use; Locrian is deliberately absent. Semitones above the tonic, one octave. */
+/** The eight scales in use (six modes and two pentatonics); Locrian is deliberately absent. Semitones above the tonic, one octave. */
 enum class Mode(val semitones: List<Int>) {
     Ionian(listOf(0, 2, 4, 5, 7, 9, 11)),
     Dorian(listOf(0, 2, 3, 5, 7, 9, 10)),
     Phrygian(listOf(0, 1, 3, 5, 7, 8, 10)),
     Lydian(listOf(0, 2, 4, 6, 7, 9, 11)),
     Mixolydian(listOf(0, 2, 4, 5, 7, 9, 10)),
-    Aeolian(listOf(0, 2, 3, 5, 7, 8, 10));
+    Aeolian(listOf(0, 2, 3, 5, 7, 8, 10)),
+    MajorPentatonic(listOf(0, 2, 4, 7, 9)),
+    MinorPentatonic(listOf(0, 3, 5, 7, 10));
+
+    /** Notes per octave: 7 for the modes, 5 for the pentatonics. */
+    val size: Int get() = semitones.size
 
     /** Semitones above the tonic of scale step [step]; steps run past the octave and below zero. */
-    fun semitoneOfStep(step: Int): Int = semitones[step.mod(7)] + 12 * step.floorDiv(7)
+    fun semitoneOfStep(step: Int): Int = semitones[step.mod(size)] + 12 * step.floorDiv(size)
 }
 
 object Theory {

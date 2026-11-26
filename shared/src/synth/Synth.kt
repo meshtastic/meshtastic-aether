@@ -278,8 +278,9 @@ class Synth(val sampleRate: Int) : NoteSink, BlockRenderer {
         for (v in voices) {
             if (!v.active) continue
             v.render(n, mono, brightness, detune)
-            val g = layer[v.kind.ordinal]
-            val pad = v.kind == Voice.Pad || v.kind == Voice.Drone || v.kind == Voice.Shimmer
+            val meshBed = v.fromNode && (v.kind == Voice.Drone || v.kind == Voice.Shimmer)
+            val g = if (meshBed) 1f else layer[v.kind.ordinal]
+            val pad = v.kind == Voice.Pad || v.kind == Voice.Drone || v.kind == Voice.Shimmer || v.kind == Voice.Choir
             val gl = v.panLeft * g
             val gr = v.panRight * g
             val sg = v.send * g

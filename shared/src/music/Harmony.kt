@@ -18,13 +18,18 @@ class Harmony(seed: Long, initialMode: Mode = Mode.Ionian) {
     var current: Chord = Chord(initialMode, 0, listOf(7, 9, 11, 13))
         private set
 
-    /** The next chord in [mode]: a new root that is never diminished, voices led by the smallest total step motion. */
+    /**
+     * The next chord in [mode]: a new root that is never diminished, voices led by the smallest total step motion.
+     * Leaving a scale of another size (7 notes to a pentatonic or back) first rescales the previous voicing to the new size.
+     */
     fun next(mode: Mode): Chord {
-        val prev = current
-        val candidates = (0..6).filter { it != prev.rootStep && !diminished(mode, it) }
+        val n = mode.size
+        val prev = rescaled(current, n)
+        val scale = n / 7.0
+        val candidates = (0 until n).filter { it != prev.rootStep && (n != 7 || !diminished(mode, it)) }
         val weights = candidates.map { root ->
-            val mean = lead(prev.voicing, root).average()
-            WEIGHTS[(root - prev.rootStep).mod(7)] * exp(-RECENTRE * maxOf(0.0, kotlin.math.abs(mean - CENTRE) - 2.0))
+            val mean = lead(prev.voicing, root, n).average()
+            WEIGHTS[(root - prev.rootStep).mod(n)] * exp(-RECENTRE * maxOf(0.0, kotlin.math.abs(mean - CENTRE * scale) - 2.0 * scale))
         }
         var pick = rng.nextDouble() * weights.sum()
         var root = candidates.last()
@@ -35,16 +40,24 @@ class Harmony(seed: Long, initialMode: Mode = Mode.Ionian) {
                 break
             }
         }
-        current = Chord(mode, root, lead(prev.voicing, root))
+        current = Chord(mode, root, lead(prev.voicing, root, n))
         return current
+    }
+
+    private fun rescaled(chord: Chord, n: Int): Chord {
+        val old = chord.mode.size
+        if (old == n) return chord
+        fun step(s: Int): Int = kotlin.math.round(s * n / old.toDouble()).toInt()
+        return Chord(chord.mode, step(chord.rootStep).mod(n), chord.voicing.map(::step))
     }
 
     private fun diminished(mode: Mode, root: Int): Boolean =
         (mode.semitoneOfStep(root + 4) - mode.semitoneOfStep(root)).mod(12) != 7
 
-    /** Each voice holds or moves one scale step, at least one holds, and the voicing is kept near [CENTRE]. */
-    private fun lead(prev: List<Int>, root: Int): List<Int> {
-        val targets = IntArray(4) { (root + 2 * it).mod(7) }
+    /** Each voice holds or moves one scale step, at least one holds, and the voicing is kept near [CENTRE] (scaled to [n] notes per octave). */
+    private fun lead(prev: List<Int>, root: Int, n: Int): List<Int> {
+        val scale = n / 7.0
+        val targets = IntArray(4) { (root + 2 * it).mod(n) }
         var best: List<Int> = prev
         var bestCost = Double.MAX_VALUE
         var bestRank = -1
@@ -55,12 +68,12 @@ class Harmony(seed: Long, initialMode: Mode = Mode.Ionian) {
             val out = ArrayList<Int>(4)
             for (i in 0..3) {
                 val t = targets[perm[i]]
-                val step = (-3..3).map { prev[i] + it }.first { it.mod(7) == t }
+                val step = (-3..3).map { prev[i] + it }.first { it.mod(n) == t }
                 val move = kotlin.math.abs(step - prev[i])
                 if (move > 1) stepwise = false
                 cost += move
                 if (move == 0) held = true
-                cost += WANDER * maxOf(0.0, kotlin.math.abs(step - CENTRE) - BAND)
+                cost += WANDER * maxOf(0.0, kotlin.math.abs(step - CENTRE * scale) - BAND * scale)
                 out += step
             }
             val rank = (if (stepwise) 2 else 0) + (if (held) 1 else 0)

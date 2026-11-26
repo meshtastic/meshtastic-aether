@@ -15,12 +15,24 @@ class TheoryTest {
         assertEquals(listOf(0, 2, 4, 6, 7, 9, 11), Mode.Lydian.semitones)
         assertEquals(listOf(0, 2, 4, 5, 7, 9, 10), Mode.Mixolydian.semitones)
         assertEquals(listOf(0, 2, 3, 5, 7, 8, 10), Mode.Aeolian.semitones)
+        assertEquals(listOf(0, 2, 4, 7, 9), Mode.MajorPentatonic.semitones)
+        assertEquals(listOf(0, 3, 5, 7, 10), Mode.MinorPentatonic.semitones)
+    }
+
+    // Regression: stepping past the octave of a five note scale used the seven note wrap and landed on the wrong pitch.
+    @Test
+    fun `a pentatonic scale wraps at five steps per octave`() {
+        assertEquals(12, Mode.MajorPentatonic.semitoneOfStep(5))
+        assertEquals(16, Mode.MajorPentatonic.semitoneOfStep(7))
+        assertEquals(-3, Mode.MajorPentatonic.semitoneOfStep(-1))
+        assertEquals(15, Mode.MinorPentatonic.semitoneOfStep(6))
+        assertEquals(14, Mode.Ionian.semitoneOfStep(8))
     }
 
     @Test
     fun `no mode is Locrian because every mode keeps a perfect fifth above its root`() {
         val locrian = listOf(0, 1, 3, 5, 6, 8, 10)
-        assertEquals(6, Mode.entries.size)
+        assertEquals(8, Mode.entries.size)
         for (mode in Mode.entries) {
             assertTrue(7 in mode.semitones, "${mode.name} lacks a perfect fifth")
             assertFalse(mode.semitones == locrian)

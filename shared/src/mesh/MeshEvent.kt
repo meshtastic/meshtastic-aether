@@ -3,7 +3,7 @@ package org.meshtastic.ambient.mesh
 import kotlinx.coroutines.flow.Flow
 
 /** A WGS84 position: [lat] in -90..90 and [lon] in -180..180, both in degrees. */
-data class GeoPoint(val lat: Double, val lon: Double)
+data class GeoPoint(val lat: Double, val lon: Double, val altitudeM: Int? = null)
 
 /** What a heard packet carries; [Encrypted] is a packet the radio could not decode (a channel we have no key for). */
 enum class PacketKind { Text, Position, Telemetry, NodeInfo, Routing, Traceroute, NeighborInfo, Other, Encrypted }
@@ -30,6 +30,12 @@ sealed interface MeshEvent {
         val relayByte: Int? = null,
         /** True for a unicast addressed to our own node. */
         val toUs: Boolean = false,
+        /** Payload size in bytes; null when unknown. */
+        val payloadBytes: Int? = null,
+        /** Length of a text message in characters (never the text itself); null for other kinds. */
+        val textLength: Int? = null,
+        /** Channel index the packet arrived on; null when unknown. */
+        val channel: Int? = null,
     ) : MeshEvent
 
     /** A node learned of, with its name and position when known; [firstThisSession] is true the first time since launch. */
@@ -39,6 +45,10 @@ sealed interface MeshEvent {
         val position: GeoPoint?,
         val firstThisSession: Boolean,
         override val atMillis: Long,
+        /** Device role name as the proto spells it (for example "ROUTER", "TRACKER"); null when unknown. */
+        val role: String? = null,
+        /** Hardware model name as the proto spells it (for example "HELTEC_V3"); null when unknown. */
+        val hardware: String? = null,
     ) : MeshEvent
 
     /** A node dropped from the radio's node database. */
@@ -53,6 +63,9 @@ sealed interface MeshEvent {
         val windMps: Float?,
         val lux: Float?,
         override val atMillis: Long,
+        val windDirectionDeg: Float? = null,
+        val windGustMps: Float? = null,
+        val windLullMps: Float? = null,
     ) : MeshEvent
 
     /** Our radio's own load: channel and transmit air utilization, each percent 0..100 or null. */
@@ -60,6 +73,27 @@ sealed interface MeshEvent {
 
     /** The link changed to [state]. */
     data class Link(val state: LinkState, override val atMillis: Long) : MeshEvent
+
+    /** A node's DeviceMetrics: battery 0..100 (101 means externally powered), voltage in volts, uptime in seconds. */
+    data class Health(
+        val node: Long,
+        val batteryPct: Int?,
+        val voltage: Float?,
+        val uptimeSeconds: Long?,
+        override val atMillis: Long,
+    ) : MeshEvent
+
+    /** Our own node's LocalStats; counters are cumulative since boot, so consumers take deltas and watch [uptimeSeconds] for resets. */
+    data class Stats(
+        val numOnline: Int?,
+        val numTotal: Int?,
+        val rxTotal: Long?,
+        val rxDupe: Long?,
+        val rxBad: Long?,
+        val noiseFloorDbm: Int?,
+        val uptimeSeconds: Long?,
+        override val atMillis: Long,
+    ) : MeshEvent
 
     /** Our own node, once known: the anchor every destination, pan and layout is relative to. */
     data class Self(val node: Long, val name: String?, val position: GeoPoint?, override val atMillis: Long) : MeshEvent

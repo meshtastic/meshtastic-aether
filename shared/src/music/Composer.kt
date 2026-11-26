@@ -5,6 +5,9 @@ import org.meshtastic.ambient.mesh.LinkState
 import org.meshtastic.ambient.mesh.MeshEvent
 import org.meshtastic.ambient.mesh.PacketKind
 import org.meshtastic.ambient.mesh.resolveRelay
+import org.meshtastic.ambient.mood.MeshMood
+import org.meshtastic.ambient.mood.MoodSnapshot
+import org.meshtastic.ambient.mood.ParamValues
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.hypot
@@ -22,13 +25,42 @@ class Composer(seed: Long, private val sampleRate: Int, pinFormFull: Boolean = f
 
     val chord: Chord get() = harmony.current
 
+    /** The mesh mood as of the last [advance]; neutral before the first. */
+    fun moodSnapshot(): MoodSnapshot = snapshot
+
+    /** The mesh-driven parameters as of the last [advance]: what the engine hands to the scene and overlay. */
+    fun params(): ParamValues = paramOverride ?: snapshot.params
+
+    /** Test seam: when set, [params] returns this instead of the mood's. */
+    internal var paramOverride: ParamValues? = null
+
+    /** Test seam: the voice a node's packets play, by node, role and hardware; the palette in production. */
+    internal var voicePicker: (Long, String?, String?) -> Voice = { node, role, hardware -> Palette.voiceFor(role, hardware, node) }
+
     private class NodeInfo(var position: GeoPoint?, var lastHeard: Long)
+
+    /** What the mesh has told us about one node besides its position; every field is null until reported. */
+    private class NodeTraits {
+        var role: String? = null
+        var hardware: String? = null
+        var batteryPct: Int? = null
+        var voltage: Float? = null
+        var uptimeSeconds: Long? = null
+        var altitudeM: Int? = null
+    }
     private class Loop(var nextFrame: Long, val baseSeconds: Double, val index: Int)
 
     private val rng = Rng.stream(seed, 3)
     private val harmony = Harmony(seed)
     private val form = Form(seed, pinFormFull)
+    /** Short-window pace (thinning, quiet detection, density) the 5 minute mood cannot give; warm-up state lives here. */
     private val crowd = Crowd()
+    private val mood = MeshMood()
+    private val scales = ScalePicker()
+    private var snapshot = MoodSnapshot.NEUTRAL
+    private val traits = HashMap<Long, NodeTraits>()
+    private var altitudeSum = 0.0
+    private var altitudeCount = 0
     private val weather = WeatherScaler()
     private val slots = SlotAllocator(Ornaments.SLOT_CAP)
     private val nodes = HashMap<Long, NodeInfo>()
@@ -74,6 +106,7 @@ class Composer(seed: Long, private val sampleRate: Int, pinFormFull: Boolean = f
     private val memory = ArrayList<Loop>()
 
     fun onEvent(e: MeshEvent) {
+        mood.onEvent(e)
         when (e) {
             is MeshEvent.Link -> crowd.warmingUp = e.state == LinkState.WarmingUp
             is MeshEvent.NodeSeen -> {
@@ -81,6 +114,7 @@ class Composer(seed: Long, private val sampleRate: Int, pinFormFull: Boolean = f
                 info.position?.let { sumLat -= it.lat; sumLon -= it.lon; positioned-- }
                 info.position = e.position
                 e.position?.let { sumLat += it.lat; sumLon += it.lon; positioned++ }
+                onNodeTraits(e)
                 if (e.firstThisSession && !crowd.warmingUp) {
                     swells++
                     sessionVoices.remove(e.node)
@@ -91,6 +125,7 @@ class Composer(seed: Long, private val sampleRate: Int, pinFormFull: Boolean = f
             is MeshEvent.NodeGone -> {
                 nodes.remove(e.node)?.position?.let { sumLat -= it.lat; sumLon -= it.lon; positioned-- }
                 crowd.forget(e.node)
+                traits.remove(e.node)?.altitudeM?.let { altitudeSum -= it; altitudeCount-- }
                 readings.remove(e.node)
                 sessionVoices.remove(e.node)
                 farewelled.remove(e.node)
@@ -112,8 +147,34 @@ class Composer(seed: Long, private val sampleRate: Int, pinFormFull: Boolean = f
                 pendingRoutes += e.nodes.take(MAX_ROUTE_NODES)
             }
             is MeshEvent.PacketHeard -> onPacket(e)
+            is MeshEvent.Health -> traitsOf(e.node).let {
+                it.batteryPct = e.batteryPct ?: it.batteryPct
+                it.voltage = e.voltage ?: it.voltage
+                it.uptimeSeconds = e.uptimeSeconds ?: it.uptimeSeconds
+            }
+            is MeshEvent.Stats -> Unit
         }
     }
+
+    private fun traitsOf(node: Long): NodeTraits = traits.getOrPut(node) { NodeTraits() }
+
+    private fun onNodeTraits(e: MeshEvent.NodeSeen) {
+        val t = traitsOf(e.node)
+        t.role = e.role ?: t.role
+        t.hardware = e.hardware ?: t.hardware
+        val alt = e.position?.altitudeM
+        if (alt != null && alt != t.altitudeM) {
+            t.altitudeM?.let { altitudeSum -= it; altitudeCount-- }
+            t.altitudeM = alt
+            altitudeSum += alt
+            altitudeCount++
+        }
+    }
+
+    private fun meanAltitude(): Double? = if (altitudeCount > 0) altitudeSum / altitudeCount else null
+
+    /** Phrase tempo band 0.5, 0.75, 1 or 1.5: divides motif step length, the answer delay and gap, and the loop period. */
+    private fun phraseSpeed(): Double = Tempo.clampSpeed(params().phraseSpeed)
 
     private fun observe(node: Long, q: Quantity, v: Float?, at: Long) {
         if (v == null || !v.isFinite()) return
@@ -161,6 +222,7 @@ class Composer(seed: Long, private val sampleRate: Int, pinFormFull: Boolean = f
         val windowEnd = nowFrame + lookaheadFrames
         val day = Day.at(moment)
         crowd.advanceTo(moment.epochMillis)
+        snapshot = mood.advance(moment.epochMillis)
         val notes = ArrayList<NoteEvent>()
         val controls = ArrayList<ControlEvent>()
         if (!started) start(nowFrame)
@@ -224,7 +286,8 @@ class Composer(seed: Long, private val sampleRate: Int, pinFormFull: Boolean = f
             keySemitones = day.rootSemitones
             keyHz = day.rootHz
             registerShift = nextRegister(day.registerOctaves, chordStarted)
-            harmony.next(day.mode)
+            val p = params()
+            harmony.next(scales.pick(day.mode, p.modeLean, p.scalePentatonicBias))
             chordStarted = true
             forceChord = false
             lastChordFrame = at
@@ -348,7 +411,7 @@ class Composer(seed: Long, private val sampleRate: Int, pinFormFull: Boolean = f
         }
     }
 
-    private fun period(base: Double, day: DayState): Double = (base * (1.0 + LOOP_SLOWING * (1 - day.density))).coerceIn(MIN_LOOP_PERIOD, MAX_LOOP_PERIOD)
+    private fun period(base: Double, day: DayState): Double = Tempo.loopPeriodSeconds(base, day.density, phraseSpeed())
 
     private fun reference(): GeoPoint? =
         origin ?: if (positioned > 0) GeoPoint(sumLat / positioned, sumLon / positioned) else null
@@ -414,68 +477,100 @@ class Composer(seed: Long, private val sampleRate: Int, pinFormFull: Boolean = f
 
     private fun ornament(e: MeshEvent.PacketHeard, start: Long, deadline: Long, day: DayState, notes: MutableList<NoteEvent>) {
         val art = Ornaments.articulation(e.kind)
+        val tr = traits[e.from]
+        val breath = e.kind == PacketKind.Encrypted
+        val voice = if (breath) Voice.Breath else voicePicker(e.from, tr?.role, tr?.hardware)
         val call = e.toUs
-        val duration = sec(if (call) art.seconds * Ornaments.CALL_LENGTH_SCALE else art.seconds)
+        val lengthScale = Traits.uptimeLengthScale(tr?.uptimeSeconds)
+        val duration = sec(art.seconds * lengthScale * (if (call) Ornaments.CALL_LENGTH_SCALE else 1.0))
         val baseVelocity = Ornaments.velocityFor(e.snr)
-        val velocity = if (call) min(1f, baseVelocity + Ornaments.CALL_VELOCITY_LIFT) else baseVelocity
+        val velocity = min(1f, (if (call) min(1f, baseVelocity + Ornaments.CALL_VELOCITY_LIFT) else baseVelocity) * Traits.payloadVelocityTrim(e.payloadBytes))
         val baseSend = Ornaments.reverbSendFor(e.hopsTaken, e.viaMqtt)
         val send = when {
             call -> max(0f, baseSend - Ornaments.CALL_DRYNESS)
             e.to == Ornaments.BROADCAST -> min(1f, baseSend + Ornaments.BROADCAST_WIDEN)
             else -> baseSend
-        }
+        }.let { (it + Traits.rssiSendDelta(e.rssi)).coerceIn(0f, 1f) }
         val baseBrightness = Ornaments.brightnessFor(e.kind, e.hopsTaken, e.viaMqtt)
-        val brightness = if (call) min(1f, baseBrightness + Ornaments.CALL_BRIGHTNESS_LIFT) else baseBrightness
-        val pan = Ornaments.panFor(nodes[e.from]?.position, reference())
+        val brightness = ((if (call) min(1f, baseBrightness + Ornaments.CALL_BRIGHTNESS_LIFT) else baseBrightness) +
+            Traits.rssiBrightnessDelta(e.rssi) + Traits.powerBrightnessDelta(tr?.voltage, tr?.batteryPct)).coerceIn(0f, 1f)
+        val pan = (Ornaments.panFor(nodes[e.from]?.position, reference()) + Traits.channelPanOffset(e.channel)).coerceIn(-1f, 1f)
         val chord = harmony.current
-        if (e.kind == PacketKind.Text) {
-            for (i in 0..3) {
-                val intended = start + sec(TEXT_STEP_SECONDS * i)
-                val at = slots.allocate(intended, duration, intended + sec(Ornaments.TTL_SECONDS)) ?: continue
-                notes += NoteEvent(at, Voice.Bell, Ornaments.pitchHz(i, 1, chord, keyHz), velocity, pan, send, duration, brightness, e.from)
+        val band = (Ornaments.band(e.from) + Traits.registerOffset(tr?.altitudeM, meanAltitude())).coerceIn(0, MAX_BAND)
+        val wobble = Traits.batteryDetuneCents(tr?.batteryPct)
+        val speed = phraseSpeed()
+
+        /** One ornament note plus its battery twin; false when the first found no slot. */
+        fun put(intended: Long, hz: Double, vel: Float, intendedDeadline: Long): Long? {
+            val at = slots.allocate(intended, duration, intendedDeadline) ?: return null
+            notes += NoteEvent(at, voice, hz, vel, pan, send, duration, brightness, e.from)
+            if (wobble >= MIN_TWIN_CENTS) {
+                slots.allocate(at, duration, at)?.let {
+                    notes += NoteEvent(it, voice, hz * Traits.centsRatio(wobble), vel * Traits.TWIN_GAIN, pan, send, duration, brightness, e.from)
+                }
             }
+            return at
+        }
+
+        if (e.kind == PacketKind.Text) {
+            var first: Long? = null
+            for (i in 0 until Traits.textPhraseNotes(e.textLength)) {
+                val intended = start + sec(TEXT_STEP_SECONDS * i)
+                val hz = Ornaments.pitchHz(i % 5, 1 + i / 5, chord, keyHz)
+                val at = put(intended, hz, velocity, intended + sec(Ornaments.TTL_SECONDS)) ?: continue
+                if (first == null) first = at
+            }
+            first?.let { mqttShimmer(e, it, Ornaments.pitchHz(0, 1, chord, keyHz), velocity, duration, notes) }
             return
         }
-        val breath = e.kind == PacketKind.Encrypted
-        val pitch = if (breath) Ornaments.BREATH_HZ else Ornaments.pitchHz(e.from, chord, keyHz)
+        val pitch = if (breath) Ornaments.BREATH_HZ else Ornaments.pitchHz(Ornaments.role(e.from), band, chord, keyHz)
         var anchor = start
         var slack = 0L
+        var firstAt = -1L
         if (!breath && crowd.rate < QUIET_RATE) {
             val motif = Motifs.of(e.from)
-            val band = Ornaments.band(e.from)
             var offset = 0.0
             var played = 0
             for (i in 0 until motif.size) {
-                offset += motif.gaps[i]
+                offset += Tempo.phraseSeconds(motif.gaps[i], speed)
                 val intended = start + sec(offset)
                 val hz = Ornaments.pitchHz(motif.roles[i], band, chord, keyHz)
-                val at = slots.allocate(intended, duration, if (i == 0) deadline else intended + sec(Ornaments.TTL_SECONDS))
+                val at = put(intended, hz, velocity * MOTIF_FALLOFF.pow(played), if (i == 0) deadline else intended + sec(Ornaments.TTL_SECONDS))
                 if (at == null) {
                     if (i == 0) return
                     continue
                 }
-                notes += NoteEvent(at, art.voice, hz, velocity * MOTIF_FALLOFF.pow(played), pan, send, duration, brightness, e.from)
+                if (firstAt < 0) firstAt = at
                 played++
                 anchor = at
             }
             slack = anchor - start
         } else {
-            val first = slots.allocate(start, duration, deadline) ?: return
-            notes += NoteEvent(first, art.voice, pitch, velocity, pan, send, duration, brightness, e.from)
+            val first = put(start, pitch, velocity, deadline) ?: return
+            firstAt = first
             anchor = first
         }
         if (breath) return
+        mqttShimmer(e, firstAt, pitch, velocity, duration, notes)
         val relay = resolveRelay(nodes.keys, e.relayByte, e.from, selfNode)
         for (k in 1..Ornaments.echoesFor(e.hopsTaken, e.viaMqtt)) {
             val at = slots.allocate(anchor + sec(Ornaments.ECHO_DELAY_SECONDS * k), duration, deadline + slack) ?: break
             val viaRelay = relay != null && k % 2 == 1
             notes += NoteEvent(
-                at, art.voice, if (viaRelay) Ornaments.pitchHz(relay, chord, keyHz) else pitch, velocity * ECHO_DECAY.pow(k),
+                at, voice, if (viaRelay) Ornaments.pitchHz(relay, chord, keyHz) else pitch, velocity * ECHO_DECAY.pow(k),
                 if (viaRelay) Ornaments.panFor(nodes[relay]?.position, reference()) else pan,
                 min(1f, send + ECHO_SEND_STEP * k), duration, brightness * ECHO_BRIGHTNESS, if (viaRelay) relay else e.from,
             )
         }
         answer(e, start, chord, notes)
+    }
+
+    /** A packet that came through MQTT carries a quiet shimmer layer under its first note. */
+    private fun mqttShimmer(e: MeshEvent.PacketHeard, at: Long, pitch: Double, velocity: Float, duration: Long, notes: MutableList<NoteEvent>) {
+        if (!e.viaMqtt || at < 0) return
+        val length = duration * MQTT_SHIMMER_LENGTH_SCALE
+        val slot = slots.allocate(at, length, at) ?: return
+        notes += NoteEvent(slot, Voice.Shimmer, pitch, velocity * Traits.MQTT_SHIMMER_GAIN, 0f, MQTT_SHIMMER_SEND, length, MQTT_SHIMMER_BRIGHTNESS, e.from)
     }
 
     /** The nearest known node, else the resolved relay, that answers [e]. */
@@ -501,8 +596,9 @@ class Composer(seed: Long, private val sampleRate: Int, pinFormFull: Boolean = f
 
     /** 2-4 s after a packet its neighbor answers a chord-stack third or fifth above it, at most once per [ANSWER_GAP_SECONDS]. */
     private fun answer(e: MeshEvent.PacketHeard, start: Long, chord: Chord, notes: MutableList<NoteEvent>) {
-        val intended = start + sec(rng.range(ANSWER_MIN_SECONDS, ANSWER_MAX_SECONDS))
-        if (intended - lastAnswerFrame < sec(ANSWER_GAP_SECONDS)) return
+        val speed = phraseSpeed()
+        val intended = start + sec(Tempo.phraseSeconds(rng.range(ANSWER_MIN_SECONDS, ANSWER_MAX_SECONDS), speed))
+        if (intended - lastAnswerFrame < sec(Tempo.phraseSeconds(ANSWER_GAP_SECONDS, speed))) return
         val who = responder(e) ?: return
         val base = Ornaments.pitchHz(e.from, chord, keyHz)
         val step = if (rng.nextDouble() < 0.5) 1 else 2
@@ -697,9 +793,6 @@ class Composer(seed: Long, private val sampleRate: Int, pinFormFull: Boolean = f
 
         const val LOOP_DAY_WEIGHT = 0.6
         const val LOOP_FIRE_BASE = 0.35
-        const val LOOP_SLOWING = 0.3
-        const val MIN_LOOP_PERIOD = 17.0
-        const val MAX_LOOP_PERIOD = 60.0
         const val PAD_LOOP_HOLD = 0.4
         const val SHIMMER_LOOP_HOLD = 0.3
         const val PAD_LOOP_VELOCITY = 0.4f
@@ -714,6 +807,11 @@ class Composer(seed: Long, private val sampleRate: Int, pinFormFull: Boolean = f
         const val MEMORY_BRIGHTNESS = 0.3f
         const val FRAGMENT_NOTES = 2
         const val MOTIF_FALLOFF = 0.85f
+        const val MAX_BAND = 2
+        const val MIN_TWIN_CENTS = 1.0
+        const val MQTT_SHIMMER_LENGTH_SCALE = 2L
+        const val MQTT_SHIMMER_SEND = 0.9f
+        const val MQTT_SHIMMER_BRIGHTNESS = 0.7f
         const val TEXT_STEP_SECONDS = 0.35
         const val ECHO_DECAY = 0.55f
         const val ECHO_SEND_STEP = 0.1f

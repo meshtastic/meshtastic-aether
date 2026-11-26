@@ -69,7 +69,11 @@ internal class ReplayMeshSource(
                         null
                     }
                     t?.toEnvironment(heard.from, at)?.let { emit(it) }
-                    if (heard.from == ownNode) t?.toVitals(at)?.let { emit(it) }
+                    t?.toHealth(heard.from, at)?.let { emit(it) }
+                    if (heard.from == ownNode) {
+                        t?.toVitals(at)?.let { emit(it) }
+                        t?.toStats(at)?.let { emit(it) }
+                    }
                 }
             }
         }

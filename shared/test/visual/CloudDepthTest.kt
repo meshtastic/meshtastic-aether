@@ -52,7 +52,10 @@ class CloudDepthTest {
     @Test
     fun `drift in z is small and differs between nodes`() {
         val s = SceneModel(48_000)
-        for (t in listOf(0.0, 10.0, 77.0, 500.0)) assertTrue(abs(s.driftZ(5, t)) <= 0.0121)
-        assertNotEquals(s.driftZ(5, 33.0), s.driftZ(6, 33.0))
+        for (t in listOf(0L, 10L, 77L, 500L)) {
+            s.update(t * 48_000)
+            assertTrue(abs(s.driftZ(5)) <= 0.0121)
+        }
+        assertNotEquals(s.driftZ(5), s.driftZ(6))
     }
 }

@@ -57,7 +57,7 @@ class ComposerTest {
 
     @Test
     fun `an hour with zero packets still produces notes and textures`() {
-        val run = Composer(1L, sr).drive(0, 3600)
+        val run = malletComposer(1L, sr).drive(0, 3600)
         assertTrue(run.notes.size > 50, "only ${run.notes.size} notes")
         assertTrue(run.controls.filterIsInstance<ControlEvent.SetTexture>().size > 100)
         assertTrue(run.notes.any { it.atFrame > 30L * 60 * sr }, "silent after thirty minutes")
@@ -76,14 +76,14 @@ class ComposerTest {
 
     @Test
     fun `the autonomous piece plays only bed voices when no packet arrives`() {
-        val run = Composer(2L, sr).drive(0, 1800)
+        val run = malletComposer(2L, sr).drive(0, 1800)
         assertTrue(run.notes.all { it.voice in setOf(Voice.Drone, Voice.Pad, Voice.Shimmer) })
     }
 
     @Test
     fun `the same seed events and calls give the same output`() {
         fun go(seed: Long): Run {
-            val c = Composer(seed, sr)
+            val c = malletComposer(seed, sr)
             val run = c.drive(0, 60)
             for (i in 1L..30L) c.onEvent(heard(i, atMs = t0 + 60_000 + i * 100))
             return c.drive(60L * sr, 60, run)
@@ -97,7 +97,7 @@ class ComposerTest {
 
     @Test
     fun `two hundred packets in one second never exceed the slot cap`() {
-        val c = Composer(3L, sr)
+        val c = malletComposer(3L, sr)
         c.advance(0, lookahead, moment(0))
         for (i in 0 until 200) c.onEvent(heard(100L + i, atMs = t0 + i * 5L))
         val orn = c.drive(sr / 4L, 12).notes.filter { it.voice in ornamentVoices }
@@ -107,7 +107,7 @@ class ComposerTest {
 
     @Test
     fun `each note starts within two seconds of its own packet's arrival and never queues for the next burst`() {
-        val c = Composer(3L, sr)
+        val c = malletComposer(3L, sr)
         c.advance(0, lookahead, moment(0))
         for (i in 0 until 200) c.onEvent(heard(100L + i, atMs = t0))
         for (i in 0 until 200) c.onEvent(heard(400L + i, atMs = t0 + 3000))
@@ -145,14 +145,14 @@ class ComposerTest {
 
     @Test
     fun `a slow trickle of packets is not thinned and every packet sounds its note and one echo`() {
-        val stream = Composer(3L, sr).drivePackets(10, 10, PacketKind.Routing)
+        val stream = malletComposer(3L, sr).drivePackets(10, 10, PacketKind.Routing)
         // Only the first few packets meet a quiet mesh and play a 3 to 4 note motif instead of one note.
         assertTrue(stream.notes.size in 2 * 100..2 * 100 + 6 * 3, "${stream.notes.size} notes for 100 packets")
     }
 
     @Test
     fun `a sustained storm is thinned to a sample that keeps sounding every second rather than dropped past a limit`() {
-        val stream = Composer(3L, sr).drivePackets(100, 10, PacketKind.Routing, hops = 0)
+        val stream = malletComposer(3L, sr).drivePackets(100, 10, PacketKind.Routing, hops = 0)
         val notes = stream.notes
         for (second in 1..9) {
             val inSecond = notes.count { it.atFrame in (second * sr.toLong())..((second + 1) * sr.toLong() - 1) }
@@ -164,7 +164,7 @@ class ComposerTest {
 
     @Test
     fun `thirty packets in a tenth of a second stay at or under the slot cap`() {
-        val c = Composer(4L, sr)
+        val c = malletComposer(4L, sr)
         c.advance(0, lookahead, moment(0))
         for (i in 0 until 30) c.onEvent(heard(10L + i, atMs = t0 + i * 3L))
         val orn = c.drive(sr / 4L, 8).notes.filter { it.voice in ornamentVoices }
@@ -175,7 +175,7 @@ class ComposerTest {
     @Test
     fun `a packet at unknown distance gets one echo while a direct one gets none and a far one two`() {
         fun notesFor(hops: Int?): Int {
-            val c = Composer(7L, sr)
+            val c = malletComposer(7L, sr)
             c.advance(0, lookahead, moment(0))
             c.onEvent(heard(42L, atMs = t0, hops = hops))
             return c.drive(sr / 4L, 6).notes.count { it.voice in ornamentVoices }
@@ -188,7 +188,7 @@ class ComposerTest {
 
     @Test
     fun `a node with no name no position null SNR and unknown hops sounds at middle distance centre pan and mid velocity`() {
-        val c = Composer(8L, sr)
+        val c = malletComposer(8L, sr)
         c.advance(0, lookahead, moment(0))
         c.onEvent(heard(77L, snr = null, hops = null))
         val n = c.drive(sr / 4L, 3).notes.first { it.voice == Voice.Mallet }
@@ -201,7 +201,7 @@ class ComposerTest {
     @Test
     fun `a direct packet is drier than an unknown one and a far one wetter`() {
         fun sendFor(hops: Int?): Float {
-            val c = Composer(9L, sr)
+            val c = malletComposer(9L, sr)
             c.advance(0, lookahead, moment(0))
             c.onEvent(heard(5L, hops = hops))
             return c.drive(sr / 4L, 3).notes.first { it.voice == Voice.Mallet }.reverbSend
@@ -212,7 +212,7 @@ class ComposerTest {
 
     @Test
     fun `encrypted packets give the same pitchless breath whatever the node`() {
-        val c = Composer(10L, sr)
+        val c = malletComposer(10L, sr)
         c.advance(0, lookahead, moment(0))
         for (node in listOf(1L, 2L, 3L)) c.onEvent(heard(node, PacketKind.Encrypted, atMs = t0 + node * 400))
         val breaths = c.drive(sr / 4L, 6).notes.filter { it.voice == Voice.Breath }
@@ -221,15 +221,15 @@ class ComposerTest {
     }
 
     @Test
-    fun `a text message triggers a bell phrase now and a chord change once forty five seconds have passed`() {
-        val c = Composer(11L, sr)
+    fun `a text message triggers a phrase now and a chord change once forty five seconds have passed`() {
+        val c = malletComposer(11L, sr)
         val before = c.drive(0, 20)
         val chordBefore = c.chord
         c.onEvent(heard(9L, PacketKind.Text, atMs = t0 + 20_000))
         val phrase = c.drive(20L * sr, 6)
         assertEquals(chordBefore.rootStep, c.chord.rootStep, "the chord changed inside forty five seconds of the last one")
-        assertTrue(phrase.notes.count { it.voice == Voice.Bell } >= 3)
-        assertTrue(before.notes.none { it.voice == Voice.Bell })
+        assertTrue(phrase.notes.count { it.node == 9L && it.voice == Voice.Mallet } >= 3)
+        assertTrue(before.notes.none { it.node == 9L })
         val after = c.drive(26L * sr, 44)
         assertNotEquals(chordBefore.rootStep, c.chord.rootStep)
         assertTrue(after.controls.filterIsInstance<ControlEvent.SetTexture>().isNotEmpty())
@@ -260,7 +260,7 @@ class ComposerTest {
 
     @Test
     fun `thirty texts in one minute never leave more than one chord sounding at any frame`() {
-        val (run, changes) = Composer(21L, sr).driveTexts(60, 2000)
+        val (run, changes) = malletComposer(21L, sr).driveTexts(60, 2000)
         assertTrue(changes.size in 1..2, "chord changed at $changes")
         val bed = run.notes.filter { it.voice in bedVoices }
         assertEquals(1, maxSounding(bed.filter { it.voice == Voice.Drone }))
@@ -273,7 +273,7 @@ class ComposerTest {
 
     @Test
     fun `texts every second change the chord at most once in forty five seconds but still bend the piece`() {
-        val (_, changes) = Composer(22L, sr).driveTexts(300, 1000)
+        val (_, changes) = malletComposer(22L, sr).driveTexts(300, 1000)
         assertTrue(changes.size >= 4, "chord changed only at $changes")
         changes.zipWithNext().forEach { (a, b) -> assertTrue(b - a >= 45L * sr, "changes ${(b - a) / sr.toDouble()} s apart") }
     }
@@ -287,7 +287,7 @@ class ComposerTest {
             val epoch = t0 + f * 1000 / sr
             return if (minutes < 1440) LocalMoment(7, minutes.toInt(), epoch) else LocalMoment(1, (minutes - 1440).toInt(), epoch)
         }
-        val (run, changes) = Composer(23L, sr).driveTexts(15 * 60, Long.MAX_VALUE / 4, ::at)
+        val (run, changes) = malletComposer(23L, sr).driveTexts(15 * 60, Long.MAX_VALUE / 4, ::at)
         val textures = run.controls.filterIsInstance<ControlEvent.SetTexture>()
         assertTrue(textures.all { it.texture.rootHz == sunday || it.texture.rootHz == monday }, "a glide value reached the synth")
         val firstMonday = textures.first { it.texture.rootHz == monday }.atFrame
@@ -300,7 +300,7 @@ class ComposerTest {
 
     @Test
     fun `chords do not change without a text inside two minutes`() {
-        val c = Composer(11L, sr)
+        val c = malletComposer(11L, sr)
         c.drive(0, 5)
         val root = c.chord.rootStep
         val voicing = c.chord.voicing
@@ -311,7 +311,7 @@ class ComposerTest {
 
     @Test
     fun `packets during warm-up make no ornaments and after it they do`() {
-        val c = Composer(12L, sr)
+        val c = malletComposer(12L, sr)
         c.advance(0, lookahead, moment(0))
         c.onEvent(MeshEvent.Link(LinkState.WarmingUp, t0))
         for (i in 0 until 20) c.onEvent(heard(i + 1L, atMs = t0 + i * 50L))
@@ -325,7 +325,7 @@ class ComposerTest {
 
     @Test
     fun `a quiet mesh brings recent nodes back as soft bell notes`() {
-        val c = Composer(13L, sr)
+        val c = malletComposer(13L, sr)
         c.advance(0, lookahead, moment(0))
         for (i in 1L..3L) c.onEvent(heard(i, atMs = t0 + i * 100))
         val run = c.drive(sr / 4L, 20 * 60)
@@ -336,7 +336,7 @@ class ComposerTest {
 
     @Test
     fun `a busy mesh gets no memory notes`() {
-        val c = Composer(13L, sr)
+        val c = malletComposer(13L, sr)
         c.advance(0, lookahead, moment(0))
         for (s in 0 until 600) for (k in 0 until 3) c.onEvent(heard(1L + k, atMs = t0 + s * 1000L + k * 300))
         val bells = c.drive(sr / 4L, 600).notes.filter { it.voice == Voice.Bell }
@@ -345,7 +345,7 @@ class ComposerTest {
 
     @Test
     fun `a node east of the origin pans right and one to the west pans left`() {
-        val c = Composer(14L, sr)
+        val c = malletComposer(14L, sr)
         c.origin = GeoPoint(45.0, 10.0)
         c.advance(0, lookahead, moment(0))
         c.onEvent(MeshEvent.NodeSeen(1L, null, GeoPoint(45.0, 10.5), false, t0))
@@ -360,7 +360,7 @@ class ComposerTest {
     @Test
     fun `a node first seen this session adds one soft pad swell`() {
         fun go(withNode: Boolean): List<NoteEvent> {
-            val c = Composer(15L, sr)
+            val c = malletComposer(15L, sr)
             c.advance(0, lookahead, moment(0))
             if (withNode) c.onEvent(MeshEvent.NodeSeen(5L, "x", null, true, t0))
             return c.drive(sr / 4L, 5).notes
@@ -373,7 +373,7 @@ class ComposerTest {
     @Test
     fun `ornaments land at frame precision a year into the run`() {
         val far = 1_500_000_000_000L
-        val c = Composer(16L, sr)
+        val c = malletComposer(16L, sr)
         c.advance(far, lookahead, moment(far))
         c.onEvent(heard(3L, atMs = moment(far).epochMillis))
         val first = c.drive(far + step, 3).notes.first { it.voice == Voice.Mallet }
@@ -384,7 +384,7 @@ class ComposerTest {
 
     @Test
     fun `an old packet past its TTL is dropped rather than played late`() {
-        val c = Composer(17L, sr)
+        val c = malletComposer(17L, sr)
         c.advance(0, lookahead, moment(0))
         c.onEvent(heard(3L, atMs = t0 - 10_000))
         assertTrue(c.drive(sr / 4L, 5).notes.none { it.voice in ornamentVoices })
@@ -392,7 +392,7 @@ class ComposerTest {
 
     @Test
     fun `day rollover with a weather range of one reading yields finite textures`() {
-        val c = Composer(18L, sr)
+        val c = malletComposer(18L, sr)
         c.onEvent(MeshEvent.Environment(1L, 12f, 55f, 1005f, 3f, 200f, t0))
         c.advance(0, lookahead, LocalMoment(7, 1439, t0))
         val out = c.advance(step, lookahead, LocalMoment(1, 0, t0 + 60_000))
@@ -412,11 +412,11 @@ class ComposerTest {
 
     @Test
     fun `weather is the median across nodes rather than the last node to report`() {
-        val three = Composer(24L, sr)
+        val three = malletComposer(24L, sr)
         three.onEvent(temp(3L, 20f, t0))
         three.onEvent(temp(1L, 10f, t0 + 1000))
         three.onEvent(temp(2L, 30f, t0 + 2000))
-        val one = Composer(24L, sr)
+        val one = malletComposer(24L, sr)
         one.onEvent(temp(9L, 10f, t0))
         one.onEvent(temp(9L, 30f, t0 + 1000))
         one.onEvent(temp(9L, 20f, t0 + 2000))
@@ -426,10 +426,10 @@ class ComposerTest {
     @Test
     fun `a node that has not reported for an hour drops out of the weather median`() {
         val min = 60_000L
-        val two = Composer(25L, sr)
+        val two = malletComposer(25L, sr)
         two.onEvent(temp(1L, 30f, t0))
         two.onEvent(temp(2L, 10f, t0 + 30 * min))
-        val one = Composer(25L, sr)
+        val one = malletComposer(25L, sr)
         one.onEvent(temp(1L, 30f, t0))
         one.onEvent(temp(1L, 10f, t0 + 30 * min))
         assertEquals(firstTexture(one, t0 + 75 * min).brightness, firstTexture(two, t0 + 75 * min).brightness, 1e-6f)
@@ -437,7 +437,7 @@ class ComposerTest {
 
     @Test
     fun `bed notes carry a fixed velocity and the form level reaches the synth only through the layer levels`() {
-        val run = Composer(2L, sr).drive(0, 3600)
+        val run = malletComposer(2L, sr).drive(0, 3600)
         assertEquals(1, run.notes.filter { it.voice == Voice.Drone }.map { it.velocity }.toSet().size)
         assertTrue(run.notes.filter { it.voice == Voice.Shimmer }.map { it.velocity }.toSet().size <= 1)
         assertTrue(run.notes.filter { it.voice == Voice.Pad }.map { it.velocity }.toSet().size <= 3)
@@ -452,7 +452,7 @@ class ComposerTest {
         val form = Form(seed)
         val tRest = (0 until 3 * 3600 step 5).first { Form.visible(form.levels(it.toDouble())) < 0.001f }
         val f = tRest * sr.toLong()
-        val c = Composer(seed, sr)
+        val c = malletComposer(seed, sr)
         c.advance(f, lookahead, moment(f))
         c.onEvent(heard(77L, atMs = moment(f).epochMillis))
         val mallet = c.drive(f + step, 3).notes.first { it.voice == Voice.Mallet }
@@ -466,7 +466,7 @@ class ComposerTest {
         val form = Form(seed)
         val tSec = (0 until 4 * 3600 step 10).first { form.levels(it.toDouble()).getValue(Voice.Shimmer) > 0.3f }
         val f = tSec.toLong() * sr
-        val c = Composer(seed, sr)
+        val c = malletComposer(seed, sr)
         val run = c.drive(f, 180)
         val shimmer = run.notes.filter { it.voice == Voice.Shimmer }
         assertTrue(shimmer.isNotEmpty(), "no shimmer note near second $tSec for seed $seed")
@@ -499,7 +499,7 @@ class ComposerTest {
     @Test
     fun `a call to us is drier shorter brighter and louder than the same packet as a broadcast`() {
         fun first(to: Long, toUs: Boolean): NoteEvent {
-            val c = Composer(21L, sr)
+            val c = malletComposer(21L, sr)
             c.advance(0, lookahead, moment(0))
             c.onEvent(link(5L, to = to, toUs = toUs, hops = 4))
             return mallets(c).first()
@@ -515,7 +515,7 @@ class ComposerTest {
     @Test
     fun `a broadcast sounds a slightly wider reverb send than a packet of unknown destination`() {
         fun send(to: Long?): Float {
-            val c = Composer(22L, sr)
+            val c = malletComposer(22L, sr)
             c.advance(0, lookahead, moment(0))
             c.onEvent(link(5L, to = to, hops = 4))
             return mallets(c).first().reverbSend
@@ -525,7 +525,7 @@ class ComposerTest {
 
     @Test
     fun `a self event sets the origin and a node east of it then pans right`() {
-        val c = Composer(23L, sr)
+        val c = malletComposer(23L, sr)
         c.onEvent(MeshEvent.Self(1L, "me", GeoPoint(45.0, 10.0), t0))
         assertEquals(GeoPoint(45.0, 10.0), c.origin)
         c.advance(0, lookahead, moment(0))
@@ -537,8 +537,8 @@ class ComposerTest {
     @Test
     fun `an echo after a resolved relay plays the relay's pitch and the later echo the source's`() {
         val source = 1000L
-        val relay = (2000L..2255L).first { hzOf(it, Composer(24L, sr).also { c -> c.advance(0, lookahead, moment(0)) }) != hzOf(source, Composer(24L, sr).also { c -> c.advance(0, lookahead, moment(0)) }) }
-        val c = Composer(24L, sr)
+        val relay = (2000L..2255L).first { hzOf(it, malletComposer(24L, sr).also { c -> c.advance(0, lookahead, moment(0)) }) != hzOf(source, malletComposer(24L, sr).also { c -> c.advance(0, lookahead, moment(0)) }) }
+        val c = malletComposer(24L, sr)
         c.advance(0, lookahead, moment(0))
         c.know(source, relay)
         c.onEvent(link(source, relay = (relay and 0xFF).toInt()))
@@ -550,7 +550,7 @@ class ComposerTest {
     @Test
     fun `an unresolved relay keeps every echo on the source pitch`() {
         val source = 1000L
-        val c = Composer(25L, sr)
+        val c = malletComposer(25L, sr)
         c.advance(0, lookahead, moment(0))
         c.know(source, 3001L, 3002L)
         c.onEvent(link(source, relay = 0x77))
@@ -562,7 +562,7 @@ class ComposerTest {
     @Test
     fun `a relay byte shared by two known nodes keeps the echoes on the source pitch`() {
         val source = 1000L
-        val c = Composer(26L, sr)
+        val c = malletComposer(26L, sr)
         c.advance(0, lookahead, moment(0))
         c.know(source, 0x1105L, 0x2205L)
         c.onEvent(link(source, relay = 0x05))
@@ -572,8 +572,8 @@ class ComposerTest {
     @Test
     fun `a relay byte matching only our own node is not resolved`() {
         val source = 1000L
-        val me = (2000L..2255L).first { hzOf(it, Composer(27L, sr).also { c -> c.advance(0, lookahead, moment(0)) }) != hzOf(source, Composer(27L, sr).also { c -> c.advance(0, lookahead, moment(0)) }) }
-        val c = Composer(27L, sr)
+        val me = (2000L..2255L).first { hzOf(it, malletComposer(27L, sr).also { c -> c.advance(0, lookahead, moment(0)) }) != hzOf(source, malletComposer(27L, sr).also { c -> c.advance(0, lookahead, moment(0)) }) }
+        val c = malletComposer(27L, sr)
         c.onEvent(MeshEvent.Self(me, null, null, t0))
         c.advance(0, lookahead, moment(0))
         c.know(source, me)
@@ -583,7 +583,7 @@ class ComposerTest {
 
     @Test
     fun `a route phrase plays bells through the route nodes in order`() {
-        val c = Composer(28L, sr)
+        val c = malletComposer(28L, sr)
         c.advance(0, lookahead, moment(0))
         val route = listOf(11L, 12L, 13L, 14L)
         c.onEvent(MeshEvent.Route(route, t0))
@@ -593,7 +593,7 @@ class ComposerTest {
 
     @Test
     fun `route phrases inside a packet burst keep the ornament slot cap`() {
-        val c = Composer(29L, sr)
+        val c = malletComposer(29L, sr)
         c.advance(0, lookahead, moment(0))
         for (i in 0 until 200) c.onEvent(heard(100L + i, atMs = t0 + i * 5L))
         repeat(5) { c.onEvent(MeshEvent.Route(listOf(1L, 2L, 3L, 4L, 5L, 6L), t0)) }
@@ -603,7 +603,7 @@ class ComposerTest {
 
     private fun dyadExtras(vararg at: Long): Int {
         fun run(withEvents: Boolean): List<NoteEvent> {
-            val c = Composer(30L, sr)
+            val c = malletComposer(30L, sr)
             c.advance(0, lookahead, moment(0))
             c.know(1L, 2L, 3L)
             val out = ArrayList<NoteEvent>()

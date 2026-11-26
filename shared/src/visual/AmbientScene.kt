@@ -69,6 +69,11 @@ fun AmbientScene(engine: AmbientEngine, modifier: Modifier = Modifier) {
     val bgRgb = remember(palette) { palette.backgroundTop.toRgb() }
     val colors = remember(palette) { HashMap<Long, Color>() }
     fun nodeColor(node: Long): Color = colors.getOrPut(node) { nodeRgb(node, bgRgb).toColor() }
+    val shifted = remember(palette) { HashMap<Long, Color>() }
+
+    /** [nodeColor] with its hue turned by [deg] whole degrees (-32..31); cached so the frame does not allocate. */
+    fun shiftedColor(node: Long, deg: Int): Color =
+        if (deg == 0) nodeColor(node) else shifted.getOrPut((node shl 6) or (deg + 32).toLong()) { shiftColor(nodeColor(node), deg.toDouble(), 1.0, 1.0) }
     Canvas(modifier) {
         frame.let { }
         val t = engine.playbackSeconds()
@@ -110,8 +115,8 @@ fun AmbientScene(engine: AmbientEngine, modifier: Modifier = Modifier) {
             )
         }
 
-        val k = CloudMotion.breathing(t)
-        projection.update(CloudMotion.yaw(t), CloudMotion.pitch(t), CloudMotion.CAMERA_DISTANCE)
+        val k = scene.cloudBreath
+        projection.update(scene.rotation, CloudMotion.CAMERA_DISTANCE)
         val zReach = CloudMotion.Z_EXTENT * k
 
         /** Projects a layout point into [out] as screen pixels, with the perspective scale and depth. */
@@ -125,7 +130,7 @@ fun AmbientScene(engine: AmbientEngine, modifier: Modifier = Modifier) {
         buffers.fit(n)
         var oi = 0
         for (o in scene.orbs) {
-            project(o.x + scene.driftX(o.node, t), o.y + scene.driftY(o.node, t), o.z + scene.driftZ(o.node, t), tmp)
+            project(o.x + scene.driftX(o.node), o.y + scene.driftY(o.node), o.z + o.zOffset + scene.driftZ(o.node), tmp)
             o.projX = tmp.x
             o.projY = tmp.y
             o.projScale = tmp.scale
@@ -146,7 +151,7 @@ fun AmbientScene(engine: AmbientEngine, modifier: Modifier = Modifier) {
                     out.scale = 1.0
                     out.depth = 0.0
                 } else {
-                    project(scene.driftX(a.node, t), scene.driftY(a.node, t), 0.0, out)
+                    project(scene.driftX(a.node), scene.driftY(a.node), 0.0, out)
                 }
                 return true
             }
@@ -179,24 +184,27 @@ fun AmbientScene(engine: AmbientEngine, modifier: Modifier = Modifier) {
         for (idx in 0 until n) {
             val o = buffers.orbs[buffers.order[idx]] ?: continue
             val g = scene.glow(o)
-            val breath = scene.breath(o.node, t).toFloat()
+            val breath = scene.breath(o.node).toFloat()
+            val lift = (o.brightness * o.flicker).toFloat()
             val s = o.projScale.toFloat()
             val depthT = CloudMotion.depthT(o.projDepth)
             val c = Offset(o.projX.toFloat(), o.projY.toFloat())
             val color = cool(desaturate(nodeColor(o.node), sat), CloudMotion.coolMix(depthT))
-            val haloR = radius * 0.04f * (1f + g.toFloat()) * breath * s
-            val haloAlpha = (orbHaloAlpha(g) * CloudMotion.brightness(depthT)).coerceAtMost(ORB_ALPHA_CAP / 2)
+            val haloColor = if (o.haloHueDegrees == 0) color else cool(desaturate(shiftedColor(o.node, o.haloHueDegrees), sat), CloudMotion.coolMix(depthT))
+            val haloR = radius * 0.04f * (1f + g.toFloat()) * breath * s * o.haloScale.toFloat()
+            val haloAlpha = (orbHaloAlpha(g) * CloudMotion.brightness(depthT) * lift).coerceAtMost(ORB_ALPHA_CAP / 2)
             drawCircle(
                 Brush.radialGradient(
-                    listOf(color.copy(alpha = haloAlpha * dim), Color.Transparent),
+                    listOf(haloColor.copy(alpha = haloAlpha * dim), Color.Transparent),
                     center = c,
                     radius = haloR * 3f,
                 ),
                 radius = haloR * 3f,
                 center = c,
             )
-            val coreR = maxOf(1.5.dp.toPx(), radius * 0.008f * (0.9f + g.toFloat() * 0.6f)) * breath * s
-            drawCircle(color.copy(alpha = CloudMotion.shadeAlpha(orbCoreAlpha(g), depthT) * dim), radius = coreR, center = c)
+            val coreR = maxOf(1.5.dp.toPx(), radius * 0.008f * (0.9f + g.toFloat() * 0.6f)) * breath * s * o.coreSize.toFloat()
+            val coreA = (CloudMotion.shadeAlpha(orbCoreAlpha(g), depthT) * o.coreAlpha.toFloat() * lift).coerceAtMost(ORB_ALPHA_CAP)
+            drawCircle(color.copy(alpha = coreA * dim), radius = coreR, center = c)
         }
         for (pu in scene.pulses) {
             if (!resolve(pu.fromNode, pa) || !resolve(pu.toNode, pb)) continue
@@ -216,17 +224,40 @@ fun AmbientScene(engine: AmbientEngine, modifier: Modifier = Modifier) {
             val p = scene.progress(rp).toFloat()
             val fade = (1f - p) * (1f - p) * (if (rp.echo == 0) 0.8f else 0.35f) * dim
             val maxR = radius * (0.12f + 0.25f * rp.strength) * s
-            val color = if (rp.kind == PacketKind.Other) palette.text else nodeColor(rp.node)
-            val width = ((if (rp.kind == PacketKind.Text) 2.5.dp.toPx() else 1.5.dp.toPx()) + 2.dp.toPx() * (1f - p)) * s
-            drawCircle(
-                desaturate(color, sat).copy(alpha = fade),
-                radius = maxR * p,
-                center = Offset(o.projX.toFloat(), o.projY.toFloat()),
-                style = Stroke(width = width),
-            )
+            val base = if (rp.kind == PacketKind.Other) palette.text else shiftedColor(rp.node, rp.hueDegrees)
+            val color = cool(desaturate(base, sat), rp.coolMix)
+            val width = EventLook.rippleWidthDp(rp.kind, rp.widthTrim, p.toDouble()).toFloat() * dp1 * s
+            val center = Offset(o.projX.toFloat(), o.projY.toFloat())
+            for (ri in 0 until rp.ringCount) {
+                val ringR = maxR * p * (1f - RING_INSET * ri)
+                val ringColor = color.copy(alpha = fade * (1f - RING_FADE * ri))
+                if (rp.style == RingStyle.Dashed) {
+                    val sweep = 360f / DASH_COUNT
+                    for (d in 0 until DASH_COUNT) {
+                        drawArc(
+                            ringColor,
+                            startAngle = d * sweep,
+                            sweepAngle = sweep / 2,
+                            useCenter = false,
+                            topLeft = Offset(center.x - ringR, center.y - ringR),
+                            size = androidx.compose.ui.geometry.Size(ringR * 2, ringR * 2),
+                            style = Stroke(width = width),
+                        )
+                    }
+                } else {
+                    drawCircle(ringColor, radius = ringR, center = center, style = Stroke(width = width))
+                }
+            }
         }
     }
 }
+
+/** Each extra ring of a long text is this fraction of the radius smaller than the one outside it, and this much fainter. */
+private const val RING_INSET = 0.22f
+private const val RING_FADE = 0.3f
+
+/** A dashed ring is this many dashes with a gap after each. */
+private const val DASH_COUNT = 16
 
 /** Reused per-frame arrays for the orb draw order; they grow only when the field does. */
 private class OrbBuffers {

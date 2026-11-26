@@ -222,10 +222,16 @@ class SceneModelTest {
     @Test
     fun `orbs breathe and different nodes do not breathe in step`() {
         val s = scene()
-        val a = (0 until 200).map { s.breath(0x1234, it * 0.1) }
+        val a = ArrayList<Double>()
+        var differs = false
+        for (i in 0 until 200) {
+            s.update(sr * i / 10)
+            a += s.breath(0x1234)
+            if (kotlin.math.abs(s.breath(0x1234) - s.breath(0x5678)) > 0.05) differs = true
+        }
         assertTrue(a.max() - a.min() > 0.1)
         assertTrue(a.all { it in 0.84..1.0 })
-        assertTrue((0 until 200).any { kotlin.math.abs(s.breath(0x1234, it * 0.1) - s.breath(0x5678, it * 0.1)) > 0.05 })
+        assertTrue(differs)
     }
 
     // Brief: disconnected look: the field desaturates and the anchor pulses more slowly.
@@ -448,7 +454,9 @@ class SceneModelTest {
         val a = s.anchor!!
         assertEquals(0.0, a.x)
         assertEquals(0.0, a.y)
-        assertTrue(s.driftX(1, 0.0) != s.driftX(1, 1000.0))
+        val before = s.driftX(1)
+        s.update(sr * 1000)
+        assertTrue(before != s.driftX(1))
         s.onEvent(seen(2, at(9000.0, 200.0)), 0)
         s.update(10)
         assertEquals(0.0, s.anchor!!.x)

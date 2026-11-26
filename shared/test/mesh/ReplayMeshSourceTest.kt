@@ -30,9 +30,12 @@ class ReplayMeshSourceTest {
 
     private val expected = listOf(
         MeshEvent.Link(LinkState.Replaying, 1_000),
-        MeshEvent.PacketHeard(0x11, PacketKind.Encrypted, 5.5f, -90, 0, false, 1_000),
-        MeshEvent.PacketHeard(0x22, PacketKind.Text, -2f, -110, 2, false, 3_000),
-        MeshEvent.PacketHeard(0x33, PacketKind.Telemetry, null, null, null, false, 7_000),
+        MeshEvent.PacketHeard(0x11, PacketKind.Encrypted, 5.5f, -90, 0, false, 1_000, payloadBytes = 4),
+        MeshEvent.PacketHeard(0x22, PacketKind.Text, -2f, -110, 2, false, 3_000, payloadBytes = 0, textLength = 0, channel = 0),
+        MeshEvent.PacketHeard(
+            0x33, PacketKind.Telemetry, null, null, null, false, 7_000,
+            payloadBytes = envTelemetry(18.0f, 55f, 1005f).encode().size, channel = 0,
+        ),
         MeshEvent.Environment(0x33, 18.0f, 55f, 1005f, null, null, 7_000),
     )
 

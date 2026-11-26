@@ -90,10 +90,17 @@ internal fun StatusOverlay(
             OutlinedButton({ controls.muted = !controls.muted }, Modifier.heightIn(min = MinTouch)) {
                 Text(if (controls.muted) "Unmute" else "Mute", style = MaterialTheme.typography.labelLarge)
             }
+            OutlinedButton(
+                { controls.driversOpen = !controls.driversOpen },
+                Modifier.heightIn(min = MinTouch).semantics { stateDescription = if (controls.driversOpen) "shown" else "hidden" },
+            ) {
+                Text(if (controls.driversOpen) "Hide drivers" else "Drivers", style = MaterialTheme.typography.labelLarge)
+            }
             if (onToggleFullscreen != null) {
                 OutlinedButton(onToggleFullscreen, Modifier.heightIn(min = MinTouch)) { Text("Fullscreen", style = MaterialTheme.typography.labelLarge) }
             }
         }
+        if (controls.driversOpen) DriversPanel(status.params.describe())
         Text(
             if (hasKeyboard) SHORTCUTS else "Tap to hide",
             style = MaterialTheme.typography.bodySmall,

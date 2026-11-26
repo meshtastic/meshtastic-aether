@@ -10,7 +10,9 @@ import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.currentTime
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import org.meshtastic.proto.DeviceMetrics
 import org.meshtastic.proto.FromRadio
+import org.meshtastic.proto.LocalStats
 import org.meshtastic.proto.MeshPacket
 import org.meshtastic.proto.Neighbor
 import org.meshtastic.proto.NeighborInfo
@@ -312,5 +314,48 @@ class SdkMeshSourceTest {
         feed.packetFlow.emit(decodedPacket(2, PortNum.TEXT_MESSAGE_APP, to = -1))
         runCurrent()
         assertEquals(listOf(true, false), got.filterIsInstance<MeshEvent.PacketHeard>().map { it.toUs })
+    }
+
+    private fun deviceTelemetry(battery: Int, volts: Float, uptime: Int) = Telemetry.Builder().also { t ->
+        t.device_metrics = DeviceMetrics.Builder().also {
+            it.battery_level = battery
+            it.voltage = volts
+            it.uptime_seconds = uptime
+        }.build()
+    }.build()
+
+    private fun statsTelemetry() = Telemetry.Builder().also { t ->
+        t.local_stats = LocalStats.Builder().also {
+            it.num_packets_rx = 50
+            it.noise_floor = -105
+            it.uptime_seconds = 90
+        }.build()
+    }.build()
+
+    @Test
+    fun `Health flows for every node and Stats only for our own and both during warm-up`() = runTest {
+        val feed = FakeFeed()
+        feed.own = 0x42L
+        val source = SdkMeshSource(feed, 5_000L) { currentTime }
+        val got = ArrayList<MeshEvent>()
+        backgroundScope.launch { source.events.collect { got += it } }
+        runCurrent()
+        feed.state.value = ConnectionState.Connected
+        runCurrent()
+        feed.nodeFlow.emit(NodeChange.Snapshot(mapOf(NodeId(0x42) to nodeInfo(0x42), NodeId(0x43) to nodeInfo(0x43))))
+        runCurrent()
+        feed.telemetryFlows.getValue(0x43L).emit(deviceTelemetry(60, 3.9f, 100))
+        feed.telemetryFlows.getValue(0x43L).emit(statsTelemetry())
+        feed.telemetryFlows.getValue(0x42L).emit(deviceTelemetry(101, 5.0f, 200))
+        feed.telemetryFlows.getValue(0x42L).emit(statsTelemetry())
+        runCurrent()
+        assertEquals(
+            listOf(MeshEvent.Health(0x43L, 60, 3.9f, 100L, 0L), MeshEvent.Health(0x42L, 101, 5.0f, 200L, 0L)),
+            got.filterIsInstance<MeshEvent.Health>(),
+        )
+        val stats = got.filterIsInstance<MeshEvent.Stats>().single()
+        assertEquals(50L, stats.rxTotal)
+        assertEquals(-105, stats.noiseFloorDbm)
+        assertEquals(90L, stats.uptimeSeconds)
     }
 }

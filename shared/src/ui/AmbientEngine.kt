@@ -27,6 +27,7 @@ import org.meshtastic.ambient.music.ControlEvent
 import org.meshtastic.ambient.music.Day
 import org.meshtastic.ambient.music.NoteEvent
 import org.meshtastic.ambient.music.Texture
+import org.meshtastic.ambient.mood.ParamValues
 import org.meshtastic.ambient.synth.Synth
 import org.meshtastic.ambient.visual.SceneModel
 import kotlin.concurrent.atomics.AtomicInt
@@ -48,6 +49,8 @@ data class EngineStatus(
     val section: String = "",
     /** The last link or source failure, until it is dismissed or a retry succeeds. */
     val error: String? = null,
+    /** The mesh-driven parameters in force; the overlay's Drivers panel lists them. */
+    val params: ParamValues = ParamValues.NEUTRAL,
 )
 
 /** Whether the radio link is up: everything but `Connecting` and `Lost` shows the field in full color. */
@@ -61,6 +64,7 @@ private class TickResult(
     val key: String,
     val mode: String,
     val section: String,
+    val params: ParamValues,
 )
 
 /**
@@ -93,6 +97,7 @@ class AmbientEngine(
     private val outbound = Channel<TickResult>(Channel.UNLIMITED)
     private val link = MutableStateFlow(LinkState.Connecting)
     private val tally = Tally()
+    private val coverage = CoverageReporter(write = { Log.i(TAG, it) })
     private var notesThisMinute = 0
     private var nextSummaryMillis = Long.MIN_VALUE
     private var lastLogged = ""
@@ -227,7 +232,8 @@ class AmbientEngine(
             scene.onTexture(it)
         }
         scene.minuteOfDay = r.minuteOfDay
-        status = status.copy(nodes = scene.orbs.size, key = r.key, mode = r.mode, section = r.section)
+        scene.onParams(r.params)
+        status = status.copy(nodes = scene.orbs.size, key = r.key, mode = r.mode, section = r.section, params = r.params)
     }
 
     private suspend fun composerLoop(firstTick: CompletableDeferred<Unit>) {
@@ -244,9 +250,11 @@ class AmbientEngine(
         while (true) {
             val e = inbound.tryReceive().getOrNull() ?: break
             composer.onEvent(e)
+            coverage.onEvent(e, now())
             if (e is MeshEvent.PacketHeard) tally.add(e.kind)
         }
         val ms = now()
+        coverage.tick(ms)
         val moment = localMoment(ms)
         val renderedNow = rendered.load()
         val out = composer.advance(renderedNow, lookaheadFrames, moment)
@@ -257,7 +265,7 @@ class AmbientEngine(
         val day = Day.at(moment)
         val key = NOTE_NAMES[day.rootSemitones.roundToInt().mod(12)]
         val section = composer.sectionAt(renderedNow.toDouble() / sampleRate)
-        outbound.trySend(TickResult(out.notes, texture, moment.minuteOfDay, key, day.mode.name, section))
+        outbound.trySend(TickResult(out.notes, texture, moment.minuteOfDay, key, day.mode.name, section, composer.params()))
         logSummary(ms, key, day.mode.name, section)
     }
 

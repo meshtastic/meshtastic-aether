@@ -39,6 +39,9 @@ internal enum class Effect { None, ToggleFullscreen, Disconnect }
 internal class Controls(volume: Float = 1f) {
     var overlayOpen by mutableStateOf(false)
 
+    /** Whether the overlay lists the mesh-driven parameters; shown only while the overlay is. */
+    var driversOpen by mutableStateOf(false)
+
     /** Volume 0..1 before muting. */
     var volume by mutableFloatStateOf(volume.coerceIn(0f, 1f))
 

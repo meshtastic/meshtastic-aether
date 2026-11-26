@@ -1,6 +1,6 @@
 package org.meshtastic.ambient.visual
 
-import kotlin.math.PI
+import org.meshtastic.ambient.mood.RotationState
 import kotlin.math.cos
 import kotlin.math.sin
 
@@ -33,6 +33,10 @@ class Projection {
         distance = cameraDistance
     }
 
+    /** Turns by the integrated [rotation]: yaw as is, pitch the axis tilt plus the wobble on top. */
+    fun update(rotation: RotationState, cameraDistance: Double) =
+        update(rotation.yawRadians, rotation.tiltRadians + rotation.wobbleRadians, cameraDistance)
+
     fun project(x: Double, y: Double, z: Double, out: Projected) {
         val xr = x * cosYaw + z * sinYaw
         val zr = -x * sinYaw + z * cosYaw
@@ -55,15 +59,6 @@ class Projection {
 
 /** The slow motion and look of the cloud. Every constant is named; times are seconds. */
 object CloudMotion {
-    /** One full turn of yaw takes ten minutes. */
-    const val YAW_PERIOD_SECONDS = 600.0
-
-    /** The pitch tilt swings this many degrees either side of level... */
-    const val PITCH_AMPLITUDE_DEGREES = 8.0
-
-    /** ...once every 90 seconds. */
-    const val PITCH_PERIOD_SECONDS = 90.0
-
     /** The cloud swells and shrinks by this fraction around its size... */
     const val BREATH_FRACTION = 0.03
 
@@ -88,13 +83,8 @@ object CloudMotion {
     /** How far toward the cool tint the farthest orbs are pulled, 0..1. */
     const val FAR_COOL_MIX = 0.3
 
-    fun yaw(tSeconds: Double): Double = 2 * PI * tSeconds / YAW_PERIOD_SECONDS
-
-    fun pitch(tSeconds: Double): Double =
-        PITCH_AMPLITUDE_DEGREES * PI / 180.0 * sin(2 * PI * tSeconds / PITCH_PERIOD_SECONDS)
-
-    /** Multiplier near 1.0 applied to every coordinate of the cloud. */
-    fun breathing(tSeconds: Double): Double = 1.0 + BREATH_FRACTION * sin(2 * PI * tSeconds / BREATH_PERIOD_SECONDS)
+    /** Multiplier near 1.0 applied to every coordinate of the cloud, from the breathing phase accumulator [phase] in radians. */
+    fun breathing(phase: Double): Double = 1.0 + BREATH_FRACTION * sin(phase)
 
     /** Depth normalised to -1 (nearest) .. 1 (farthest) for the depth cues. */
     fun depthT(depth: Double): Double = (depth / DEPTH_RANGE).coerceIn(-1.0, 1.0)
