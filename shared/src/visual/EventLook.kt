@@ -96,7 +96,7 @@ object EventLook {
     fun brightness(voltage: Float?, batteryPct: Int?): Double {
         if (batteryPct != null && batteryPct > 100) return BRIGHTNESS_MAX
         if (voltage == null || !voltage.isFinite() || voltage <= 0f) return 1.0
-        val t = ((voltage - VOLTS_LOW) / (VOLTS_HIGH - VOLTS_LOW)).toDouble().coerceIn(0.0, 1.0)
+        val t = ((voltage - VOLTS_LOW) / (VOLTS_HIGH - VOLTS_LOW)).coerceIn(0.0, 1.0)
         return BRIGHTNESS_MIN + (BRIGHTNESS_MAX - BRIGHTNESS_MIN) * t
     }
 

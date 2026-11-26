@@ -12,6 +12,9 @@ private const val HEADER_BYTES = 44
 private const val QUEUE_BLOCKS = 256
 private const val FLUSH_MILLIS = 1000L
 
+/** A RIFF size is 32 bits; past this (about 3 hours at 48 kHz) the header stays at the limit and the samples keep coming. */
+private const val MAX_DATA_BYTES = Int.MAX_VALUE.toLong() - 36
+
 /**
  * Copies the 16-bit stereo blocks the sink plays into a WAV file on a writer thread, so the audio thread only
  * enqueues. A full queue drops the block. The header is rewritten every second, so a killed app leaves a playable
@@ -22,6 +25,9 @@ class PcmRecorder(private val file: File, private val sampleRate: Int) {
     private val queue = ArrayBlockingQueue<ByteArray>(QUEUE_BLOCKS)
 
     @Volatile private var open = true
+
+    /** False once the writer has failed (an unwritable path); [offer] then stops copying. */
+    @Volatile private var writing = true
     private val writer = Thread(::drain, "aether-record").apply { isDaemon = true }
 
     /** Epoch millis of the first block, or 0 before it. */
@@ -32,6 +38,7 @@ class PcmRecorder(private val file: File, private val sampleRate: Int) {
 
     /** Called from the audio thread with the block it is about to play. */
     fun offer(bytes: ByteArray, length: Int) {
+        if (!writing) return
         if (startMillis == 0L) startMillis = System.currentTimeMillis()
         queue.offer(bytes.copyOf(length))
     }
@@ -42,6 +49,15 @@ class PcmRecorder(private val file: File, private val sampleRate: Int) {
     }
 
     private fun drain() {
+        try {
+            write()
+        } catch (e: Exception) {
+            writing = false
+            System.err.println("aether: recording to $file stopped: $e")
+        }
+    }
+
+    private fun write() {
         file.parentFile?.mkdirs()
         RandomAccessFile(file, "rw").use { f ->
             f.setLength(0)
@@ -68,12 +84,28 @@ class PcmRecorder(private val file: File, private val sampleRate: Int) {
 
     private fun header(dataBytes: Long): ByteArray {
         val b = java.nio.ByteBuffer.allocate(HEADER_BYTES).order(java.nio.ByteOrder.LITTLE_ENDIAN)
-        b.put("RIFF".toByteArray()).putInt((36 + dataBytes).toInt()).put("WAVE".toByteArray())
+        val data = dataBytes.coerceAtMost(MAX_DATA_BYTES)
+        b.put("RIFF".toByteArray()).putInt((36 + data).toInt()).put("WAVE".toByteArray())
         b.put("fmt ".toByteArray()).putInt(16).putShort(1).putShort(2).putInt(sampleRate).putInt(sampleRate * 4)
-        b.putShort(4).putShort(16).put("data".toByteArray()).putInt(dataBytes.toInt())
+        b.putShort(4).putShort(16).put("data".toByteArray()).putInt(data.toInt())
         return b.array()
     }
 }
 
-internal fun recorderFromEnvironment(sampleRate: Int): PcmRecorder? =
-    System.getenv(RECORD_AUDIO_ENV)?.takeIf { it.isNotBlank() }?.let { PcmRecorder(File(it), sampleRate).also(PcmRecorder::start) }
+/**
+ * The process's one recorder, made on the first sink start when [RECORD_AUDIO_ENV] is set. It outlives sessions, so a
+ * reconnect continues the same file instead of truncating it; its header is current to the second, so quitting is safe.
+ */
+internal object ProcessRecorder {
+    private var recorder: PcmRecorder? = null
+    private var made = false
+
+    @Synchronized
+    fun get(sampleRate: Int): PcmRecorder? {
+        if (!made) {
+            made = true
+            recorder = System.getenv(RECORD_AUDIO_ENV)?.takeIf { it.isNotBlank() }?.let { PcmRecorder(File(it), sampleRate).also(PcmRecorder::start) }
+        }
+        return recorder
+    }
+}

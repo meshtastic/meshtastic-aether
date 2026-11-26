@@ -10,13 +10,13 @@ import kotlin.math.sin
 /**
  * A mono voice placed to one side for headphones: a head-shadow shelf per ear and an interaural time difference, the
  * spherical-head model, not measured HRIRs. The ear nearer the source hears it undelayed; the far one hears it up to
- * 0.66 ms later and with its highs cut. A voice straight ahead (`lateral` 0) comes out as `mono / sqrt(2)` in both ears,
- * the same as the constant-power pan at centre, so switching modes changes nothing for it.
+ * 0.66 ms later and with its highs cut. The near ear's highs rise by up to 2x. A voice straight ahead (`lateral` 0) comes out
+ * as `mono / sqrt(2)` in both ears, the same as the constant-power pan at center, so switching modes changes nothing for it.
  *
  * Sources: Woodworth's interaural delay, `tau = (a / c)(alpha + sin alpha)` with `alpha = asin(lateral)`; and the
  * head-shadow filter of Brown and Duda (1998), `H(s) = (alpha(theta) s + beta) / (s + beta)` with `beta = 2c / a` and
  * `alpha(theta) = 1.05 + 0.95 cos(1.2 theta)` (theta in degrees from the ear's axis), taken relative to its value at
- * 90 degrees so that a centred source passes flat. State is preallocated and the coefficients are cached per side, so a steady chunk allocates nothing.
+ * 90 degrees so that a centered source passes flat. State is preallocated and the coefficients are cached per side, so a steady chunk allocates nothing.
  */
 internal class BinauralPanner(private val sampleRate: Int) {
     private val ring = FloatArray(RING)
@@ -31,8 +31,12 @@ internal class BinauralPanner(private val sampleRate: Int) {
     private var cachedLateral = Float.NaN
     private var alpha = 0.0
     private var delayTarget = 0.0
-    private var nearShelf = shelf(HALF_PI, sampleRate)
-    private var farShelf = nearShelf
+    private var nearB0 = 1f
+    private var nearB1 = 0f
+    private var nearA1 = 0f
+    private var farB0 = 1f
+    private var farB1 = 0f
+    private var farA1 = 0f
 
     fun reset() {
         ring.fill(0f)
@@ -51,15 +55,29 @@ internal class BinauralPanner(private val sampleRate: Int) {
     fun process(mono: FloatArray, n: Int, lateral: Float, left: FloatArray, right: FloatArray) {
         val ux = lateral.coerceIn(-1f, 1f)
         if (ux != cachedLateral) {
+            // A fresh note starts at its delay: the ring is silent, so there is nothing to ramp from.
+            val fresh = cachedLateral.isNaN()
             cachedLateral = ux
             alpha = asin(abs(ux.toDouble()))
             delayTarget = itdSamples(alpha, sampleRate)
-            nearShelf = shelf(HALF_PI - alpha, sampleRate)
-            farShelf = shelf(HALF_PI + alpha, sampleRate)
+            if (fresh) delayPrev = delayTarget
+            val k = 2.0 * sampleRate
+            val near = shelfRelative(HALF_PI - alpha)
+            nearB0 = ((BETA + near * k) / (BETA + k)).toFloat()
+            nearB1 = ((BETA - near * k) / (BETA + k)).toFloat()
+            nearA1 = ((BETA - k) / (BETA + k)).toFloat()
+            val far = shelfRelative(HALF_PI + alpha)
+            farB0 = ((BETA + far * k) / (BETA + k)).toFloat()
+            farB1 = ((BETA - far * k) / (BETA + k)).toFloat()
+            farA1 = nearA1
         }
         val rightIsNear = ux >= 0f
-        val rightCoeffs = if (rightIsNear) nearShelf else farShelf
-        val leftCoeffs = if (rightIsNear) farShelf else nearShelf
+        val lb0 = if (rightIsNear) farB0 else nearB0
+        val lb1 = if (rightIsNear) farB1 else nearB1
+        val la1 = if (rightIsNear) farA1 else nearA1
+        val rb0 = if (rightIsNear) nearB0 else farB0
+        val rb1 = if (rightIsNear) nearB1 else farB1
+        val ra1 = if (rightIsNear) nearA1 else farA1
         val d0 = delayPrev
         for (i in 0 until n) {
             val x = mono[i]
@@ -73,10 +91,10 @@ internal class BinauralPanner(private val sampleRate: Int) {
             val inLeft = if (rightIsNear) delayed else x
             val inRight = if (rightIsNear) x else delayed
 
-            val yl = leftCoeffs.b0 * inLeft + zLeft
-            zLeft = leftCoeffs.b1 * inLeft - leftCoeffs.a1 * yl
-            val yr = rightCoeffs.b0 * inRight + zRight
-            zRight = rightCoeffs.b1 * inRight - rightCoeffs.a1 * yr
+            val yl = lb0 * inLeft + zLeft
+            zLeft = lb1 * inLeft - la1 * yl
+            val yr = rb0 * inRight + zRight
+            zRight = rb1 * inRight - ra1 * yr
             left[i] = yl * CENTRE_GAIN
             right[i] = yr * CENTRE_GAIN
             pos = (pos + 1) and MASK
@@ -101,7 +119,7 @@ internal class BinauralPanner(private val sampleRate: Int) {
         /** Highest high-shelf gain relative to a source at 90 degrees. */
         const val MAX_SHELF = 2.0
 
-        /** Gain of a centred voice in each ear: the constant-power centre. */
+        /** Gain of a centered voice in each ear: the constant-power center. */
         val CENTRE_GAIN = (1.0 / kotlin.math.sqrt(2.0)).toFloat()
 
         /** Woodworth: seconds of interaural delay for a source [alpha] radians off the median plane. */
@@ -115,16 +133,18 @@ internal class BinauralPanner(private val sampleRate: Int) {
         /** Brown and Duda's `alpha(theta)` for [thetaRadians] from the ear's axis: 2 at 0, 0.756 at 90 degrees, 0.1 at 150. */
         fun shadowAlpha(thetaRadians: Double): Double = 1.05 + 0.95 * cos(1.2 * thetaRadians)
 
-        /** The shelf for an ear [thetaRadians] from the source, relative to a source at 90 degrees, so a centred voice is flat. */
+        /** The shelf's corner, `2c / a` radians per second (about 1.25 kHz). */
+        private const val BETA = 2.0 * SPEED_OF_SOUND / HEAD_RADIUS
+
+        /** High-frequency gain for an ear [thetaRadians] from the source, relative to a source at 90 degrees, capped at [MAX_SHELF]. */
+        fun shelfRelative(thetaRadians: Double): Double = (shadowAlpha(thetaRadians) / shadowAlpha(HALF_PI)).coerceIn(0.0, MAX_SHELF)
+
+        /** The bilinear shelf for an ear [thetaRadians] from the source, so a centered voice is flat; the render loop uses the same arithmetic. */
         fun shelf(thetaRadians: Double, sampleRate: Int): Shelf {
-            val relative = (shadowAlpha(thetaRadians) / shadowAlpha(HALF_PI)).coerceIn(0.0, MAX_SHELF)
-            val beta = 2.0 * SPEED_OF_SOUND / HEAD_RADIUS
+            val relative = shelfRelative(thetaRadians)
             val k = 2.0 * sampleRate
-            val denominator = beta + k
-            val b0 = (beta + relative * k) / denominator
-            val b1 = (beta - relative * k) / denominator
-            val a1 = (beta - k) / denominator
-            return Shelf(b0.toFloat(), b1.toFloat(), a1.toFloat())
+            val denominator = BETA + k
+            return Shelf(((BETA + relative * k) / denominator).toFloat(), ((BETA - relative * k) / denominator).toFloat(), ((BETA - k) / denominator).toFloat())
         }
     }
 }

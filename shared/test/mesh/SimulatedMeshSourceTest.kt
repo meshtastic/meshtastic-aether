@@ -107,7 +107,7 @@ class SimulatedMeshSourceTest {
         assertTrue(ev.any { it.kind == PacketKind.Encrypted })
         assertTrue(ev.any { it.hopsTaken == null })
         assertTrue(ev.filter { it.hopsTaken != null }.all { it.hopsTaken!! in 0..3 })
-        assertTrue(ev.all { it.snr == null || it.snr!! in -20f..15f })
+        assertTrue(ev.all { it.snr == null || it.snr in -20f..15f })
     }
 
     @Test
@@ -169,7 +169,7 @@ class SimulatedMeshSourceTest {
         assertTrue((roles["CLIENT"] ?: 0) > 70, "CLIENT ${roles["CLIENT"]} of 200 against a weight of 52 percent")
         assertTrue((roles["ROUTER"] ?: 0) < (roles["CLIENT"] ?: 0))
         assertTrue(seen.mapNotNull { it.hardware }.toSet().size >= 6)
-        assertTrue(seen.mapNotNull { it.position }.all { it.altitudeM != null && it.altitudeM!! in 0..2000 })
+        assertTrue(seen.mapNotNull { it.position }.all { it.altitudeM != null && it.altitudeM in 0..2000 })
     }
 
     @Test
@@ -203,9 +203,9 @@ class SimulatedMeshSourceTest {
             if (e is MeshEvent.Stats) {
                 stats++
                 assertEquals(heard, e.rxTotal, "rxTotal against packets heard so far")
-                assertTrue(e.rxDupe!! <= e.rxTotal!! && e.rxBad!! <= e.rxTotal!!)
+                assertTrue(e.rxDupe!! <= e.rxTotal!! && e.rxBad!! <= e.rxTotal)
                 assertTrue(e.noiseFloorDbm!! in -125..-95 && e.numTotal == 41 && e.numOnline!! in 1..41)
-                if (last != null) assertTrue(e.uptimeSeconds!! > last.uptimeSeconds!! && e.rxDupe!! >= last.rxDupe!!)
+                if (last != null) assertTrue(e.uptimeSeconds!! > last.uptimeSeconds!! && e.rxDupe >= last.rxDupe!!)
                 last = e
             }
         }
@@ -218,7 +218,7 @@ class SimulatedMeshSourceTest {
         val wind = env.filter { it.windMps != null }
         assertTrue(wind.isNotEmpty(), "no wind reports")
         assertTrue(wind.map { it.node }.toSet().size < env.map { it.node }.toSet().size)
-        assertTrue(wind.all { it.windDirectionDeg!! in 0f..360f && it.windGustMps!! >= it.windMps!! && it.windMps!! >= it.windLullMps!! && it.windLullMps!! >= 0f })
+        assertTrue(wind.all { it.windDirectionDeg!! in 0f..360f && it.windGustMps!! >= it.windMps!! && it.windMps >= it.windLullMps!! && it.windLullMps >= 0f })
         assertTrue(env.filter { it.windMps == null }.all { it.windDirectionDeg == null && it.windGustMps == null && it.windLullMps == null })
     }
 

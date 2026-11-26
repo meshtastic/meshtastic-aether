@@ -2,7 +2,7 @@ package org.meshtastic.aether.ui
 
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.runComposeUiTest
+import androidx.compose.ui.test.v2.runComposeUiTest
 import org.meshtastic.aether.AppRoot
 import org.meshtastic.aether.Platform
 import kotlin.test.Test

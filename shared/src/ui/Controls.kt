@@ -76,7 +76,7 @@ internal class DisconnectConfirm {
     }
 }
 
-/** The viewer's controls: overlay, volume and mute. Plain state, so a key table can be tested without a window. */
+/** The viewer's controls: overlay, volume, mute and headphones. Plain state, so a key table can be tested without a window. */
 internal class Controls(volume: Float = 1f, headphones: Boolean = false) {
     /** Whether the sound is placed for headphones; the engine and the saved setting follow it. */
     var headphones by mutableStateOf(headphones)

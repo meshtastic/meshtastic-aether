@@ -16,7 +16,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.ui.backhandler.BackHandler
+import androidx.navigationevent.NavigationEventInfo
+import androidx.navigationevent.compose.NavigationBackHandler
+import androidx.navigationevent.compose.rememberNavigationEventState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
@@ -321,7 +323,8 @@ private fun Running(
     HostCommands(commands, controls.muted, perform)
     // Back closes the HUD, then returns to the connect screen. Only where the system has a Back control: on desktop the
     // handler can be driven by Escape, which already means close the HUD or leave full screen.
-    BackHandler(enabled = platform.hasSystemBack) { if (controls.overlayOpen) controls.overlayOpen = false else onStop() }
+    val backState = rememberNavigationEventState(NavigationEventInfo.None)
+    NavigationBackHandler(backState, isBackEnabled = platform.hasSystemBack, onBackCompleted = { if (controls.overlayOpen) controls.overlayOpen = false else onStop() })
     var fade by remember(engine) { mutableFloatStateOf(0f) }
     LaunchedEffect(engine) {
         val start = nowMillis()
@@ -332,7 +335,8 @@ private fun Running(
     }
     LaunchedEffect(controls.effectiveVolume, fade) { engine.volume = controls.effectiveVolume * fade }
     val focus = remember { FocusRequester() }
-    LaunchedEffect(Unit) { focus.requestFocus() }
+    // The HUD takes focus when it opens; when it closes the scene takes it back, so the next key (Select on a remote) reaches it.
+    LaunchedEffect(controls.overlayOpen) { if (!controls.overlayOpen) runCatching { focus.requestFocus() } }
 
     var lastInput by remember { mutableLongStateOf(nowMillis()) }
     val screenReader by rememberUpdatedState(screenReaderActive)

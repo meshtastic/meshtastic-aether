@@ -42,7 +42,7 @@ internal class ReplayMeshSource(
 
             frame.my_info?.let {
                 ownNode = it.my_node_num.toLong() and 0xFFFFFFFFL
-                if (ownNode != lastSelf?.node) emit(MeshEvent.Self(ownNode!!, null, null, at).also { s -> lastSelf = s })
+                if (ownNode != lastSelf?.node) emit(MeshEvent.Self(ownNode, null, null, at).also { s -> lastSelf = s })
             }
             frame.node_info?.let { info ->
                 val num = info.num.toLong() and 0xFFFFFFFFL

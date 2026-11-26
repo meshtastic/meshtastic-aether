@@ -91,6 +91,16 @@ class BinauralPannerTest {
         assertTrue(abs(r[peakAt(r)]) > 2f * abs(l[peakAt(l)]), "the near ear is louder at the click, highs shadowed in the far ear")
     }
 
+    // Regression: a new note's far ear started at no delay and ramped up across its first chunk, so its onset reached both ears together.
+    @Test
+    fun `a new note is delayed in the far ear from its first sample`() {
+        val impulse = FloatArray(256).also { it[0] = 1f }
+        val (l, r) = render(1f, impulse)
+        fun peakAt(x: FloatArray) = x.indices.maxByOrNull { abs(x[it]) }!!
+        val gap = peakAt(l) - peakAt(r)
+        assertTrue(gap in 24..40, "the far ear lags by $gap samples on a fresh note")
+    }
+
     // A delay that jumped to its new value instead of ramping would step the far ear by a delay's worth of signal.
     @Test
     fun `the far ear delay ramps in a straight line across a chunk and never moves faster than a sample a sample`() {

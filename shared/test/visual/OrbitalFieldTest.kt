@@ -68,7 +68,7 @@ class OrbitalFieldTest {
         val none = meanDistance(edge = false, fade = 1.0)
         val linked = meanDistance(edge = true, fade = 1.0)
         val faded = meanDistance(edge = true, fade = 0.0)
-        assertTrue(none - linked > 0.2, "linked nodes sit closer: $linked against $none")
+        assertTrue(none - linked > 0.12, "linked nodes sit closer: $linked against $none")
         assertEquals(none, faded, 1e-12)
     }
 
@@ -143,7 +143,7 @@ class OrbitalFieldTest {
     }
 
     @Test
-    fun `an orb nearer the anchor turns faster by the cube root law and binding follows rssi`() {
+    fun `an orb nearer the anchor turns faster by Kepler's three halves power and binding follows rssi`() {
         val inner = OrbitalField.angularRate(0.25)
         val outer = OrbitalField.angularRate(0.5)
         assertEquals(2.0.pow(1.5), inner / outer, 1e-9)
@@ -153,5 +153,16 @@ class OrbitalFieldTest {
         assertEquals(0.0, OrbitalField.binding(-200.0), 1e-12)
         assertEquals(1.0, OrbitalField.binding(0.0), 1e-12)
         assertTrue(abs(OrbitalField.binding(null) - 0.4) < 1e-12)
+    }
+
+    // Regression: the edge pull was strong enough that a long link pinned both orbs against the offset limit, freezing their orbits.
+    @Test
+    fun `a long link at full gravity leans the orbs without pinning them to the limit`() {
+        val a = orb(10, -0.5, 0.0, -40.0)
+        val b = orb(20, 0.5, 0.0, -40.0)
+        var maxOffset = 0.0
+        run(listOf(a, b), 30.0, listOf(Edge(10, 20, 0)), gravity = 1.0)
+        run(listOf(a, b), 30.0, listOf(Edge(10, 20, 0)), gravity = 1.0) { maxOffset = maxOf(maxOffset, offset(a), offset(b)) }
+        assertTrue(maxOffset < OrbitalField.MAX_OFFSET * 0.95, "an orb reached $maxOffset of the ${OrbitalField.MAX_OFFSET} limit")
     }
 }

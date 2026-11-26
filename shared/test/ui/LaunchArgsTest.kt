@@ -36,7 +36,7 @@ class LaunchArgsTest {
     fun `an unreadable look or tcp value is an error and not a choice`() {
         val bad = parseLaunchArgs(arrayOf("--look", "neon"))
         assertNotNull(bad.error)
-        assertTrue("projector" in bad.error!!)
+        assertTrue("projector" in bad.error)
         assertNull(bad.look)
         assertNull(parseLaunchArgs(arrayOf("--look")).look)
         assertNotNull(parseLaunchArgs(arrayOf("--look")).error)

@@ -235,7 +235,7 @@ class ComposerTraitsTest {
             c.onEvent(MeshEvent.Health(100L + i, 5, null, null, t0))
             c.onEvent(heard(100L + i, atMs = t0 + i * 5L, mqtt = true))
         }
-        val notes = c.drive(step, 12).filter { it.node != null && it.node!! in 100L..299L }
+        val notes = c.drive(step, 12).filter { it.node != null && it.node in 100L..299L }
         assertTrue(notes.isNotEmpty())
         val edges = notes.flatMap { listOf(it.atFrame to 1, it.atFrame + it.durationFrames to -1) }.sortedWith(compareBy({ it.first }, { it.second }))
         var n = 0

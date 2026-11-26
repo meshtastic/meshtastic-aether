@@ -362,6 +362,8 @@ private fun televisionSliderKey(event: KeyEvent, controls: Controls, focus: Focu
         if (event.type == KeyEventType.KeyDown) focus.moveFocus(horizontal)
         return true
     }
+    // The slider has no click, so Select would fall through to the scene and close the HUD.
+    if (event.key == Key.DirectionCenter) return true
     val action = when (event.key) {
         Key.DirectionUp -> KeyAction.VolumeUp
         Key.DirectionDown -> KeyAction.VolumeDown

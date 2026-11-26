@@ -25,7 +25,7 @@ private fun Int.unsigned(): Long = toLong() and 0xFFFFFFFFL
 /** DeviceMetrics of any node; null when the packet carries none of battery, voltage and uptime. */
 internal fun Telemetry.toHealth(node: Long, nowMillis: Long): MeshEvent.Health? {
     val d = device_metrics ?: return null
-    val battery = d.battery_level?.toInt()
+    val battery = d.battery_level
     val volts = d.voltage
     val uptime = d.uptime_seconds?.unsigned()
     if (battery == null && volts == null && uptime == null) return null

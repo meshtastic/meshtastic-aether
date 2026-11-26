@@ -38,10 +38,15 @@ internal object OrbitalField {
     private const val MIN_RADIUS = 0.15
     private const val MAX_RATE = 1.0
 
-    private const val SPRING = 0.8
-    private const val DAMPING = 1.4
-    private const val EDGE_PULL = 0.6
-    private const val EDGE_REACH = 0.5
+    internal const val SPRING = 0.8
+    internal const val DAMPING = 1.4
+
+    /**
+     * Pull per unit of edge length. The steady lean is `EDGE_PULL / SPRING * gravity * fade * min(d, EDGE_REACH)`, at most
+     * 0.1 at full gravity, so with the ring it stays under [MAX_OFFSET] and the orbit keeps turning.
+     */
+    internal const val EDGE_PULL = 0.16
+    internal const val EDGE_REACH = 0.5
 
     /** Largest step integrated at once; a longer gap (the first frame, a stalled app) is cut to this. */
     const val MAX_STEP_SECONDS = 0.05
@@ -79,7 +84,7 @@ internal object OrbitalField {
      * pull of edges and the tightness of the rings. [edgeFade] is each edge's freshness 0..1; [orbOf] finds an edge's
      * ends and [anchorNode] is the one end that is fixed at the origin.
      */
-    fun step(
+    inline fun step(
         dtSeconds: Double,
         orbs: Collection<Orb>,
         edges: Collection<Edge>,
@@ -152,7 +157,7 @@ internal object OrbitalField {
     }
 
     /** Where on its ring an orb starts: a fixed function of the node number, so orbs do not move in lockstep. */
-    private fun ringStart(node: Long): Double = (node * 0.7548776662466927).mod(1.0) * 2 * PI
+    internal fun ringStart(node: Long): Double = (node * 0.7548776662466927).mod(1.0) * 2 * PI
 
     private const val GOLDEN_ANGLE = 2.399963229728653
 }

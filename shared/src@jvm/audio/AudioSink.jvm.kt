@@ -24,7 +24,6 @@ class JvmAudioSink : AudioSink {
     @Volatile private var line: SourceDataLine? = null
     @Volatile private var running = false
     private var thread: Thread? = null
-    private var recorder: PcmRecorder? = null
 
     @Synchronized
     override fun start(renderer: BlockRenderer) {
@@ -36,8 +35,7 @@ class JvmAudioSink : AudioSink {
         line = l
         running = true
         val pump = BlockPump(renderer)
-        val rec = recorderFromEnvironment(sampleRate)
-        recorder = rec
+        val rec = ProcessRecorder.get(sampleRate)
         val bytes = ByteArray(PUMP_BLOCK_FRAMES * fmt.frameSize)
         thread = Thread({
             while (running) {
@@ -65,8 +63,6 @@ class JvmAudioSink : AudioSink {
         thread = null
         l.close()
         line = null
-        recorder?.close()
-        recorder = null
     }
 
     override fun playbackFrame(): Long = line?.longFramePosition ?: 0L

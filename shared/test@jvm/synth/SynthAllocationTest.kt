@@ -20,7 +20,7 @@ class SynthAllocationTest {
         val out = FloatArray(1024)
         synth.render(out, 512)
         val bean = ManagementFactory.getThreadMXBean() as com.sun.management.ThreadMXBean
-        val id = Thread.currentThread().id
+        val id = Thread.currentThread().threadId()
         val before = bean.getThreadAllocatedBytes(id)
         var frames = 0
         while (frames < 10 * rate) {
