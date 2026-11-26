@@ -13,5 +13,7 @@ settings:
   compose: enabled
   android:
     applicationId: org.meshtastic.aether
+    versionCode: 1000
+    versionName: 0.1.0
     namespace: org.meshtastic.aether
     minSdk: 26 # meshtastic-sdk's floor

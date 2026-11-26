@@ -9,6 +9,7 @@ on:
     branches: [main]
   merge_group:
   workflow_dispatch:
+  workflow_call:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -54,6 +55,9 @@ jobs:
             echo "::error::Test names in shared/test must not contain commas or parentheses"
             exit 1
           fi
+
+      - name: Changelog fragments are valid
+        run: scripts/changelog.sh check
 
       - name: Build every module
         run: ./kotlin build

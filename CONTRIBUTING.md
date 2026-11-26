@@ -82,7 +82,7 @@ Renovate follows `.github/renovate.json`, which extends the org's `kmp-library` 
 
 ## Changelog
 
-[`CHANGELOG.md`](CHANGELOG.md) is hand-written in [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) form, and no entry is generated from commits. Add a bullet under `## [Unreleased]` in the right section (`Added`, `Changed`, `Deprecated`, `Removed`, `Fixed` or `Security`) for anything a listener or operator would notice: a new or changed behavior, a flag, a link type, a fix to something they could hit. Refactors, test-only changes and CI changes get no entry.
+[`CHANGELOG.md`](CHANGELOG.md) is hand-written in [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) form, and no entry is generated from commits. Add a fragment to [`changelog.d/`](changelog.d/README.md), never `CHANGELOG.md` itself, for anything a listener or operator would notice: a new or changed behavior, a flag, a link type, a fix to something they could hit. Refactors, test-only changes and CI changes get no entry. The release cut folds the fragments in; [`RELEASING.md`](RELEASING.md) has the steps.
 
 ## Architecture rules
 

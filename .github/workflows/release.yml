@@ -1,0 +1,279 @@
+name: Release
+
+# Cut a release on main with `scripts/changelog.sh cut X.Y.Z` and `scripts/version.sh set X.Y.Z`, merge it, then
+# dispatch this workflow with the version or push the vX.Y.Z tag. Every check runs before anything is tagged, so a
+# refused release leaves no tag behind. Off while the repository is private, like CI. Process: RELEASING.md.
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release, e.g. 0.1.0 (needs a CHANGELOG.md section and matching manifests)'
+        required: true
+        type: string
+      dry_run:
+        description: 'Run every check and build every artifact, but tag and release nothing'
+        required: false
+        type: boolean
+        default: false
+
+concurrency:
+  group: release-${{ github.event_name == 'push' && github.ref_name || format('v{0}', inputs.version) }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  KOTLIN_CLI_NO_WELCOME_BANNER: 1
+
+jobs:
+  prepare:
+    name: Check the version, manifests and changelog
+    if: ${{ !github.event.repository.private }}
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Resolve the version
+        id: version
+        env:
+          REQUESTED: ${{ inputs.version || github.ref_name }}
+        run: |
+          version="${REQUESTED#v}"
+          if ! [[ $version =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::not a version: $REQUESTED (want X.Y.Z)"
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: The commit is on main
+        if: ${{ !inputs.dry_run }}
+        run: |
+          if ! git merge-base --is-ancestor HEAD origin/main; then
+            echo "::error::$(git rev-parse --short HEAD) is not on main; release from main or use a dry run"
+            exit 1
+          fi
+
+      - name: Any existing tag points at this commit
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          if tagged=$(git rev-parse -q --verify "refs/tags/v$VERSION^{commit}"); then
+            if [ "$tagged" != "$(git rev-parse HEAD)" ]; then
+              echo "::error::v$VERSION already tags $tagged, not this commit"
+              exit 1
+            fi
+          fi
+
+      - name: Every manifest carries the version
+        run: scripts/version.sh check "${{ steps.version.outputs.version }}"
+
+      - name: The changelog has the release notes
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          scripts/changelog.sh notes "$VERSION" > release-notes.md
+          if ! grep -q '[^[:space:]]' release-notes.md; then
+            echo "::error::the [$VERSION] section of CHANGELOG.md is empty"
+            exit 1
+          fi
+
+      - name: Keep the notes
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-notes
+          path: release-notes.md
+
+  ci:
+    name: CI
+    needs: prepare
+    uses: ./.github/workflows/ci.yml
+
+  android:
+    name: Android APK and AAB
+    needs: [prepare, ci]
+    runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ needs.prepare.outputs.version }}
+      HAS_KEYSTORE: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Point the toolchain caches at one directory
+        run: |
+          echo "KOTLIN_CLI_BOOTSTRAP_CACHE_DIR=$HOME/kotlin-cache/cli" >> "$GITHUB_ENV"
+          echo "KOTLIN_SHARED_CACHE_DIR=$HOME/kotlin-cache/shared" >> "$GITHUB_ENV"
+
+      - name: Cache the Kotlin Toolchain and dependencies
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/kotlin-cache
+          key: kotlin-${{ runner.os }}-${{ hashFiles('kotlin', 'libs.versions.toml', 'common.module-template.yaml', '**/module.yaml') }}
+          restore-keys: |
+            kotlin-${{ runner.os }}-
+
+      - name: Build the release APK and AAB
+        run: |
+          ./kotlin build -m androidApp -p android -v release
+          ./kotlin package -m androidApp -p android -v release -f aab
+
+      # Signed with the release keystore when its secrets exist; otherwise the files ship unsigned and say so.
+      - name: Sign
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          mkdir -p out
+          apk=build/tasks/_androidApp_buildAndroidRelease/gradle-project-release-unsigned.apk
+          aab=build/tasks/_androidApp_bundleAndroid/gradle-project-release.aab
+          tools="$ANDROID_HOME/build-tools/$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -printf '%f\n' | sort -V | tail -1)"
+          if [ "$HAS_KEYSTORE" = true ]; then
+            echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
+            "$tools/zipalign" -f -p 4 "$apk" "$RUNNER_TEMP/aligned.apk"
+            "$tools/apksigner" sign --ks "$RUNNER_TEMP/release.jks" --ks-pass env:KEYSTORE_PASSWORD \
+              --ks-key-alias "$KEY_ALIAS" --key-pass env:KEY_PASSWORD \
+              --out "out/meshtastic-aether-$VERSION-android.apk" "$RUNNER_TEMP/aligned.apk"
+            jarsigner -keystore "$RUNNER_TEMP/release.jks" -storepass:env KEYSTORE_PASSWORD -keypass:env KEY_PASSWORD \
+              -signedjar "out/meshtastic-aether-$VERSION-android.aab" "$aab" "$KEY_ALIAS"
+            rm -f "$RUNNER_TEMP/release.jks"
+          else
+            echo "::warning::no ANDROID_KEYSTORE_BASE64 secret: the APK and AAB are unsigned"
+            "$tools/zipalign" -f -p 4 "$apk" "out/meshtastic-aether-$VERSION-android-unsigned.apk"
+            cp "$aab" "out/meshtastic-aether-$VERSION-android-unsigned.aab"
+          fi
+          badging=$("$tools/aapt2" dump badging out/*.apk)
+          if ! grep -q "versionName='$VERSION'" <<<"$badging"; then
+            echo "::error::the APK does not carry versionName $VERSION"
+            exit 1
+          fi
+
+      - name: Keep the Android files
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: android
+          path: out/
+
+  desktop:
+    name: Desktop jar (${{ matrix.id }})
+    needs: [prepare, ci]
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            id: linux-x64
+          - os: macos-latest
+            id: macos-arm64
+    runs-on: ${{ matrix.os }}
+    env:
+      VERSION: ${{ needs.prepare.outputs.version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Point the toolchain caches at one directory
+        run: |
+          echo "KOTLIN_CLI_BOOTSTRAP_CACHE_DIR=$HOME/kotlin-cache/cli" >> "$GITHUB_ENV"
+          echo "KOTLIN_SHARED_CACHE_DIR=$HOME/kotlin-cache/shared" >> "$GITHUB_ENV"
+
+      - name: Cache the Kotlin Toolchain and dependencies
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/kotlin-cache
+          key: kotlin-${{ runner.os }}-${{ hashFiles('kotlin', 'libs.versions.toml', 'common.module-template.yaml', '**/module.yaml') }}
+          restore-keys: |
+            kotlin-${{ runner.os }}-
+
+      # The jar bundles the Compose native libraries for the OS it is built on, so each OS gets its own.
+      - name: Package the executable jar
+        run: |
+          ./kotlin package -m desktopApp -f executable-jar
+          mkdir -p out
+          cp build/tasks/_desktopApp_executableJarJvm/desktopApp-jvm-executable.jar "out/meshtastic-aether-$VERSION-desktop-${{ matrix.id }}.jar"
+
+      - name: Keep the jar
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: desktop-${{ matrix.id }}
+          path: out/
+
+  web:
+    name: Web build
+    needs: [prepare, ci]
+    runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ needs.prepare.outputs.version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Point the toolchain caches at one directory
+        run: |
+          echo "KOTLIN_CLI_BOOTSTRAP_CACHE_DIR=$HOME/kotlin-cache/cli" >> "$GITHUB_ENV"
+          echo "KOTLIN_SHARED_CACHE_DIR=$HOME/kotlin-cache/shared" >> "$GITHUB_ENV"
+
+      - name: Cache the Kotlin Toolchain and dependencies
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/kotlin-cache
+          key: kotlin-${{ runner.os }}-${{ hashFiles('kotlin', 'libs.versions.toml', 'common.module-template.yaml', '**/module.yaml') }}
+          restore-keys: |
+            kotlin-${{ runner.os }}-
+
+      - name: Build and zip the static site
+        run: |
+          ./kotlin build -m webApp -v release
+          mkdir -p out
+          (cd build/tasks/_webApp_buildWasmJsAppWasmJsRelease && zip -qr "$GITHUB_WORKSPACE/out/meshtastic-aether-$VERSION-web.zip" .)
+
+      - name: Keep the site
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: web
+          path: out/
+
+  publish:
+    name: Tag and publish the GitHub Release
+    needs: [prepare, android, desktop, web]
+    if: ${{ !inputs.dry_run }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      VERSION: ${{ needs.prepare.outputs.version }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Collect the artifacts
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          path: artifacts
+
+      - name: Tag the release
+        run: |
+          if ! git rev-parse -q --verify "refs/tags/v$VERSION" >/dev/null; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git tag -a "v$VERSION" -m "Meshtastic Aether $VERSION"
+            git push origin "v$VERSION"
+          fi
+
+      - name: Publish the release
+        run: |
+          gh release create "v$VERSION" --verify-tag --title "Meshtastic Aether $VERSION" \
+            --notes-file artifacts/release-notes/release-notes.md \
+            artifacts/android/* artifacts/desktop-*/* artifacts/web/*

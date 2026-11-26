@@ -58,6 +58,7 @@ Launch flags: `--demo`, `--replay`, `--tcp host[:port]`, `--ask`, `--fullscreen`
 - Expressive opt-ins are file-level (`@file:OptIn(ExperimentalMaterial3ExpressiveApi::class)`), never in a build flag.
 - The theme is `MaterialExpressiveTheme` with `MotionScheme.standard()`: no overshoot, and the toolbar keeps its standard colors so a saturated slab never burns in.
 - UI colors come from `MaterialTheme` roles, never hardcoded values; only the scene reads `LocalAmbientPalette`.
+- A user-visible change adds a fragment to `changelog.d/` (`scripts/changelog.sh check` validates it); never edit `CHANGELOG.md` or the manifest versions by hand, the release cut does both (`RELEASING.md`).
 - Test names in `shared/test` take no commas or parentheses: Kotlin/Native rejects them, and only the iOS test compile shows it. Check with `grep -rn 'fun \`[^\`]*[,()][^\`]*\`' shared/test/`.
 - Compose UI tests live in `shared/test@jvm` (`androidx.compose.ui.test.v2.runComposeUiTest`), and no check may need them on wasm. A running session animates forever, so a test cannot wait for it to go idle: test the pieces (`HostCommands`, the chooser, the countdown) on their own.
 - Host menus and Back call `AppCommands` and the shared key path (`perform`), never their own copies of an action, so the two-press disconnect and the haptics apply everywhere.
