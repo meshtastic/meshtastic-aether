@@ -1,0 +1,89 @@
+name: CI
+
+# Off while the repository is private: every job is gated on it being public, so a private repo spends no
+# Actions minutes and the checks switch on by themselves when the visibility changes.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  merge_group:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+# The ./kotlin wrapper provisions the toolchain and its own JDK, so there is no setup-java step. Both of its caches
+# are moved to ~/kotlin-cache (KOTLIN_CLI_BOOTSTRAP_CACHE_DIR, KOTLIN_SHARED_CACHE_DIR) so a single cache step
+# covers them on every OS. The toolchain installs no browser: the Wasm tests use the runner's Chrome, and iOS needs
+# the runner's Xcode.
+env:
+  KOTLIN_CLI_NO_WELCOME_BANNER: 1
+
+jobs:
+  linux:
+    name: Build, JVM and Wasm tests
+    if: ${{ !github.event.repository.private }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Point the toolchain caches at one directory
+        run: |
+          echo "KOTLIN_CLI_BOOTSTRAP_CACHE_DIR=$HOME/kotlin-cache/cli" >> "$GITHUB_ENV"
+          echo "KOTLIN_SHARED_CACHE_DIR=$HOME/kotlin-cache/shared" >> "$GITHUB_ENV"
+
+      - name: Cache the Kotlin Toolchain and dependencies
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/kotlin-cache
+          key: kotlin-${{ runner.os }}-${{ hashFiles('kotlin', 'libs.versions.toml', 'common.module-template.yaml', '**/module.yaml') }}
+          restore-keys: |
+            kotlin-${{ runner.os }}-
+
+      # Kotlin/Native rejects commas and parentheses in test names, and only the iOS test compile shows it.
+      - name: Test names are valid on Kotlin/Native
+        run: |
+          # shellcheck disable=SC2016 # the backticks are literal: they delimit Kotlin test names
+          if grep -rn 'fun `[^`]*[,()][^`]*`' shared/test/; then
+            echo "::error::Test names in shared/test must not contain commas or parentheses"
+            exit 1
+          fi
+
+      - name: Build every module
+        run: ./kotlin build
+
+      - name: Shared tests (JVM and Wasm)
+        run: ./kotlin test -m shared
+
+      - name: Tools tests
+        run: ./kotlin test -m tools
+
+  ios:
+    name: iOS simulator tests
+    if: ${{ !github.event.repository.private }}
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Point the toolchain caches at one directory
+        run: |
+          echo "KOTLIN_CLI_BOOTSTRAP_CACHE_DIR=$HOME/kotlin-cache/cli" >> "$GITHUB_ENV"
+          echo "KOTLIN_SHARED_CACHE_DIR=$HOME/kotlin-cache/shared" >> "$GITHUB_ENV"
+
+      - name: Cache the Kotlin Toolchain and dependencies
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/kotlin-cache
+          key: kotlin-${{ runner.os }}-${{ hashFiles('kotlin', 'libs.versions.toml', 'common.module-template.yaml', '**/module.yaml') }}
+          restore-keys: |
+            kotlin-${{ runner.os }}-
+
+      - name: Shared tests on the iOS simulator
+        run: ./kotlin test -m shared -p iosSimulatorArm64

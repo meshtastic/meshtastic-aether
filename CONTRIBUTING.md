@@ -74,6 +74,12 @@ cd meshtastic-aether
 
 [`README.md`](README.md) lists the launch flags and the other run targets.
 
+## CI and dependency updates
+
+`.github/workflows/ci.yml` runs the same gate as above on Linux (build every module, shared tests on JVM and Wasm, tools tests, and the Kotlin/Native test-name check) and the shared tests on the iOS simulator on macOS. Every job is gated on the repository being public, so it spends no minutes while private and switches on at the visibility change. The `./kotlin` wrapper provisions the toolchain and its JDK, and CI caches both under `~/kotlin-cache`.
+
+Renovate follows `.github/renovate.json`, which extends the org's `kmp-library` policy. Nothing automerges until CI is a required check on `main`. Kotlin and Compose in `common.module-template.yaml` are read by regex managers and grouped with the catalog, and Kotlin stays on the meshtastic-sdk's compiler. Update the toolchain itself with `./kotlin update`, which rewrites the wrapper's version and checksum together.
+
 ## Changelog
 
 [`CHANGELOG.md`](CHANGELOG.md) is hand-written in [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) form, and no entry is generated from commits. Add a bullet under `## [Unreleased]` in the right section (`Added`, `Changed`, `Deprecated`, `Removed`, `Fixed` or `Security`) for anything a listener or operator would notice: a new or changed behavior, a flag, a link type, a fix to something they could hit. Refactors, test-only changes and CI changes get no entry.

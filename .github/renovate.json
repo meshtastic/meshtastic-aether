@@ -1,0 +1,37 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "description": "Extends the org policy for Kotlin Multiplatform repos (3-day soak, kotlin-toolchain and first-party holds; see meshtastic/.github:kmp-library.json). Aether is an app built with the Kotlin Toolchain, not Gradle, so two versions live outside the catalog: Kotlin and Compose in common.module-template.yaml, read here by regex managers. The toolchain itself (kotlin_cli_version and its sha256 in the ./kotlin wrapper) is updated with `./kotlin update`, never by Renovate, because a regex cannot recompute the checksum. packageRules apply in order and the last match wins.",
+  "extends": ["local>meshtastic/.github:kmp-library"],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "Kotlin in the toolchain template, pinned to the meshtastic-sdk compiler so its klibs link.",
+      "managerFilePatterns": ["/(^|/)common\\.module-template\\.yaml$/"],
+      "matchStrings": ["kotlin:\\s*\\n\\s*version:\\s*(?<currentValue>\\S+)"],
+      "depNameTemplate": "org.jetbrains.kotlin:kotlin-stdlib",
+      "datasourceTemplate": "maven"
+    },
+    {
+      "customType": "regex",
+      "description": "Compose Multiplatform in the toolchain template; it must match `compose` in libs.versions.toml, so it shares the compose-multiplatform group with the catalog entries.",
+      "managerFilePatterns": ["/(^|/)common\\.module-template\\.yaml$/"],
+      "matchStrings": ["compose:\\s*\\n\\s*version:\\s*(?<currentValue>\\S+)"],
+      "depNameTemplate": "org.jetbrains.compose.runtime:runtime",
+      "datasourceTemplate": "maven"
+    }
+  ],
+  "packageRules": [
+    {
+      "description": "No required check gates merges yet: CI runs only once the repository is public. Nothing automerges until CI is a required check on main; remove this rule then.",
+      "matchPackageNames": ["*"],
+      "automerge": false
+    },
+    {
+      "description": "HOLD: Kotlin in the toolchain template moves with the preset's kotlin-toolchain group, which only matches the Gradle manager. It must stay on the meshtastic-sdk's compiler, so a human checks the SDK first.",
+      "matchManagers": ["custom.regex"],
+      "matchPackageNames": ["org.jetbrains.kotlin:kotlin-stdlib"],
+      "groupName": "kotlin-toolchain",
+      "automerge": false
+    }
+  ]
+}
