@@ -268,8 +268,8 @@ class AmbientEngine(
         nextSummaryMillis = ms + SUMMARY_MILLIS
         Log.i(
             TAG,
-            "minute heard=${tally.total} (${tally.describe()}) notes=$notesThisMinute " +
-                "link=${link.value} $key $mode section=$section volume=$volume",
+            "minute heard=${tally.total} (${tally.describe()}) notes=$notesThisMinute nodes=${scene.orbs.size} " +
+                "link=${link.value} $key $mode section=$section volume=$volume${scene.frameStats.takeReport()?.let { " " + it.format() } ?: ""}",
         )
         tally.reset()
         notesThisMinute = 0

@@ -53,9 +53,14 @@ fun AmbientScene(engine: AmbientEngine, modifier: Modifier = Modifier) {
     val dither = remember { ditherTile() }
     val ditherBrush = remember(dither) { ShaderBrush(ImageShader(dither, TileMode.Repeated, TileMode.Repeated)) }
     val scene = engine.scene
+    val projection = remember { Projection() }
+    val tmp = remember { Projected() }
+    val pa = remember { Projected() }
+    val pb = remember { Projected() }
+    val buffers = remember { OrbBuffers() }
     LaunchedEffect(engine) {
         while (true) {
-            androidx.compose.runtime.withFrameNanos { }
+            androidx.compose.runtime.withFrameNanos { scene.frameStats.record(it) }
             scene.update(engine.playbackFrame())
             frame++
         }
@@ -105,74 +110,157 @@ fun AmbientScene(engine: AmbientEngine, modifier: Modifier = Modifier) {
             )
         }
 
-        fun place(o: Orb): Offset = Offset(
-            cx + ((o.x + scene.driftX(o.node, t)) * rx).toFloat(),
-            cy + ((o.y + scene.driftY(o.node, t)) * ry).toFloat(),
-        )
+        val k = CloudMotion.breathing(t)
+        projection.update(CloudMotion.yaw(t), CloudMotion.pitch(t), CloudMotion.CAMERA_DISTANCE)
+        val zReach = CloudMotion.Z_EXTENT * k
 
-        fun at(node: Long?): Offset? = when {
-            node == null -> scene.anchor?.let { Offset(cx + (scene.driftX(it.node, t) * rx).toFloat(), cy + (scene.driftY(it.node, t) * ry).toFloat()) } ?: Offset(cx, cy)
-            node == scene.anchor?.node -> at(null)
-            else -> scene.orb(node)?.let { place(it) }
+        /** Projects a layout point into [out] as screen pixels, with the perspective scale and depth. */
+        fun project(x: Double, y: Double, z: Double, out: Projected) {
+            projection.project(x * k, y * k, z * zReach, out)
+            out.x = cx + out.x * rx
+            out.y = cy + out.y * ry
+        }
+
+        val n = scene.orbs.size
+        buffers.fit(n)
+        var oi = 0
+        for (o in scene.orbs) {
+            project(o.x + scene.driftX(o.node, t), o.y + scene.driftY(o.node, t), o.z + scene.driftZ(o.node, t), tmp)
+            o.projX = tmp.x
+            o.projY = tmp.y
+            o.projScale = tmp.scale
+            o.projDepth = tmp.depth
+            buffers.orbs[oi] = o
+            buffers.depth[oi] = tmp.depth
+            oi++
+        }
+        DepthSort.backToFront(buffers.depth, buffers.order, n)
+
+        /** Fills [out] with the screen position, scale and depth of [node] (null is the anchor); false when unknown. */
+        fun resolve(node: Long?, out: Projected): Boolean {
+            if (node == null || node == scene.anchor?.node) {
+                val a = scene.anchor
+                if (a == null) {
+                    out.x = cx.toDouble()
+                    out.y = cy.toDouble()
+                    out.scale = 1.0
+                    out.depth = 0.0
+                } else {
+                    project(scene.driftX(a.node, t), scene.driftY(a.node, t), 0.0, out)
+                }
+                return true
+            }
+            val o = scene.orb(node) ?: return false
+            out.x = o.projX
+            out.y = o.projY
+            out.scale = o.projScale
+            out.depth = o.projDepth
+            return true
         }
 
         for (e in scene.edges) {
-            val a = at(e.a) ?: continue
-            val b = at(e.b) ?: continue
-            drawLine(palette.edge.copy(alpha = (0.12 * scene.edgeFade(e) * dim).toFloat()), a, b, strokeWidth = dp1)
+            if (!resolve(e.a, pa) || !resolve(e.b, pb)) continue
+            drawLine(
+                palette.edge.copy(alpha = (0.12 * scene.edgeFade(e) * dim).toFloat()),
+                Offset(pa.x.toFloat(), pa.y.toFloat()),
+                Offset(pb.x.toFloat(), pb.y.toFloat()),
+                strokeWidth = dp1 * ((pa.scale + pb.scale) / 2).toFloat(),
+            )
         }
         val ring = scene.anchorBreath.toFloat()
         val ringAlpha = if (scene.linked) 0.45f + 0.25f * ring else 0.2f + 0.6f * ring
+        resolve(null, pa)
         drawCircle(
             palette.anchor.copy(alpha = ringAlpha * dim),
-            radius = radius * ANCHOR_RING * (0.9f + 0.2f * ring),
-            center = at(null) ?: Offset(cx, cy),
-            style = Stroke(width = 2.dp.toPx()),
+            radius = radius * ANCHOR_RING * (0.9f + 0.2f * ring) * pa.scale.toFloat(),
+            center = Offset(pa.x.toFloat(), pa.y.toFloat()),
+            style = Stroke(width = 2.dp.toPx() * pa.scale.toFloat()),
         )
-        for (o in scene.orbs) {
+        for (idx in 0 until n) {
+            val o = buffers.orbs[buffers.order[idx]] ?: continue
             val g = scene.glow(o)
             val breath = scene.breath(o.node, t).toFloat()
-            val c = place(o)
-            val color = desaturate(nodeColor(o.node), sat)
-            val haloR = radius * 0.04f * (1f + g.toFloat()) * breath
+            val s = o.projScale.toFloat()
+            val depthT = CloudMotion.depthT(o.projDepth)
+            val c = Offset(o.projX.toFloat(), o.projY.toFloat())
+            val color = cool(desaturate(nodeColor(o.node), sat), CloudMotion.coolMix(depthT))
+            val haloR = radius * 0.04f * (1f + g.toFloat()) * breath * s
+            val haloAlpha = (orbHaloAlpha(g) * CloudMotion.brightness(depthT)).coerceAtMost(ORB_ALPHA_CAP / 2)
             drawCircle(
                 Brush.radialGradient(
-                    listOf(color.copy(alpha = orbHaloAlpha(g) * dim), Color.Transparent),
+                    listOf(color.copy(alpha = haloAlpha * dim), Color.Transparent),
                     center = c,
                     radius = haloR * 3f,
                 ),
                 radius = haloR * 3f,
                 center = c,
             )
-            drawCircle(color.copy(alpha = orbCoreAlpha(g) * dim), radius = maxOf(1.5.dp.toPx(), radius * 0.008f * (0.9f + g.toFloat() * 0.6f)) * breath, center = c)
+            val coreR = maxOf(1.5.dp.toPx(), radius * 0.008f * (0.9f + g.toFloat() * 0.6f)) * breath * s
+            drawCircle(color.copy(alpha = CloudMotion.shadeAlpha(orbCoreAlpha(g), depthT) * dim), radius = coreR, center = c)
         }
         for (pu in scene.pulses) {
-            val from = at(pu.fromNode) ?: continue
-            val to = at(pu.toNode) ?: continue
+            if (!resolve(pu.fromNode, pa) || !resolve(pu.toNode, pb)) continue
             val p = scene.progress(pu).toFloat()
-            val head = Offset(from.x + (to.x - from.x) * p, from.y + (to.y - from.y) * p)
-            val tail = Offset(from.x + (to.x - from.x) * (p - 0.25f).coerceAtLeast(0f), from.y + (to.y - from.y) * (p - 0.25f).coerceAtLeast(0f))
+            val tp = (p - 0.25f).coerceAtLeast(0f)
+            val head = Offset((pa.x + (pb.x - pa.x) * p).toFloat(), (pa.y + (pb.y - pa.y) * p).toFloat())
+            val tail = Offset((pa.x + (pb.x - pa.x) * tp).toFloat(), (pa.y + (pb.y - pa.y) * tp).toFloat())
+            val headScale = (pa.scale + (pb.scale - pa.scale) * p).toFloat()
             val color = desaturate(nodeColor(pu.colorNode), sat)
             val a = (if (p >= 1f) 0.4f else 0.85f) * dim
-            drawLine(color.copy(alpha = a * 0.5f), tail, head, strokeWidth = 2.dp.toPx())
-            drawCircle(color.copy(alpha = a), radius = radius * 0.012f, center = head)
+            drawLine(color.copy(alpha = a * 0.5f), tail, head, strokeWidth = 2.dp.toPx() * headScale)
+            drawCircle(color.copy(alpha = a), radius = radius * 0.012f * headScale, center = head)
         }
         for (rp in scene.ripples) {
             val o = scene.orb(rp.node) ?: continue
+            val s = o.projScale.toFloat()
             val p = scene.progress(rp).toFloat()
             val fade = (1f - p) * (1f - p) * (if (rp.echo == 0) 0.8f else 0.35f) * dim
-            val maxR = radius * (0.12f + 0.25f * rp.strength)
+            val maxR = radius * (0.12f + 0.25f * rp.strength) * s
             val color = if (rp.kind == PacketKind.Other) palette.text else nodeColor(rp.node)
-            val width = (if (rp.kind == PacketKind.Text) 2.5.dp.toPx() else 1.5.dp.toPx()) + 2.dp.toPx() * (1f - p)
+            val width = ((if (rp.kind == PacketKind.Text) 2.5.dp.toPx() else 1.5.dp.toPx()) + 2.dp.toPx() * (1f - p)) * s
             drawCircle(
                 desaturate(color, sat).copy(alpha = fade),
                 radius = maxR * p,
-                center = place(o),
+                center = Offset(o.projX.toFloat(), o.projY.toFloat()),
                 style = Stroke(width = width),
             )
         }
     }
 }
+
+/** Reused per-frame arrays for the orb draw order; they grow only when the field does. */
+private class OrbBuffers {
+    var orbs = arrayOfNulls<Orb>(0)
+    var depth = DoubleArray(0)
+    var order = IntArray(0)
+    private var size = -1
+
+    /** Makes room for [n] orbs and, when the count changed, restarts the order as the identity. */
+    fun fit(n: Int) {
+        if (n > orbs.size) {
+            val cap = maxOf(n, orbs.size * 2, 64)
+            orbs = arrayOfNulls(cap)
+            depth = DoubleArray(cap)
+            order = IntArray(cap)
+            size = -1
+        }
+        if (n != size) {
+            for (i in 0 until n) order[i] = i
+            size = n
+        }
+    }
+}
+
+private val COOL_TINT = Color(0.55f, 0.70f, 1.0f)
+
+/** [c] pulled toward a cool blue by [mix] 0..1. */
+private fun cool(c: Color, mix: Float): Color =
+    if (mix <= 0f) c else Color(
+        c.red + (COOL_TINT.red - c.red) * mix,
+        c.green + (COOL_TINT.green - c.green) * mix,
+        c.blue + (COOL_TINT.blue - c.blue) * mix,
+        c.alpha,
+    )
 
 /** The anchor ring's radius as a fraction of the scene radius. */
 private const val ANCHOR_RING = 0.035f

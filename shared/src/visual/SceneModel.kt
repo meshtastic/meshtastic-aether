@@ -25,6 +25,16 @@ class Orb internal constructor(val node: Long, var name: String?, internal var p
         internal set
     var y = 0.0
         internal set
+
+    /** Depth -1..1 across the cloud, from the node number and the radius in the plane; see [SceneModel.depthFor]. */
+    var z = 0.0
+        internal set
+
+    /** The last projected screen offset, scale and depth, written by the scene each frame. */
+    internal var projX = 0.0
+    internal var projY = 0.0
+    internal var projScale = 1.0
+    internal var projDepth = 0.0
     internal var lastActiveFrame = NEVER
     internal var seenFrame = 0L
     internal var notePulseFrame = NEVER
@@ -74,6 +84,9 @@ private class Pending(val dueFrame: Long, val node: Long, val kind: PacketKind, 
  * exists only once that frame has been reached, so sight and sound agree.
  */
 class SceneModel(private val sampleRate: Int) {
+    /** Frame timing from the render loop; the engine reads and resets it once a minute. */
+    val frameStats = FrameStats()
+
     /** Our own node's position when known; else the layout centres on the centroid of positioned nodes. */
     var origin: GeoPoint? = null
         set(value) {
@@ -350,6 +363,8 @@ class SceneModel(private val sampleRate: Int) {
 
     fun driftY(node: Long, tSeconds: Double): Double = DRIFT * cos(tSeconds * 0.029 + phase(node, 2))
 
+    fun driftZ(node: Long, tSeconds: Double): Double = DRIFT * sin(tSeconds * 0.033 + phase(node, 5))
+
     private fun layout() {
         dirty = false
         val ref = origin ?: centroid()
@@ -413,6 +428,7 @@ class SceneModel(private val sampleRate: Int) {
                 }
             }
         }
+        for (o in list) o.z = depthFor(o.node, o.x * o.x + o.y * o.y)
     }
 
     private fun isFree(list: List<Orb>, upTo: Int, x: Double, y: Double): Boolean {
@@ -508,6 +524,21 @@ class SceneModel(private val sampleRate: Int) {
             } else {
                 FIT_EDGE + (1.0 - FIT_EDGE) * (1.0 - exp(-(distance - fit) / fit))
             }
+
+        /** Fraction of the full depth reach an orb at the cloud's edge keeps, so the cloud is an ellipsoid with a lumpy rim. */
+        const val ELLIPSOID_EDGE_DEPTH = 0.15
+
+        /**
+         * Depth -1..1 of [node] for an orb whose planar radius squared is [radiusSquared]: a stable hash of the node
+         * number (two uniform draws summed, so most land near the middle) scaled by an ellipsoid profile that shrinks
+         * to [ELLIPSOID_EDGE_DEPTH] at the edge of the unit disc.
+         */
+        fun depthFor(node: Long, radiusSquared: Double): Double {
+            val h = unit(Rng.mix(node xor 0x2545F4914F6CDD1DL)) + unit(Rng.mix(node xor 0x6A09E667F3BCC909L)) - 1.0
+            val profile = ELLIPSOID_EDGE_DEPTH +
+                (1.0 - ELLIPSOID_EDGE_DEPTH) * sqrt((1.0 - radiusSquared).coerceIn(0.0, 1.0))
+            return h * profile
+        }
 
         /** Where a node with no position sits: a pure function of the node number, so it never moves between runs. */
         fun seededPosition(node: Long): Pair<Double, Double> {
