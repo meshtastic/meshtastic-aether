@@ -4,6 +4,7 @@ import org.meshtastic.ambient.mesh.GeoPoint
 import org.meshtastic.ambient.mesh.LinkState
 import org.meshtastic.ambient.mesh.MeshEvent
 import org.meshtastic.ambient.mesh.PacketKind
+import org.meshtastic.ambient.mesh.resolveRelay
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.pow
@@ -31,6 +32,10 @@ class Composer(seed: Long, private val sampleRate: Int) {
     private class Reading(val value: Float, val atMillis: Long)
     private val readings = HashMap<Long, HashMap<Quantity, Reading>>()
     private val pending = ArrayDeque<MeshEvent.PacketHeard>()
+    private var selfNode: Long? = null
+    private var lastDyadMs = Long.MIN_VALUE
+    private val pendingDyads = ArrayList<Pair<Long, Long>>()
+    private val pendingRoutes = ArrayList<List<Long>>()
     private var sumLat = 0.0
     private var sumLon = 0.0
     private var positioned = 0
@@ -72,6 +77,14 @@ class Composer(seed: Long, private val sampleRate: Int) {
                 observe(e.node, Quantity.Lux, e.lux, e.atMillis)
             }
             is MeshEvent.Vitals -> crowd.onVitals(e.channelUtilPct)
+            is MeshEvent.Self -> {
+                selfNode = e.node
+                e.position?.let { origin = it }
+            }
+            is MeshEvent.Neighbors -> onNeighbors(e)
+            is MeshEvent.Route -> if (!crowd.warmingUp && e.nodes.isNotEmpty()) {
+                pendingRoutes += e.nodes.take(MAX_ROUTE_NODES)
+            }
             is MeshEvent.PacketHeard -> onPacket(e)
         }
     }
@@ -89,6 +102,15 @@ class Composer(seed: Long, private val sampleRate: Int) {
         if (values.isEmpty()) return null
         val mid = values.size / 2
         return if (values.size % 2 == 1) values[mid] else (values[mid - 1] + values[mid]) / 2f
+    }
+
+    /** At most one dyad a minute: the reporter and the first neighbor the composer already knows. */
+    private fun onNeighbors(e: MeshEvent.Neighbors) {
+        if (crowd.warmingUp) return
+        if (lastDyadMs != Long.MIN_VALUE && e.atMillis - lastDyadMs < DYAD_MS) return
+        val other = e.neighbors.firstOrNull { it != e.node && it in nodes } ?: return
+        lastDyadMs = e.atMillis
+        pendingDyads += e.node to other
     }
 
     private fun onPacket(e: MeshEvent.PacketHeard) {
@@ -122,6 +144,7 @@ class Composer(seed: Long, private val sampleRate: Int) {
         }
         runLoops(nowFrame, windowEnd, day, moment, notes)
         runOrnaments(nowFrame, windowEnd, moment, day, notes)
+        runMeshPhrases(nowFrame, day, notes)
         if (swells > 0 && !crowd.warmingUp) {
             swells = 0
             val level = form.levels(nowFrame / sampleRate.toDouble()).getValue(Voice.Pad)
@@ -269,12 +292,49 @@ class Composer(seed: Long, private val sampleRate: Int) {
         }
     }
 
+    private fun runMeshPhrases(nowFrame: Long, day: DayState, notes: MutableList<NoteEvent>) {
+        val chord = harmony.current
+        val padLevel = form.levels(nowFrame / sampleRate.toDouble()).getValue(Voice.Pad)
+        for ((a, b) in pendingDyads) {
+            val length = clip(nowFrame, sec(DYAD_SECONDS))
+            if (padLevel <= 0.02f || length <= 0) continue
+            for (node in listOf(a, b)) {
+                notes += NoteEvent(
+                    nowFrame, Voice.Pad, padHz(day, chord.roleSemitone(Ornaments.role(node))), DYAD_VELOCITY,
+                    Ornaments.panFor(nodes[node]?.position, reference()), 0.7f, length, 0.3f,
+                )
+            }
+        }
+        pendingDyads.clear()
+        val ttl = sec(Ornaments.TTL_SECONDS)
+        val duration = sec(ROUTE_NOTE_SECONDS)
+        for (route in pendingRoutes) {
+            route.forEachIndexed { i, node ->
+                val intended = nowFrame + sec(ROUTE_STEP_SECONDS * i)
+                val at = slots.allocate(intended, duration, intended + ttl) ?: return@forEachIndexed
+                notes += NoteEvent(
+                    at, Voice.Bell, Ornaments.pitchHz(node, chord, keyHz), ROUTE_VELOCITY,
+                    Ornaments.panFor(nodes[node]?.position, reference()), 0.5f, duration, 0.5f,
+                )
+            }
+        }
+        pendingRoutes.clear()
+    }
+
     private fun ornament(e: MeshEvent.PacketHeard, start: Long, deadline: Long, day: DayState, notes: MutableList<NoteEvent>) {
         val art = Ornaments.articulation(e.kind)
-        val duration = sec(art.seconds)
-        val velocity = Ornaments.velocityFor(e.snr)
-        val send = Ornaments.reverbSendFor(e.hopsTaken, e.viaMqtt)
-        val brightness = Ornaments.brightnessFor(e.kind, e.hopsTaken, e.viaMqtt)
+        val call = e.toUs
+        val duration = sec(if (call) art.seconds * Ornaments.CALL_LENGTH_SCALE else art.seconds)
+        val baseVelocity = Ornaments.velocityFor(e.snr)
+        val velocity = if (call) min(1f, baseVelocity + Ornaments.CALL_VELOCITY_LIFT) else baseVelocity
+        val baseSend = Ornaments.reverbSendFor(e.hopsTaken, e.viaMqtt)
+        val send = when {
+            call -> max(0f, baseSend - Ornaments.CALL_DRYNESS)
+            e.to == Ornaments.BROADCAST -> min(1f, baseSend + Ornaments.BROADCAST_WIDEN)
+            else -> baseSend
+        }
+        val baseBrightness = Ornaments.brightnessFor(e.kind, e.hopsTaken, e.viaMqtt)
+        val brightness = if (call) min(1f, baseBrightness + Ornaments.CALL_BRIGHTNESS_LIFT) else baseBrightness
         val pan = Ornaments.panFor(nodes[e.from]?.position, reference())
         val chord = harmony.current
         if (e.kind == PacketKind.Text) {
@@ -289,10 +349,14 @@ class Composer(seed: Long, private val sampleRate: Int) {
         val first = slots.allocate(start, duration, deadline) ?: return
         notes += NoteEvent(first, art.voice, pitch, velocity, pan, send, duration, brightness)
         if (e.kind == PacketKind.Encrypted) return
+        val relay = resolveRelay(nodes.keys, e.relayByte, e.from, selfNode)
         for (k in 1..Ornaments.echoesFor(e.hopsTaken, e.viaMqtt)) {
             val at = slots.allocate(first + sec(Ornaments.ECHO_DELAY_SECONDS * k), duration, deadline) ?: break
+            val viaRelay = relay != null && k % 2 == 1
             notes += NoteEvent(
-                at, art.voice, pitch, velocity * 0.55f.pow(k), pan, min(1f, send + 0.1f * k), duration, brightness * 0.8f,
+                at, art.voice, if (viaRelay) Ornaments.pitchHz(relay, chord, keyHz) else pitch, velocity * 0.55f.pow(k),
+                if (viaRelay) Ornaments.panFor(nodes[relay]?.position, reference()) else pan,
+                min(1f, send + 0.1f * k), duration, brightness * 0.8f,
             )
         }
     }
@@ -341,5 +405,12 @@ class Composer(seed: Long, private val sampleRate: Int) {
         const val DRONE_VELOCITY = 0.7f
         const val PAD_VELOCITY = 0.5f
         const val MEMORY_VELOCITY = 0.15f
+        const val DYAD_MS = 60_000L
+        const val DYAD_SECONDS = 4.0
+        const val DYAD_VELOCITY = 0.25f
+        const val MAX_ROUTE_NODES = 8
+        const val ROUTE_STEP_SECONDS = 0.3
+        const val ROUTE_NOTE_SECONDS = 0.8
+        const val ROUTE_VELOCITY = 0.45f
     }
 }

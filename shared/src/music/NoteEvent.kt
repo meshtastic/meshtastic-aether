@@ -12,6 +12,8 @@ data class NoteEvent(
     val reverbSend: Float,
     val durationFrames: Long,
     val brightness: Float,
+    /** The mesh node this note stands for (ornaments, echoes, memory notes), null for the bed. */
+    val node: Long? = null,
 )
 
 /** Global sound character, changed slowly. All fields 0..1 except [rootHz]. */

@@ -472,4 +472,154 @@ class ComposerTest {
         val padPitches = run.notes.filter { it.voice == Voice.Pad }.map { it.pitchHz }.toSet()
         assertTrue(shimmer.all { it.pitchHz in padPitches }, "shimmer ${shimmer.map { it.pitchHz }} vs pads $padPitches")
     }
+
+    private fun link(
+        node: Long,
+        to: Long? = null,
+        relay: Int? = null,
+        toUs: Boolean = false,
+        hops: Int? = 6,
+        kind: PacketKind = PacketKind.Position,
+    ) = MeshEvent.PacketHeard(node, kind, null, null, hops, false, t0, to, relay, toUs)
+
+    private fun Composer.know(vararg nodes: Long) {
+        for (n in nodes) onEvent(MeshEvent.NodeSeen(n, null, null, false, t0))
+    }
+
+    private fun hzOf(node: Long, c: Composer): Double =
+        Ornaments.pitchHz(node, c.chord, Day.at(moment(0)).rootHz)
+
+    private fun mallets(c: Composer, seconds: Int = 6) =
+        c.drive(sr / 4L, seconds).notes.filter { it.voice == Voice.Mallet }.sortedBy { it.atFrame }
+
+    @Test
+    fun `a call to us is drier shorter brighter and louder than the same packet as a broadcast`() {
+        fun first(to: Long, toUs: Boolean): NoteEvent {
+            val c = Composer(21L, sr)
+            c.advance(0, lookahead, moment(0))
+            c.onEvent(link(5L, to = to, toUs = toUs, hops = 4))
+            return mallets(c).first()
+        }
+        val call = first(77L, true)
+        val broadcast = first(Ornaments.BROADCAST, false)
+        assertTrue(call.reverbSend < broadcast.reverbSend)
+        assertTrue(call.durationFrames < broadcast.durationFrames)
+        assertTrue(call.velocity > broadcast.velocity)
+        assertTrue(call.brightness > broadcast.brightness)
+    }
+
+    @Test
+    fun `a broadcast sounds a slightly wider reverb send than a packet of unknown destination`() {
+        fun send(to: Long?): Float {
+            val c = Composer(22L, sr)
+            c.advance(0, lookahead, moment(0))
+            c.onEvent(link(5L, to = to, hops = 4))
+            return mallets(c).first().reverbSend
+        }
+        assertEquals(send(null) + 0.05f, send(Ornaments.BROADCAST), 1e-6f)
+    }
+
+    @Test
+    fun `a self event sets the origin and a node east of it then pans right`() {
+        val c = Composer(23L, sr)
+        c.onEvent(MeshEvent.Self(1L, "me", GeoPoint(45.0, 10.0), t0))
+        assertEquals(GeoPoint(45.0, 10.0), c.origin)
+        c.advance(0, lookahead, moment(0))
+        c.onEvent(MeshEvent.NodeSeen(2L, null, GeoPoint(45.0, 10.5), false, t0))
+        c.onEvent(heard(2L, atMs = t0 + 500))
+        assertTrue(mallets(c).all { it.pan > 0.5f })
+    }
+
+    @Test
+    fun `an echo after a resolved relay plays the relay's pitch and the later echo the source's`() {
+        val source = 1000L
+        val relay = (2000L..2255L).first { hzOf(it, Composer(24L, sr).also { c -> c.advance(0, lookahead, moment(0)) }) != hzOf(source, Composer(24L, sr).also { c -> c.advance(0, lookahead, moment(0)) }) }
+        val c = Composer(24L, sr)
+        c.advance(0, lookahead, moment(0))
+        c.know(source, relay)
+        c.onEvent(link(source, relay = (relay and 0xFF).toInt()))
+        val notes = mallets(c)
+        assertEquals(3, notes.size)
+        assertEquals(listOf(hzOf(source, c), hzOf(relay, c), hzOf(source, c)), notes.map { it.pitchHz })
+    }
+
+    @Test
+    fun `an unresolved relay keeps every echo on the source pitch`() {
+        val source = 1000L
+        val c = Composer(25L, sr)
+        c.advance(0, lookahead, moment(0))
+        c.know(source, 3001L, 3002L)
+        c.onEvent(link(source, relay = 0x77))
+        val notes = mallets(c)
+        assertEquals(3, notes.size)
+        assertEquals(setOf(hzOf(source, c)), notes.map { it.pitchHz }.toSet())
+    }
+
+    @Test
+    fun `a relay byte shared by two known nodes keeps the echoes on the source pitch`() {
+        val source = 1000L
+        val c = Composer(26L, sr)
+        c.advance(0, lookahead, moment(0))
+        c.know(source, 0x1105L, 0x2205L)
+        c.onEvent(link(source, relay = 0x05))
+        assertEquals(setOf(hzOf(source, c)), mallets(c).map { it.pitchHz }.toSet())
+    }
+
+    @Test
+    fun `a relay byte matching only our own node is not resolved`() {
+        val source = 1000L
+        val me = (2000L..2255L).first { hzOf(it, Composer(27L, sr).also { c -> c.advance(0, lookahead, moment(0)) }) != hzOf(source, Composer(27L, sr).also { c -> c.advance(0, lookahead, moment(0)) }) }
+        val c = Composer(27L, sr)
+        c.onEvent(MeshEvent.Self(me, null, null, t0))
+        c.advance(0, lookahead, moment(0))
+        c.know(source, me)
+        c.onEvent(link(source, relay = (me and 0xFF).toInt()))
+        assertEquals(setOf(hzOf(source, c)), mallets(c).map { it.pitchHz }.toSet())
+    }
+
+    @Test
+    fun `a route phrase plays bells through the route nodes in order`() {
+        val c = Composer(28L, sr)
+        c.advance(0, lookahead, moment(0))
+        val route = listOf(11L, 12L, 13L, 14L)
+        c.onEvent(MeshEvent.Route(route, t0))
+        val bells = c.drive(sr / 4L, 6).notes.filter { it.voice == Voice.Bell }.sortedBy { it.atFrame }
+        assertEquals(route.map { hzOf(it, c) }, bells.map { it.pitchHz })
+    }
+
+    @Test
+    fun `route phrases inside a packet burst keep the ornament slot cap`() {
+        val c = Composer(29L, sr)
+        c.advance(0, lookahead, moment(0))
+        for (i in 0 until 200) c.onEvent(heard(100L + i, atMs = t0 + i * 5L))
+        repeat(5) { c.onEvent(MeshEvent.Route(listOf(1L, 2L, 3L, 4L, 5L, 6L), t0)) }
+        val orn = c.drive(sr / 4L, 12).notes.filter { it.voice in ornamentVoices }
+        assertEquals(Ornaments.SLOT_CAP, maxSounding(orn))
+    }
+
+    private fun dyadExtras(vararg at: Long): Int {
+        fun run(withEvents: Boolean): List<NoteEvent> {
+            val c = Composer(30L, sr)
+            c.advance(0, lookahead, moment(0))
+            c.know(1L, 2L, 3L)
+            val out = ArrayList<NoteEvent>()
+            var f = sr / 4L
+            for (ms in at) {
+                if (withEvents) c.onEvent(MeshEvent.Neighbors(1L, listOf(9L, 2L, 3L), t0 + ms))
+                val end = (ms / 1000 + 5) * sr
+                while (f < end) {
+                    out += c.advance(f, lookahead, moment(f)).notes
+                    f += step
+                }
+            }
+            return out
+        }
+        return (run(true) - run(false).toSet()).count { it.voice == Voice.Pad }
+    }
+
+    @Test
+    fun `neighbor reports sound one pad dyad of two roles per minute at most`() {
+        assertEquals(2, dyadExtras(0L, 30_000L))
+        assertEquals(4, dyadExtras(0L, 30_000L, 61_000L))
+    }
 }

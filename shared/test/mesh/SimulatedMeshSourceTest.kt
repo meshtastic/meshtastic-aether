@@ -118,6 +118,46 @@ class SimulatedMeshSourceTest {
         assertTrue(ev.all { it.temperatureC!! in -10f..45f && it.humidityPct!! in 0f..100f && it.pressureHpa!! in 950f..1050f })
     }
 
+    @Test
+    fun `Self comes right after the link and relay bytes resolve to a simulated node`() = runTest {
+        val src = SimulatedMeshSource(21L, nodeCount = 40) { currentTime }
+        val ev = run(src, 8 * HOUR)
+        val self = ev[1] as MeshEvent.Self
+        assertEquals(src.self.num, self.node)
+        val known = src.nodes.map { it.num }
+        val heard = ev.filterIsInstance<MeshEvent.PacketHeard>()
+        val relayed = heard.filter { (it.hopsTaken ?: 0) > 0 }
+        assertTrue(relayed.size > 50, "only ${relayed.size} relayed packets")
+        for (h in relayed) {
+            val node = resolveRelay(known, h.relayByte, h.from, self.node)
+            assertTrue(node != null && node != h.from, "relay ${h.relayByte} of ${h.from} did not resolve")
+        }
+        assertTrue(heard.filter { it.hopsTaken == 0 || it.hopsTaken == null }.all { it.relayByte == null })
+    }
+
+    @Test
+    fun `destinations are mostly broadcast and a unicast to us is flagged toUs`() = runTest {
+        val src = SimulatedMeshSource(22L, nodeCount = 40) { currentTime }
+        val heard = run(src, 8 * HOUR).filterIsInstance<MeshEvent.PacketHeard>()
+        val dms = heard.filter { it.toUs }
+        assertTrue(dms.isNotEmpty())
+        assertTrue(dms.all { it.to == src.self.num })
+        assertTrue(heard.filter { !it.toUs }.all { it.to == 0xFFFFFFFFL })
+        assertTrue(dms.size * 2 < heard.size, "DMs ${dms.size} of ${heard.size}")
+    }
+
+    @Test
+    fun `Neighbors and Route events only name simulated nodes`() = runTest {
+        val src = SimulatedMeshSource(23L, nodeCount = 60) { currentTime }
+        val ev = run(src, 24 * HOUR)
+        val known = src.nodes.map { it.num }.toSet()
+        val nb = ev.filterIsInstance<MeshEvent.Neighbors>()
+        val routes = ev.filterIsInstance<MeshEvent.Route>()
+        assertTrue(nb.isNotEmpty() && routes.isNotEmpty(), "neighbors ${nb.size} routes ${routes.size}")
+        assertTrue(nb.all { it.node in known && it.neighbors.isNotEmpty() && it.node !in it.neighbors && known.containsAll(it.neighbors) })
+        assertTrue(routes.all { it.nodes.first() == src.self.num && it.nodes.drop(1).all { n -> n in known } && it.nodes.size >= 2 })
+    }
+
     private fun MeshEvent.shifted(by: Long): MeshEvent = when (this) {
         is MeshEvent.PacketHeard -> copy(atMillis = atMillis + by)
         is MeshEvent.NodeSeen -> copy(atMillis = atMillis + by)
@@ -125,6 +165,9 @@ class SimulatedMeshSourceTest {
         is MeshEvent.Environment -> copy(atMillis = atMillis + by)
         is MeshEvent.Vitals -> copy(atMillis = atMillis + by)
         is MeshEvent.Link -> copy(atMillis = atMillis + by)
+        is MeshEvent.Self -> copy(atMillis = atMillis + by)
+        is MeshEvent.Neighbors -> copy(atMillis = atMillis + by)
+        is MeshEvent.Route -> copy(atMillis = atMillis + by)
     }
 
     private fun MeshEvent.kindKey(): String = when (this) {
@@ -134,5 +177,8 @@ class SimulatedMeshSourceTest {
         is MeshEvent.Vitals -> "V"
         is MeshEvent.Link -> "L$state"
         is MeshEvent.NodeGone -> "G$node"
+        is MeshEvent.Self -> "S$node"
+        is MeshEvent.Neighbors -> "B$node"
+        is MeshEvent.Route -> "R${nodes.joinToString(",")}"
     }
 }

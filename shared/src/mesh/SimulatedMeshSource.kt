@@ -57,6 +57,12 @@ class SimulatedMeshSource(
 
     internal val nodes: List<SimNode>
     internal val streams: List<SimStream>
+
+    /** Our own simulated node: not in [nodes], never heard from, the target of DMs and traceroutes. */
+    internal val self: SimNode
+
+    /** Nodes whose low byte is nonzero and shared with no other simulated node (self included): safe relay bytes. */
+    private val relayPool: List<SimNode>
     private val firstOffsetMs: List<Long>
 
     init {
@@ -94,7 +100,21 @@ class SimulatedMeshSource(
             if (rnd.nextDouble() < 0.35) add(PacketKind.Encrypted, 2 * MIN, 12 * MIN)
             if (rnd.nextDouble() < 0.15) add(PacketKind.Routing, 60 * MIN, 180 * MIN)
             if (rnd.nextDouble() < 0.1) add(PacketKind.Traceroute, 120 * MIN, 240 * MIN)
+            if (rnd.nextDouble() < 0.3) add(PacketKind.NeighborInfo, 90 * MIN, 240 * MIN)
         }
+        val selfRnd = SplitMix(seed xor 0x5E1F5E1FL)
+        self = SimNode(
+            num = 0x0C000000L + (selfRnd.nextLong() ushr 40) * 16 + 15,
+            name = "Sim Self",
+            position = GeoPoint(45.0, -122.0),
+            knowsHopStart = true,
+            viaMqtt = false,
+            hasEnvironment = false,
+            baseTempC = 15.0,
+            phase = 0.0,
+        )
+        val lowBytes = (ns + self).groupingBy { (it.num and 0xFF).toInt() }.eachCount()
+        relayPool = ns.filter { (it.num and 0xFF) != 0L && lowBytes[(it.num and 0xFF).toInt()] == 1 }
         nodes = ns
         streams = ss
         firstOffsetMs = offsets
@@ -103,6 +123,7 @@ class SimulatedMeshSource(
     override val events: Flow<MeshEvent> = flow {
         val rnd = SplitMix(seed xor 0x5DEECE66DL)
         emit(MeshEvent.Link(LinkState.Simulated, nowMillis()))
+        emit(MeshEvent.Self(self.num, self.name, self.position, nowMillis()))
         for (n in nodes) emit(MeshEvent.NodeSeen(n.num, n.name, n.position, true, nowMillis()))
 
         // Virtual schedule time in ms; the flow sleeps (next - current) / speed.
@@ -119,7 +140,13 @@ class SimulatedMeshSource(
             when {
                 idx >= 0 -> {
                     val s = streams[idx]
-                    emit(heard(nodes[s.node], s.kind, rnd))
+                    val node = nodes[s.node]
+                    emit(heard(node, s.kind, rnd))
+                    when (s.kind) {
+                        PacketKind.NeighborInfo -> emit(neighbors(node, rnd))
+                        PacketKind.Traceroute -> emit(route(node, rnd))
+                        else -> Unit
+                    }
                     due[idx] = now + (s.periodMs * (1.0 + rnd.between(-s.jitter, s.jitter))).toLong()
                 }
                 next == envDue -> {
@@ -142,16 +169,39 @@ class SimulatedMeshSource(
 
     private fun heard(n: SimNode, kind: PacketKind, rnd: SplitMix): MeshEvent.PacketHeard {
         val hopStart = if (n.knowsHopStart) 3 else 0
-        val taken = rnd.nextInt(4)
+        val snr = rnd.between(-15.0, 10.0).toFloat()
+        val rssi = rnd.between(-125.0, -60.0).toInt()
+        val relays = relayPool.filter { it !== n }
+        val taken = if (hopStart == 0) 0 else if (relays.isEmpty()) 0 else rnd.nextInt(4)
+        val relay = if (hopStart != 0 && taken > 0) relays[rnd.nextInt(relays.size)] else null
+        val toUs = kind == PacketKind.Traceroute || (kind == PacketKind.Text && rnd.nextDouble() < 0.25)
         return MeshEvent.PacketHeard(
             from = n.num,
             kind = kind,
-            snr = rnd.between(-15.0, 10.0).toFloat(),
-            rssi = rnd.between(-125.0, -60.0).toInt(),
+            snr = snr,
+            rssi = rssi,
             hopsTaken = if (hopStart == 0) null else taken,
             viaMqtt = n.viaMqtt,
             atMillis = nowMillis(),
+            to = if (toUs) self.num else BROADCAST,
+            relayByte = relay?.let { (it.num and 0xFF).toInt() },
+            toUs = toUs,
         )
+    }
+
+    private fun neighbors(n: SimNode, rnd: SplitMix): MeshEvent.Neighbors {
+        val others = nodes.filter { it !== n }
+        val picked = LinkedHashSet<Long>()
+        if (others.isNotEmpty()) repeat(1 + rnd.nextInt(4)) { picked += others[rnd.nextInt(others.size)].num }
+        return MeshEvent.Neighbors(n.num, picked.toList(), nowMillis())
+    }
+
+    /** A reply to a traceroute we sent: us first, then relays, then the answering node. */
+    private fun route(n: SimNode, rnd: SplitMix): MeshEvent.Route {
+        val others = nodes.filter { it !== n }
+        val mids = LinkedHashSet<Long>()
+        if (others.isNotEmpty()) repeat(rnd.nextInt(3)) { mids += others[rnd.nextInt(others.size)].num }
+        return MeshEvent.Route(listOf(self.num) + mids + n.num, nowMillis())
     }
 
     private fun environment(n: SimNode, simMs: Long, rnd: SplitMix): MeshEvent.Environment {
@@ -169,6 +219,7 @@ class SimulatedMeshSource(
     }
 
     private companion object {
+        const val BROADCAST = 0xFFFFFFFFL
         const val MIN = 60_000L
         const val ENV_PERIOD_MS = 10 * MIN
         const val VITALS_PERIOD_MS = 2 * MIN

@@ -22,6 +22,7 @@ internal interface SdkFeed {
     val fromRadio: Flow<FromRadio>
     val nodes: Flow<NodeChange>
     val connection: Flow<ConnectionState>
+    val ownNode: Flow<NodeInfo?>
     fun ownNodeNum(): Long?
     fun telemetry(node: Long): Flow<Telemetry>
 }
@@ -31,13 +32,14 @@ private class RadioClientFeed(private val client: RadioClient) : SdkFeed {
     override val fromRadio get() = client.fromRadio
     override val nodes get() = client.nodes
     override val connection get() = client.connection
+    override val ownNode get() = client.ownNode
     override fun ownNodeNum(): Long? = client.ownNode.value?.num?.toLong()?.and(0xFFFFFFFFL)
     override fun telemetry(node: Long): Flow<Telemetry> = client.telemetry.observe(NodeId(node.toInt()))
 }
 
 /**
  * Live mesh through the SDK. After every `Connected` the source emits state-only events
- * (`NodeSeen`, `Environment`, `Vitals`) and no `PacketHeard` for [warmUpMillis], because the
+ * (`NodeSeen`, `Environment`, `Vitals`, `Self`) and no `PacketHeard`, `Neighbors` or `Route` for [warmUpMillis], because the
  * node snapshot and retained handshake packets flush at that point.
  */
 class SdkMeshSource internal constructor(
@@ -56,12 +58,25 @@ class SdkMeshSource internal constructor(
 
         launch {
             feed.packets.collect { p ->
-                if (nowMillis() >= warmUntil) PacketMapper.map(p, nowMillis())?.let { send(it) }
+                if (nowMillis() < warmUntil) return@collect
+                PacketMapper.map(p, nowMillis(), feed.ownNodeNum())?.let { send(it) }
+                p.toNeighbors(nowMillis())?.let { send(it) }
+                p.toRoute(nowMillis())?.let { send(it) }
             }
         }
         launch {
             feed.fromRadio.collect { f ->
-                if (nowMillis() >= warmUntil) RawFrameMapper.map(f, nowMillis())?.let { send(it) }
+                if (nowMillis() >= warmUntil) RawFrameMapper.map(f, nowMillis(), feed.ownNodeNum())?.let { send(it) }
+            }
+        }
+        launch {
+            var last: MeshEvent.Self? = null
+            feed.ownNode.collect { info ->
+                val seen = info?.toNodeSeen(false, nowMillis()) ?: return@collect
+                val prev = last
+                if (prev == null || prev.node != seen.node || prev.name != seen.name || prev.position != seen.position) {
+                    MeshEvent.Self(seen.node, seen.name, seen.position, nowMillis()).also { last = it; send(it) }
+                }
             }
         }
         feed.connection.collectLatest { state ->

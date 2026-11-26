@@ -21,6 +21,12 @@ sealed interface MeshEvent {
         val hopsTaken: Int?,
         val viaMqtt: Boolean,
         override val atMillis: Long,
+        /** Destination node number; null when unknown. Firmware forwards only broadcasts and packets addressed to us. */
+        val to: Long? = null,
+        /** Low byte (0..255) of the node that relayed the packet last; null when the packet came straight from its origin. */
+        val relayByte: Int? = null,
+        /** True for a unicast addressed to our own node. */
+        val toUs: Boolean = false,
     ) : MeshEvent
 
     data class NodeSeen(
@@ -46,6 +52,15 @@ sealed interface MeshEvent {
     data class Vitals(val channelUtilPct: Float?, val airUtilTxPct: Float?, override val atMillis: Long) : MeshEvent
 
     data class Link(val state: LinkState, override val atMillis: Long) : MeshEvent
+
+    /** Our own node, once known: the anchor every destination, pan and layout is relative to. */
+    data class Self(val node: Long, val name: String?, val position: GeoPoint?, override val atMillis: Long) : MeshEvent
+
+    /** A NeighborInfo report: [node] hears each of [neighbors] directly. */
+    data class Neighbors(val node: Long, val neighbors: List<Long>, override val atMillis: Long) : MeshEvent
+
+    /** A traceroute route, origin first, in node numbers. */
+    data class Route(val nodes: List<Long>, override val atMillis: Long) : MeshEvent
 }
 
 interface MeshSource {

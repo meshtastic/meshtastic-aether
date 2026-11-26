@@ -17,11 +17,17 @@ internal fun decodedPacket(
     rssi: Int? = null,
     viaMqtt: Boolean = false,
     payload: ByteArray = ByteArray(0),
+    to: Int = 0,
+    relayNode: Int = 0,
+    requestId: Int = 0,
 ): MeshPacket = MeshPacket.Builder().also { b ->
     b.from = from
+    b.to = to
+    b.relay_node = relayNode
     b.decoded = Data.Builder().also { d ->
         d.portnum = port
         d.payload = payload.toByteString()
+        d.request_id = requestId
     }.build()
     b.hop_start = hopStart
     b.hop_limit = hopLimit
@@ -37,8 +43,12 @@ internal fun encryptedPacket(
     snr: Float = 0f,
     rssi: Int? = null,
     viaMqtt: Boolean = false,
+    to: Int = 0,
+    relayNode: Int = 0,
 ): MeshPacket = MeshPacket.Builder().also { b ->
     b.from = from
+    b.to = to
+    b.relay_node = relayNode
     b.encrypted = byteArrayOf(9, 8, 7, 6).toByteString()
     b.hop_start = hopStart
     b.hop_limit = hopLimit

@@ -12,7 +12,10 @@ import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.meshtastic.proto.FromRadio
 import org.meshtastic.proto.MeshPacket
+import org.meshtastic.proto.Neighbor
+import org.meshtastic.proto.NeighborInfo
 import org.meshtastic.proto.NodeInfo
+import org.meshtastic.proto.RouteDiscovery
 import org.meshtastic.proto.PortNum
 import org.meshtastic.proto.Position
 import org.meshtastic.proto.Telemetry
@@ -36,6 +39,8 @@ private class FakeFeed : SdkFeed {
     override val fromRadio: Flow<FromRadio> get() = rawFlow
     override val nodes: Flow<NodeChange> get() = nodeFlow
     override val connection: Flow<ConnectionState> get() = state
+    val ownFlow = MutableStateFlow<NodeInfo?>(null)
+    override val ownNode: Flow<NodeInfo?> get() = ownFlow
     override fun ownNodeNum(): Long? = own
     override fun telemetry(node: Long): Flow<Telemetry> =
         telemetryFlows.getOrPut(node) { MutableSharedFlow(extraBufferCapacity = 16) }
@@ -235,5 +240,77 @@ class SdkMeshSourceTest {
         feed.telemetryFlows.getValue(0x42L).emit(envTelemetry(20f, 50f, 1000f))
         runCurrent()
         assertEquals(1, got.filterIsInstance<MeshEvent.Environment>().size, got.toString())
+    }
+
+    private fun own(num: Int, name: String?, lat: Int = 0, lon: Int = 0) = NodeInfo.Builder().also { n ->
+        n.num = num
+        if (name != null) n.user = User.Builder().also { it.long_name = name }.build()
+        if (lat != 0) n.position = Position.Builder().also { it.latitude_i = lat; it.longitude_i = lon }.build()
+    }.build()
+
+    @Test
+    fun `Self is emitted once per change in node name or position even during warm-up`() = runTest {
+        val feed = FakeFeed()
+        val source = SdkMeshSource(feed, 5_000L) { currentTime }
+        val got = ArrayList<MeshEvent>()
+        backgroundScope.launch { source.events.collect { got += it } }
+        runCurrent()
+        feed.state.value = ConnectionState.Connected
+        runCurrent()
+        feed.ownFlow.value = own(0x42, "Home")
+        runCurrent()
+        assertEquals(listOf(MeshEvent.Self(0x42L, "Home", null, 0L)), got.filterIsInstance<MeshEvent.Self>())
+        feed.ownFlow.value = own(0x42, "Home").newBuilder().also { it.snr = 4f }.build()
+        runCurrent()
+        assertEquals(1, got.filterIsInstance<MeshEvent.Self>().size, "unrelated NodeInfo change re-emitted")
+        feed.ownFlow.value = own(0x42, "Hilltop")
+        runCurrent()
+        feed.ownFlow.value = own(0x42, "Hilltop", 450_000_000, -1_220_000_000)
+        runCurrent()
+        val selfs = got.filterIsInstance<MeshEvent.Self>()
+        assertEquals(listOf("Home", "Hilltop", "Hilltop"), selfs.map { it.name })
+        assertEquals(GeoPoint(45.0, -122.0), selfs.last().position)
+    }
+
+    @Test
+    fun `NeighborInfo and traceroute packets become Neighbors and Route after warm-up only`() = runTest {
+        val feed = FakeFeed()
+        val source = SdkMeshSource(feed, 1_000L) { currentTime }
+        val got = ArrayList<MeshEvent>()
+        backgroundScope.launch { source.events.collect { got += it } }
+        runCurrent()
+        feed.state.value = ConnectionState.Connected
+        runCurrent()
+        val nb = NeighborInfo.Builder().also { b ->
+            b.node_id = 7
+            b.neighbors = listOf(Neighbor.Builder().also { it.node_id = 8 }.build())
+        }.build().encode()
+        val tr = RouteDiscovery.Builder().also { it.route = listOf(0x11) }.build().encode()
+        feed.packetFlow.emit(decodedPacket(7, PortNum.NEIGHBORINFO_APP, payload = nb))
+        runCurrent()
+        assertTrue(got.none { it is MeshEvent.Neighbors }, "retained packet leaked: $got")
+        advanceTimeBy(1_000)
+        runCurrent()
+        feed.packetFlow.emit(decodedPacket(7, PortNum.NEIGHBORINFO_APP, payload = nb))
+        feed.packetFlow.emit(decodedPacket(0x10, PortNum.TRACEROUTE_APP, to = 0x20, payload = tr))
+        runCurrent()
+        assertEquals(listOf(MeshEvent.Neighbors(7L, listOf(8L), currentTime)), got.filterIsInstance<MeshEvent.Neighbors>())
+        assertEquals(listOf(listOf(0x10L, 0x11L, 0x20L)), got.filterIsInstance<MeshEvent.Route>().map { it.nodes })
+    }
+
+    @Test
+    fun `packets are marked toUs against the node number the client learned`() = runTest {
+        val feed = FakeFeed()
+        feed.own = 0x42L
+        val source = SdkMeshSource(feed, 0L) { currentTime }
+        val got = ArrayList<MeshEvent>()
+        backgroundScope.launch { source.events.collect { got += it } }
+        runCurrent()
+        feed.state.value = ConnectionState.Connected
+        runCurrent()
+        feed.packetFlow.emit(decodedPacket(1, PortNum.TEXT_MESSAGE_APP, to = 0x42))
+        feed.packetFlow.emit(decodedPacket(2, PortNum.TEXT_MESSAGE_APP, to = -1))
+        runCurrent()
+        assertEquals(listOf(true, false), got.filterIsInstance<MeshEvent.PacketHeard>().map { it.toUs })
     }
 }

@@ -14,7 +14,13 @@ private fun MeshPacket.snrOrNull(): Float? = if (rx_snr == 0f && (rx_rssi ?: 0) 
 
 private fun MeshPacket.rssiOrNull(): Int? = rx_rssi?.takeIf { it != 0 }
 
-private fun MeshPacket.heard(kind: PacketKind, nowMillis: Long) = MeshEvent.PacketHeard(
+/** `to` is 0 only when unset; broadcast is 0xFFFFFFFF. */
+private fun MeshPacket.toNode(): Long? = (to.toLong() and 0xFFFFFFFFL).takeIf { it != 0L }
+
+/** relay_node is the low byte of the last relayer; 0 means the packet came straight from its origin. */
+private fun MeshPacket.relayOrNull(): Int? = (relay_node and 0xFF).takeIf { it != 0 }
+
+private fun MeshPacket.heard(kind: PacketKind, nowMillis: Long, ownNode: Long?): MeshEvent.PacketHeard = MeshEvent.PacketHeard(
     from = fromNode(),
     kind = kind,
     snr = snrOrNull(),
@@ -22,11 +28,14 @@ private fun MeshPacket.heard(kind: PacketKind, nowMillis: Long) = MeshEvent.Pack
     hopsTaken = hops(),
     viaMqtt = via_mqtt,
     atMillis = nowMillis,
+    to = toNode(),
+    relayByte = relayOrNull(),
+    toUs = ownNode != null && toNode() == ownNode,
 )
 
 /** Maps packets that carry a decoded payload; an undecoded packet belongs to [RawFrameMapper]. */
 object PacketMapper {
-    fun map(p: MeshPacket, nowMillis: Long): MeshEvent.PacketHeard? {
+    fun map(p: MeshPacket, nowMillis: Long, ownNode: Long? = null): MeshEvent.PacketHeard? {
         val data = p.decoded ?: return null
         val kind = when (data.portnum) {
             PortNum.TEXT_MESSAGE_APP, PortNum.TEXT_MESSAGE_COMPRESSED_APP -> PacketKind.Text
@@ -38,15 +47,15 @@ object PacketMapper {
             PortNum.NEIGHBORINFO_APP -> PacketKind.NeighborInfo
             else -> PacketKind.Other
         }
-        return p.heard(kind, nowMillis)
+        return p.heard(kind, nowMillis, ownNode)
     }
 }
 
 /** Takes only `FromRadio.packet` frames with no decoded payload, so it never overlaps [PacketMapper]. */
 object RawFrameMapper {
-    fun map(f: FromRadio, nowMillis: Long): MeshEvent.PacketHeard? {
+    fun map(f: FromRadio, nowMillis: Long, ownNode: Long? = null): MeshEvent.PacketHeard? {
         val p = f.packet ?: return null
         if (p.decoded != null) return null
-        return p.heard(PacketKind.Encrypted, nowMillis)
+        return p.heard(PacketKind.Encrypted, nowMillis, ownNode)
     }
 }

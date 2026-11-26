@@ -180,4 +180,110 @@ class SceneModelTest {
         assertEquals(1.0, SceneModel.nightDim(14 * 60), 1e-9)
         assertTrue((0 until 1440).all { SceneModel.nightDim(it) in 0.4..1.0 })
     }
+
+    private val me = 0x00AA0001L
+
+    private fun withSelf(): SceneModel = scene().also { it.onEvent(MeshEvent.Self(me, "me", null, 0), 0) }
+
+    private fun toUs(from: Long, relay: Int? = null) =
+        MeshEvent.PacketHeard(from, PacketKind.Text, 5f, -80, 1, false, 0, to = me, relayByte = relay, toUs = true)
+
+    @Test
+    fun `a pulse to our node is not spawned before its start and reaches the anchor at the note frame`() {
+        val s = withSelf()
+        s.onEvent(seen(0x11, at(500.0, 30.0)), 0)
+        s.onEvent(toUs(0x11), 100_000)
+        val start = 100_000 - (SceneModel.TRAVEL_SECONDS * sr).toLong()
+        s.update(start - 1)
+        assertTrue(s.pulses.isEmpty())
+        s.update(100_000)
+        assertEquals(1, s.pulses.size)
+        val p = s.pulses[0]
+        assertEquals(0x11L, p.fromNode)
+        assertEquals(null, p.toNode)
+        assertEquals(100_000L, p.endFrame)
+        assertEquals(1.0, s.progress(p), 1e-9)
+    }
+
+    @Test
+    fun `a resolved relay adds a second pulse in the relay color arriving at the same frame`() {
+        val s = withSelf()
+        s.onEvent(seen(0x11, at(500.0, 30.0)), 0)
+        s.onEvent(seen(0x2277, at(800.0, 200.0)), 0)
+        s.onEvent(toUs(0x11, relay = 0x77), 100_000)
+        s.update(100_000)
+        assertEquals(2, s.pulses.size)
+        val relay = s.pulses.first { it.fromNode == 0x2277L }
+        val direct = s.pulses.first { it.fromNode == 0x11L }
+        assertEquals(0x2277L, relay.colorNode)
+        assertEquals(direct.endFrame, relay.endFrame)
+        assertEquals(direct.startFrame + (direct.endFrame - direct.startFrame) / 2, relay.startFrame)
+    }
+
+    @Test
+    fun `an unresolved relay byte draws no extra pulse`() {
+        val s = withSelf()
+        s.onEvent(seen(0x11, at(500.0, 30.0)), 0)
+        s.onEvent(toUs(0x11, relay = 0x99), 100_000)
+        s.update(100_000)
+        assertEquals(1, s.pulses.size)
+    }
+
+    @Test
+    fun `a broadcast keeps its ripple and spawns no source pulse`() {
+        val s = withSelf()
+        s.onEvent(heard(0x11), 1_000)
+        s.update(1_000)
+        assertEquals(1, s.ripples.size)
+        assertTrue(s.pulses.isEmpty())
+    }
+
+    @Test
+    fun `neighbor edges fade within a minute and refresh when reported again`() {
+        val s = withSelf()
+        s.onEvent(seen(1, at(100.0, 0.0)), 0)
+        s.onEvent(seen(2, at(100.0, 90.0)), 0)
+        s.onEvent(MeshEvent.Neighbors(1, listOf(2), 0), 0)
+        s.update(sr * 59)
+        assertEquals(1, s.edges.size)
+        s.onEvent(MeshEvent.Neighbors(2, listOf(1), 0), 0)
+        s.update(sr * 100)
+        assertEquals(1, s.edges.size, "refreshed at 59 s so alive at 100 s")
+        s.update(sr * 120)
+        assertTrue(s.edges.isEmpty())
+    }
+
+    @Test
+    fun `a route with an unknown middle node skips it and pulses 400 ms per hop`() {
+        val s = withSelf()
+        s.onEvent(seen(1, at(100.0, 0.0)), 0)
+        s.onEvent(seen(3, at(200.0, 90.0)), 0)
+        s.onEvent(MeshEvent.Route(listOf(1, 2, 3, me), 0), 0)
+        s.update(0)
+        assertEquals(1, s.pulses.size)
+        assertEquals(1L, s.pulses[0].fromNode)
+        assertEquals(3L, s.pulses[0].toNode)
+        s.update(19_200)
+        assertEquals(2, s.pulses.size)
+        assertEquals(3L, s.pulses[1].fromNode)
+        assertEquals(null, s.pulses[1].toNode)
+        assertEquals(19_200L, s.pulses[1].startFrame)
+    }
+
+    @Test
+    fun `the anchor stays at the centre while orbs drift and layout shifts`() {
+        val s = scene()
+        s.onEvent(MeshEvent.Self(me, "me", at(0.0, 0.0), 0), 0)
+        s.onEvent(seen(1, at(300.0, 45.0)), 0)
+        s.update(0)
+        val a = s.anchor!!
+        assertEquals(0.0, a.x)
+        assertEquals(0.0, a.y)
+        assertTrue(s.driftX(1, 0.0) != s.driftX(1, 1000.0))
+        s.onEvent(seen(2, at(9000.0, 200.0)), 0)
+        s.update(10)
+        assertEquals(0.0, s.anchor!!.x)
+        assertEquals(0.0, s.anchor!!.y)
+        assertTrue(s.orbs.none { it.node == me })
+    }
 }

@@ -111,13 +111,31 @@ fun AmbientScene(engine: AmbientEngine, modifier: Modifier = Modifier) {
                 center = Offset(cx, cy),
             )
         }
-        drawCircle(Color.White.copy(alpha = 0.25f * dim), radius = 3f, center = Offset(cx, cy))
 
         fun place(o: Orb): Offset = Offset(
             cx + ((o.x + scene.driftX(o.node, t)) * radius).toFloat(),
             cy + ((o.y + scene.driftY(o.node, t)) * radius).toFloat(),
         )
 
+        fun at(node: Long?): Offset? = when {
+            node == null -> scene.anchor?.let { Offset(cx + (scene.driftX(it.node, t) * radius).toFloat(), cy + (scene.driftY(it.node, t) * radius).toFloat()) } ?: Offset(cx, cy)
+            node == scene.anchor?.node -> at(null)
+            else -> scene.orb(node)?.let { place(it) }
+        }
+
+        for (e in scene.edges) {
+            val a = at(e.a) ?: continue
+            val b = at(e.b) ?: continue
+            drawLine(Color.White.copy(alpha = (0.12 * scene.edgeFade(e) * dim).toFloat()), a, b, strokeWidth = 1f)
+        }
+        scene.anchor?.let {
+            drawCircle(
+                nodeColor(it.node).copy(alpha = 0.55f * dim),
+                radius = radius * 0.02f,
+                center = at(null) ?: Offset(cx, cy),
+                style = Stroke(width = 2f),
+            )
+        }
         for (o in scene.orbs) {
             val g = scene.glow(o).toFloat()
             val r = radius * 0.035f * (0.7f + g)
@@ -132,6 +150,17 @@ fun AmbientScene(engine: AmbientEngine, modifier: Modifier = Modifier) {
                 radius = r * 3f,
                 center = c,
             )
+        }
+        for (pu in scene.pulses) {
+            val from = at(pu.fromNode) ?: continue
+            val to = at(pu.toNode) ?: continue
+            val p = scene.progress(pu).toFloat()
+            val head = Offset(from.x + (to.x - from.x) * p, from.y + (to.y - from.y) * p)
+            val tail = Offset(from.x + (to.x - from.x) * (p - 0.25f).coerceAtLeast(0f), from.y + (to.y - from.y) * (p - 0.25f).coerceAtLeast(0f))
+            val color = nodeColor(pu.colorNode)
+            val a = (if (p >= 1f) 0.4f else 0.85f) * dim
+            drawLine(color.copy(alpha = a * 0.5f), tail, head, strokeWidth = 2f)
+            drawCircle(color.copy(alpha = a), radius = radius * 0.012f, center = head)
         }
         for (rp in scene.ripples) {
             val o = scene.orb(rp.node) ?: continue

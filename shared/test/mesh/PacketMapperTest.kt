@@ -1,6 +1,9 @@
 package org.meshtastic.ambient.mesh
 
+import org.meshtastic.proto.Neighbor
+import org.meshtastic.proto.NeighborInfo
 import org.meshtastic.proto.PortNum
+import org.meshtastic.proto.RouteDiscovery
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -95,5 +98,78 @@ class PacketMapperTest {
     fun `a node number with the high bit set stays positive`() {
         val e = assertNotNull(PacketMapper.map(decodedPacket(0xDEADBEEF.toInt(), PortNum.TEXT_MESSAGE_APP), 0L))
         assertEquals(0xDEADBEEFL, e.from)
+    }
+
+    private val broadcast = -1
+
+    @Test
+    fun `to and relay_node are carried and a zero relay_node means no relay`() {
+        val e = assertNotNull(PacketMapper.map(decodedPacket(1, PortNum.TEXT_MESSAGE_APP, to = broadcast, relayNode = 0x1F), 0L))
+        assertEquals(0xFFFFFFFFL, e.to)
+        assertEquals(0x1F, e.relayByte)
+        val direct = assertNotNull(PacketMapper.map(decodedPacket(1, PortNum.TEXT_MESSAGE_APP, to = 0x42), 0L))
+        assertEquals(0x42L, direct.to)
+        assertNull(direct.relayByte)
+        val raw = assertNotNull(RawFrameMapper.map(frame(encryptedPacket(1, to = broadcast, relayNode = 0xA5)), 0L))
+        assertEquals(0xFFFFFFFFL, raw.to)
+        assertEquals(0xA5, raw.relayByte)
+    }
+
+    @Test
+    fun `a packet with no destination set has a null to`() {
+        val e = assertNotNull(PacketMapper.map(decodedPacket(1, PortNum.TEXT_MESSAGE_APP), 0L))
+        assertNull(e.to)
+    }
+
+    @Test
+    fun `toUs is true only when the destination is our own node`() {
+        val own = 0x42L
+        val dm = assertNotNull(PacketMapper.map(decodedPacket(1, PortNum.TEXT_MESSAGE_APP, to = 0x42), 0L, own))
+        assertEquals(true, dm.toUs)
+        val other = assertNotNull(PacketMapper.map(decodedPacket(1, PortNum.TEXT_MESSAGE_APP, to = 0x43), 0L, own))
+        assertEquals(false, other.toUs)
+        val bcast = assertNotNull(PacketMapper.map(decodedPacket(1, PortNum.TEXT_MESSAGE_APP, to = broadcast), 0L, own))
+        assertEquals(false, bcast.toUs)
+        val unknownOwn = assertNotNull(PacketMapper.map(decodedPacket(1, PortNum.TEXT_MESSAGE_APP, to = 0x42), 0L))
+        assertEquals(false, unknownOwn.toUs)
+        val raw = assertNotNull(RawFrameMapper.map(frame(encryptedPacket(1, to = 0x42)), 0L, own))
+        assertEquals(true, raw.toUs)
+    }
+
+    private fun neighborPayload(reporter: Int, vararg heard: Int) = NeighborInfo.Builder().also { b ->
+        b.node_id = reporter
+        b.neighbors = heard.map { id -> Neighbor.Builder().also { it.node_id = id }.build() }
+    }.build().encode()
+
+    private fun routePayload(vararg hops: Int) = RouteDiscovery.Builder().also { it.route = hops.toList() }.build().encode()
+
+    @Test
+    fun `a NeighborInfo payload becomes edges from its reporting node`() {
+        val p = decodedPacket(5, PortNum.NEIGHBORINFO_APP, payload = neighborPayload(7, 8, 9))
+        assertEquals(MeshEvent.Neighbors(7L, listOf(8L, 9L), 11L), p.toNeighbors(11L))
+    }
+
+    @Test
+    fun `an empty or undecodable NeighborInfo gives no event and other ports are ignored`() {
+        assertNull(decodedPacket(5, PortNum.NEIGHBORINFO_APP, payload = neighborPayload(7)).toNeighbors(0L))
+        assertNull(decodedPacket(5, PortNum.NEIGHBORINFO_APP, payload = byteArrayOf(0x0A, 0x7F)).toNeighbors(0L))
+        assertNull(decodedPacket(5, PortNum.TEXT_MESSAGE_APP, payload = neighborPayload(7, 8)).toNeighbors(0L))
+    }
+
+    @Test
+    fun `a traceroute request path runs from the sender through its route to us`() {
+        val p = decodedPacket(0x10, PortNum.TRACEROUTE_APP, to = 0x20, payload = routePayload(0x11, 0x12))
+        assertEquals(MeshEvent.Route(listOf(0x10L, 0x11L, 0x12L, 0x20L), 3L), p.toRoute(3L))
+    }
+
+    @Test
+    fun `a traceroute reply path starts at the requester who is the destination`() {
+        val p = decodedPacket(0x30, PortNum.TRACEROUTE_APP, to = 0x20, payload = routePayload(0x11), requestId = 99)
+        assertEquals(MeshEvent.Route(listOf(0x20L, 0x11L, 0x30L), 3L), p.toRoute(3L))
+    }
+
+    @Test
+    fun `an undecodable traceroute payload gives no route`() {
+        assertNull(decodedPacket(1, PortNum.TRACEROUTE_APP, to = 2, payload = byteArrayOf(0x0A, 0x7F)).toRoute(0L))
     }
 }

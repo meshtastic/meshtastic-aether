@@ -24,6 +24,7 @@ class ReplayMeshSource(
     override val events: Flow<MeshEvent> = flow {
         var previous: Long? = null
         var ownNode: Long? = null
+        var lastSelf: MeshEvent.Self? = null
         val seen = HashSet<Long>()
         var started = false
         for (line in lines) {
@@ -39,19 +40,28 @@ class ReplayMeshSource(
             previous = at
             if (gap > 0) delay((gap / speed).toLong())
 
-            frame.my_info?.let { ownNode = it.my_node_num.toLong() and 0xFFFFFFFFL }
+            frame.my_info?.let {
+                ownNode = it.my_node_num.toLong() and 0xFFFFFFFFL
+                if (ownNode != lastSelf?.node) emit(MeshEvent.Self(ownNode!!, null, null, at).also { s -> lastSelf = s })
+            }
             frame.node_info?.let { info ->
                 val num = info.num.toLong() and 0xFFFFFFFFL
-                emit(info.toNodeSeen(seen.add(num), at))
+                val node = info.toNodeSeen(seen.add(num), at)
+                emit(node)
+                if (num == ownNode && (node.name != lastSelf?.name || node.position != lastSelf?.position)) {
+                    emit(MeshEvent.Self(num, node.name, node.position, at).also { s -> lastSelf = s })
+                }
             }
             val packet = frame.packet ?: continue
             val data = packet.decoded
             if (data == null) {
-                RawFrameMapper.map(frame, at)?.let { emit(it) }
+                RawFrameMapper.map(frame, at, ownNode)?.let { emit(it) }
                 continue
             }
-            PacketMapper.map(packet, at)?.let { heard ->
+            PacketMapper.map(packet, at, ownNode)?.let { heard ->
                 emit(heard)
+                packet.toNeighbors(at)?.let { emit(it) }
+                packet.toRoute(at)?.let { emit(it) }
                 if (heard.kind == PacketKind.Telemetry) {
                     val t = try {
                         Telemetry.ADAPTER.decode(data.payload)

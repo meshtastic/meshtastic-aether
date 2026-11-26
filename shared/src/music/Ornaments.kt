@@ -43,6 +43,16 @@ object Ornaments {
     const val GRID_SECONDS = 0.25
     const val ECHO_DELAY_SECONDS = 0.375
 
+    /** Destination node number of a broadcast. */
+    const val BROADCAST = 0xFFFFFFFFL
+
+    /** A call (unicast to us) against the same packet as a broadcast: shorter, drier, brighter, a little louder. */
+    const val CALL_LENGTH_SCALE = 0.6
+    const val CALL_DRYNESS = 0.15f
+    const val CALL_VELOCITY_LIFT = 0.1f
+    const val CALL_BRIGHTNESS_LIFT = 0.15f
+    const val BROADCAST_WIDEN = 0.05f
+
     /** Smoothed packets per second above which per-packet notes thin to a sample. */
     const val THIN_RATE = 25.0
 

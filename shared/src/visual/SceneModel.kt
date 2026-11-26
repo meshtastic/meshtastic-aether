@@ -4,6 +4,7 @@ import org.meshtastic.ambient.mesh.GeoPoint
 import org.meshtastic.ambient.mesh.LinkState
 import org.meshtastic.ambient.mesh.MeshEvent
 import org.meshtastic.ambient.mesh.PacketKind
+import org.meshtastic.ambient.mesh.resolveRelay
 import org.meshtastic.ambient.music.Ornaments
 import org.meshtastic.ambient.music.Rng
 import kotlin.math.PI
@@ -35,6 +36,26 @@ class Ripple internal constructor(
     val echo: Int,
 )
 
+/** Our own node: fixed at the scene centre, never an orb, and never named on screen. */
+class Anchor internal constructor(val node: Long) {
+    val x = 0.0
+    val y = 0.0
+}
+
+/** A pulse travelling along one leg: orb [fromNode] to orb [toNode], or to the anchor when [toNode] is null. */
+class Pulse internal constructor(
+    val fromNode: Long,
+    val toNode: Long?,
+    val startFrame: Long,
+    val endFrame: Long,
+    /** Whose color the pulse wears. */
+    val colorNode: Long,
+    val strength: Float,
+)
+
+/** A faint line between two nodes that fades unless it is reported again. */
+class Edge internal constructor(val a: Long, val b: Long, internal var refreshedFrame: Long)
+
 private class Pending(val dueFrame: Long, val node: Long, val kind: PacketKind, val strength: Float, val echo: Int)
 
 /**
@@ -56,6 +77,10 @@ class SceneModel(private val sampleRate: Int) {
     private val orbMap = LinkedHashMap<Long, Orb>()
     private val pending = ArrayList<Pending>()
     private val active = ArrayList<Ripple>()
+    private val pendingPulses = ArrayList<Pulse>()
+    private val activePulses = ArrayList<Pulse>()
+    private val edgeMap = LinkedHashMap<Pair<Long, Long>, Edge>()
+    private var selfNode: Long? = null
     private var dirty = false
     private var warming = false
     private var lastFrame = 0L
@@ -65,6 +90,12 @@ class SceneModel(private val sampleRate: Int) {
         private set
 
     val orbs: Collection<Orb> get() = orbMap.values
+    val pulses: List<Pulse> get() = activePulses
+    val edges: Collection<Edge> get() = edgeMap.values
+
+    /** Our node's anchor at the scene centre; null until a [MeshEvent.Self] arrives. */
+    var anchor: Anchor? = null
+        private set
     val ripples: List<Ripple> get() = active
     val dim: Double get() = nightDim(minuteOfDay)
 
@@ -74,7 +105,7 @@ class SceneModel(private val sampleRate: Int) {
     fun onEvent(e: MeshEvent, dueFrame: Long) {
         when (e) {
             is MeshEvent.Link -> warming = e.state == LinkState.WarmingUp
-            is MeshEvent.NodeSeen -> {
+            is MeshEvent.NodeSeen -> if (e.node != selfNode) {
                 val orb = orbMap.getOrPut(e.node) { Orb(e.node, null, null).also { it.seenFrame = lastFrame } }
                 orb.name = e.name
                 orb.position = e.position
@@ -83,7 +114,60 @@ class SceneModel(private val sampleRate: Int) {
             is MeshEvent.NodeGone -> if (orbMap.remove(e.node) != null) dirty = true
             is MeshEvent.PacketHeard -> if (!warming) enqueue(e, dueFrame)
             is MeshEvent.Environment, is MeshEvent.Vitals -> Unit
+            is MeshEvent.Self -> {
+                selfNode = e.node
+                anchor = Anchor(e.node)
+                if (orbMap.remove(e.node) != null) dirty = true
+                e.position?.let { origin = it }
+            }
+            is MeshEvent.Neighbors -> for (n in e.neighbors) addEdge(e.node, n)
+            is MeshEvent.Route -> routePulses(e, dueFrame)
         }
+    }
+
+    private fun isKnown(node: Long) = node == selfNode || orbMap.containsKey(node)
+
+    private fun addEdge(a: Long, b: Long) {
+        if (a == b || !isKnown(a) || !isKnown(b)) return
+        val key = Pair(minOf(a, b), maxOf(a, b))
+        val edge = edgeMap[key]
+        if (edge != null) {
+            edge.refreshedFrame = lastFrame
+            return
+        }
+        edgeMap[key] = Edge(key.first, key.second, lastFrame)
+        if (edgeMap.size > MAX_EDGES) edgeMap.remove(edgeMap.keys.first())
+    }
+
+    /** 1.0 when reported now, fading linearly to 0 over [EDGE_FADE_SECONDS]. */
+    fun edgeFade(edge: Edge): Double =
+        (1.0 - (lastFrame - edge.refreshedFrame).coerceAtLeast(0L).toDouble() / sampleRate / EDGE_FADE_SECONDS)
+            .coerceIn(0.0, 1.0)
+
+    private fun routePulses(e: MeshEvent.Route, dueFrame: Long) {
+        val hopFrames = (sampleRate * HOP_SECONDS).toLong()
+        val base = maxOf(dueFrame, lastFrame)
+        val known = e.nodes.filter { isKnown(it) }
+        for (i in 0 until known.size - 1) {
+            val a = known[i]
+            val b = known[i + 1]
+            if (a == b) continue
+            val start = base + i * hopFrames
+            addPulse(Pulse(a, if (b == selfNode) null else b, start, start + hopFrames, a, 0.6f))
+        }
+    }
+
+    private fun addPulse(p: Pulse) {
+        pendingPulses += p
+        if (pendingPulses.size > MAX_PENDING) pendingPulses.removeAt(0)
+    }
+
+    /** Direct pulse source to anchor ending at [dueFrame]; a resolved relay adds a second, started halfway through. */
+    private fun packetPulses(e: MeshEvent.PacketHeard, dueFrame: Long, strength: Float) {
+        val travel = (sampleRate * TRAVEL_SECONDS).toLong()
+        val relay = resolveRelay(orbMap.keys, e.relayByte, e.from, selfNode)
+        if (e.toUs) addPulse(Pulse(e.from, null, dueFrame - travel, dueFrame, e.from, strength))
+        if (relay != null) addPulse(Pulse(relay, null, dueFrame - travel / 2, dueFrame, relay, strength))
     }
 
     private fun enqueue(e: MeshEvent.PacketHeard, dueFrame: Long) {
@@ -92,11 +176,12 @@ class SceneModel(private val sampleRate: Int) {
             add(Pending(dueFrame, e.from, e.kind, strength, 0))
             return
         }
-        if (!orbMap.containsKey(e.from)) {
+        if (e.from != selfNode && !orbMap.containsKey(e.from)) {
             orbMap[e.from] = Orb(e.from, null, null).also { it.seenFrame = lastFrame }
             dirty = true
         }
         add(Pending(dueFrame, e.from, e.kind, strength, 0))
+        if (e.from != selfNode) packetPulses(e, dueFrame, strength)
         for (k in 1..Ornaments.echoesFor(e.hopsTaken, e.viaMqtt)) {
             val at = dueFrame + (Ornaments.ECHO_DELAY_SECONDS * k * sampleRate).toLong()
             add(Pending(at, e.from, e.kind, strength * 0.5f, k))
@@ -125,6 +210,17 @@ class SceneModel(private val sampleRate: Int) {
             }
         }
         active.removeAll { (playbackFrame - it.startFrame).toDouble() / sampleRate > RIPPLE_LIFE_SECONDS }
+        val pi = pendingPulses.iterator()
+        while (pi.hasNext()) {
+            val p = pi.next()
+            if (p.startFrame <= playbackFrame) {
+                pi.remove()
+                activePulses += p
+                if (activePulses.size > MAX_PULSES) activePulses.removeAt(0)
+            }
+        }
+        activePulses.removeAll { (playbackFrame - it.endFrame).toDouble() / sampleRate > PULSE_LINGER_SECONDS }
+        edgeMap.values.removeAll { (playbackFrame - it.refreshedFrame).toDouble() / sampleRate >= EDGE_FADE_SECONDS }
         if (dirty) layout()
     }
 
@@ -150,6 +246,10 @@ class SceneModel(private val sampleRate: Int) {
     /** 0..1 progress of [r] through its life. */
     fun progress(r: Ripple): Double =
         ((lastFrame - r.startFrame).toDouble() / sampleRate / RIPPLE_LIFE_SECONDS).coerceIn(0.0, 1.0)
+
+    /** 0..1 progress of [p] along its leg; 1.0 is arrival. */
+    fun progress(p: Pulse): Double =
+        ((lastFrame - p.startFrame).toDouble() / (p.endFrame - p.startFrame).coerceAtLeast(1L)).coerceIn(0.0, 1.0)
 
     /** Slow drift of an orb around its laid-out place, in unit-disc units; the whole field wanders against burn-in. */
     fun driftX(node: Long, tSeconds: Double): Double = DRIFT * sin(tSeconds * 0.037 + phase(node, 1))
@@ -208,6 +308,12 @@ class SceneModel(private val sampleRate: Int) {
         const val RIPPLE_LIFE_SECONDS = 6.0
         const val MAX_PENDING = 256
         const val MAX_RIPPLES = 96
+        const val MAX_PULSES = 96
+        const val MAX_EDGES = 256
+        const val EDGE_FADE_SECONDS = 60.0
+        const val HOP_SECONDS = 0.4
+        const val TRAVEL_SECONDS = 0.8
+        private const val PULSE_LINGER_SECONDS = 0.5
 
         private const val HAZE_TAU_SECONDS = 8.0
         private const val HAZE_STEP = 0.12
