@@ -4,53 +4,60 @@ import kotlin.math.exp
 import kotlin.math.ln
 import org.meshtastic.ambient.mesh.LinkState
 import org.meshtastic.ambient.mesh.MeshEvent
-import org.meshtastic.ambient.mesh.PacketKind
 
 /**
  * The pass-1 signals at one instant. Each signal is 0..1 with a confidence 0..1; a signal with no data holds its neutral
- * (0.5, or 0 for surge, chat and arrival) and confidence 0. [pressureTrend] and [activityTrend] are -1..1.
+ * (0.5) and confidence 0. The trends are -1..1: [pressureTrend], [temperatureTrend] and [batteryTrend] are per-node
+ * 3 h changes (median) as a fraction of a full-scale change, [activityTrend] is the change of relative activity over 30 minutes.
  */
 data class MoodSnapshot(
     val nowMillis: Long,
-    /** Packets per minute, smoothed (tau 5 min), for display. */
-    val packetsPerMinute: Double,
     val activity: Double, val activityConfidence: Double,
-    val surge: Double, val surgeConfidence: Double,
-    val silence: Double, val silenceConfidence: Double,
     val reach: Double, val reachConfidence: Double,
     val linkQuality: Double, val linkQualityConfidence: Double,
     val senders: Double, val sendersConfidence: Double,
-    val chat: Double, val chatConfidence: Double,
-    val arrival: Double, val arrivalConfidence: Double,
     /** Median temperature over reporting nodes against its own 24 h range. */
     val warmth: Double, val warmthConfidence: Double,
     /** Median wind speed as a fraction of 15 m/s. */
     val wind: Double, val windConfidence: Double,
-    /** Median over nodes of the pressure change over 3 h, as a fraction of 6 hPa, signed. */
     val pressureTrend: Double, val pressureTrendConfidence: Double,
-    /** Change of relative activity over the last 30 minutes, signed. */
+    val temperatureTrend: Double, val temperatureTrendConfidence: Double,
+    val batteryTrend: Double, val batteryTrendConfidence: Double,
     val activityTrend: Double, val activityTrendConfidence: Double,
+    /** Nodes whose battery level changed over the 3 h window: the only ones the battery trend counts. */
+    val batteryMovedNodes: Int,
+    /** True when the mesh is quiet against its own history (or nothing is known yet) and the link is not warming up. */
+    val quiet: Boolean,
+    val warmingUp: Boolean,
+    /** 0..1 busyness: relative activity, relative sender count and our channel utilization. */
+    val density: Double,
+    /** 0..1 from relative link quality; 0.5 with no data. */
+    val brightness: Double,
+    /** 0..1 from relative activity, channel utilization and a poor link. */
+    val tension: Double,
     val rotation: RotationTarget,
     val params: ParamValues,
 ) {
     companion object {
         val NEUTRAL = MoodSnapshot(
-            0L, 0.0, 0.5, 0.0, 0.0, 0.0, 0.5, 0.0, 0.5, 0.0, 0.5, 0.0, 0.5, 0.0, 0.0, 0.0, 0.0, 0.0,
-            0.5, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, RotationTarget.NEUTRAL, ParamValues.NEUTRAL,
+            0L, 0.5, 0.0, 0.5, 0.0, 0.5, 0.0, 0.5, 0.0, 0.5, 0.0, 0.0, 0.0,
+            0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0, true, false, 0.0, 0.5, 0.15,
+            RotationTarget.NEUTRAL, ParamValues.NEUTRAL,
         )
     }
 }
 
 /**
- * Folds mesh events into slow, self-normalized signals and the rotation and parameter values derived from them.
- * Time is the events' own epoch millis; [advance] moves the clock and reads the snapshot. Single-threaded.
+ * Folds mesh events into slow, self-normalized signals and the rotation and parameter values derived from them, plus
+ * the short-window pace the composer thins and gates by. Time is the events' own epoch millis; [advance] moves the clock
+ * and reads the snapshot. While the link is warming up, packets feed nothing (a connect burst is not the mesh's pace).
+ * Single-threaded.
  */
 class MeshMood {
     private var clock = Long.MIN_VALUE
     private val rate = Decay(ACTIVITY_TAU)
-    private val surgeAcc = Decay(SURGE_TAU)
-    private val chatAcc = Decay(CHAT_TAU)
-    private val arrivalAcc = Decay(ARRIVAL_TAU)
+    private val fast = Decay(FAST_TAU)
+    private val slow = Decay(SLOW_TAU)
     private val hopsSum = Decay(REACH_TAU)
     private val hopsWeight = Decay(REACH_TAU)
     private val snrSum = Decay(LINK_TAU)
@@ -58,8 +65,8 @@ class MeshMood {
     private var packets = 0L
     private var lastPacketMs = Long.MIN_VALUE
     private val lastHeard = HashMap<Long, Long>()
-    private val known = HashSet<Long>()
     private var warming = false
+    private var util: Double? = null
 
     private val activityRange = RollingRange(0.5, 0.0, ln(21.0))
     private val reachRange = RollingRange(1.0, 0.0, 7.0)
@@ -78,11 +85,18 @@ class MeshMood {
     private class Reading(var value: Double, var at: Long)
 
     private val pressure = HashMap<Long, Series>()
+    private val temperatureSeries = HashMap<Long, Series>()
+    private val batterySeries = HashMap<Long, Series>()
     private val temperature = HashMap<Long, Reading>()
     private val windSpeed = HashMap<Long, Reading>()
     private var weatherAt = Long.MIN_VALUE
     private var pressureTrendV = 0.0
     private var pressureConf = 0.0
+    private var temperatureTrendV = 0.0
+    private var temperatureTrendConf = 0.0
+    private var batteryTrendV = 0.0
+    private var batteryTrendConf = 0.0
+    private var batteryMoved = 0
     private var warmthV = 0.5
     private var warmthConf = 0.0
     private var windV = 0.0
@@ -91,26 +105,46 @@ class MeshMood {
     private var sendersAt = Long.MIN_VALUE
     private var band = 2
 
+    /** True between `Link(WarmingUp)` and the next link state. */
+    val warmingUp: Boolean get() = warming
+
+    /** Packets per second over about 2 s: what ornament thinning reacts to. */
+    val fastRate: Double get() = fast.value
+
+    /** Distinct nodes heard within the last [windowMs] before the clock. */
+    fun activeNodes(windowMs: Long): Int {
+        var n = 0
+        for (t in lastHeard.values) if (clock - t <= windowMs) n++
+        return n
+    }
+
     fun onEvent(e: MeshEvent) {
         when (e) {
             is MeshEvent.PacketHeard -> {
                 sync(e.atMillis)
-                onPacket(e)
+                if (!warming) onPacket(e)
             }
-            is MeshEvent.NodeSeen -> {
-                sync(e.atMillis)
-                if (known.add(e.node) && e.firstThisSession && !warming) arrivalAcc.add(1.0)
-            }
+            is MeshEvent.NodeSeen -> sync(e.atMillis)
             is MeshEvent.NodeGone -> {
                 sync(e.atMillis)
                 lastHeard.remove(e.node)
                 pressure.remove(e.node)
+                temperatureSeries.remove(e.node)
+                batterySeries.remove(e.node)
                 temperature.remove(e.node)
                 windSpeed.remove(e.node)
             }
             is MeshEvent.Environment -> {
                 sync(e.atMillis)
                 onEnvironment(e)
+            }
+            is MeshEvent.Health -> {
+                sync(e.atMillis)
+                e.batteryPct?.let { if (it in 0..100) sample(batterySeries, e.node, it.toDouble(), e.atMillis) }
+            }
+            is MeshEvent.Vitals -> {
+                sync(e.atMillis)
+                e.channelUtilPct?.let { if (it.isFinite()) util = util?.let { u -> u + UTIL_SMOOTHING * (it - u) } ?: it.toDouble() }
             }
             is MeshEvent.Link -> {
                 sync(e.atMillis)
@@ -124,10 +158,9 @@ class MeshMood {
         packets++
         lastPacketMs = maxOf(lastPacketMs, e.atMillis)
         rate.add(1.0 / ACTIVITY_TAU)
-        surgeAcc.add(SURGE_STEP)
+        fast.add(1.0 / FAST_TAU)
+        slow.add(1.0 / SLOW_TAU)
         lastHeard[e.from] = e.atMillis
-        if (known.add(e.from) && !warming) arrivalAcc.add(1.0)
-        if (e.kind == PacketKind.Text || e.toUs) chatAcc.add(1.0)
         e.hopsTaken?.let {
             hopsSum.add(it.coerceIn(0, 7).toDouble())
             hopsWeight.add(1.0)
@@ -141,23 +174,29 @@ class MeshMood {
     }
 
     private fun onEnvironment(e: MeshEvent.Environment) {
-        e.pressureHpa?.let { p ->
-            if (p.isFinite() && p in 800f..1100f) {
-                val s = pressure.getOrPut(e.node) { Series() }
-                if (s.at.isNotEmpty() && e.atMillis - s.at.last() < SAMPLE_MS) {
-                    s.value[s.value.lastIndex] = p.toDouble()
-                } else {
-                    s.at.addLast(e.atMillis)
-                    s.value.addLast(p.toDouble())
-                }
-                while (s.at.isNotEmpty() && s.at.first() < e.atMillis - PRESSURE_KEEP_MS) {
-                    s.at.removeFirst()
-                    s.value.removeFirst()
-                }
+        e.pressureHpa?.let { p -> if (p.isFinite() && p in 800f..1100f) sample(pressure, e.node, p.toDouble(), e.atMillis) }
+        e.temperatureC?.let {
+            if (it.isFinite() && it in -60f..70f) {
+                record(temperature, e.node, it.toDouble(), e.atMillis)
+                sample(temperatureSeries, e.node, it.toDouble(), e.atMillis)
             }
         }
-        e.temperatureC?.let { if (it.isFinite() && it in -60f..70f) record(temperature, e.node, it.toDouble(), e.atMillis) }
         e.windMps?.let { if (it.isFinite() && it in 0f..100f) record(windSpeed, e.node, it.toDouble(), e.atMillis) }
+    }
+
+    /** Keeps one sample per 5 minutes per node for the last 6 hours, the latest within a slot replacing the earlier. */
+    private fun sample(map: HashMap<Long, Series>, node: Long, v: Double, at: Long) {
+        val s = map.getOrPut(node) { Series() }
+        if (s.at.isNotEmpty() && at - s.at.last() < SAMPLE_MS) {
+            s.value[s.value.lastIndex] = v
+        } else {
+            s.at.addLast(at)
+            s.value.addLast(v)
+        }
+        while (s.at.isNotEmpty() && s.at.first() < at - SERIES_KEEP_MS) {
+            s.at.removeFirst()
+            s.value.removeFirst()
+        }
     }
 
     private fun record(map: HashMap<Long, Reading>, node: Long, v: Double, at: Long) {
@@ -172,9 +211,8 @@ class MeshMood {
         if (clock != Long.MIN_VALUE && ms <= clock) return
         clock = ms
         rate.advance(ms)
-        surgeAcc.advance(ms)
-        chatAcc.advance(ms)
-        arrivalAcc.advance(ms)
+        fast.advance(ms)
+        slow.advance(ms)
         hopsSum.advance(ms)
         hopsWeight.advance(ms)
         snrSum.advance(ms)
@@ -197,11 +235,6 @@ class MeshMood {
             activity = activityRange.normalize(x)
         }
         val (trend, trendConf) = activityTrendOf(now, x, activity, dataConf, hasPackets)
-
-        val surgeConf = if (hasPackets) ramp(packets.toDouble(), 3.0) else 0.0
-        val surge = 1.0 - exp(-surgeAcc.value)
-        val silenceConf = surgeConf
-        val silence = if (hasPackets) clamp01(ln(maxOf(sinceLast, 10.0) / 10.0) / ln(60.0)) else 0.5
 
         val reachW = hopsWeight.value
         var reach = 0.5
@@ -230,42 +263,77 @@ class MeshMood {
         }
         val sendersConf = ramp(sendersCount.toDouble(), 3.0)
 
-        val chat = 1.0 - exp(-chatAcc.value / 2.0)
-        val arrival = 1.0 - exp(-arrivalAcc.value / 2.0)
-
         refreshWeather(now)
 
+        val choice = RotationTargets.chooseDirection(
+            pressureTrendV, pressureConf, temperatureTrendV, temperatureTrendConf, batteryTrendV, batteryTrendConf, trend, trendConf,
+        )
         val rotation = RotationTarget(
-            RotationTargets.periodSeconds(activity, dataConf),
-            RotationTargets.direction(pressureTrendV, pressureConf, trend, trendConf),
-            0.0, 0.0, surge * surgeConf,
-            RotationTargets.directionStrength(pressureTrendV, pressureConf, trend, trendConf),
+            RotationTargets.periodSeconds(activity, dataConf), choice.direction, 0.0, 0.0, 0.0, choice.strength,
         )
         val tilt = RotationTargets.cappedTilt(RotationTargets.tiltDegrees(pressureTrendV, pressureConf, reach, reachConf))
-        val wobble = RotationTargets.cappedWobble(tilt, RotationTargets.wobbleDegrees(windV, windConf))
+        val wobble = RotationTargets.cappedWobble(
+            tilt, RotationTargets.wobbleDegrees(windV, windConf, senders, sendersConf),
+        )
         val finalRotation = rotation.copy(tiltDegrees = tilt, wobbleDegrees = wobble)
 
         val lean = clamp((((link - 0.5) * 2.0) * linkConf + ((warmthV - 0.5) * 2.0) * warmthConf) / 2.0)
         val activityEff = lerp(0.5, activity, dataConf)
         val penta = sendersConf * senders * (1.0 - activityEff)
 
+        // The 5 minute activity is too slow to tell a burst from a lull: the 60 s pace, on the same self-normalized scale, drives quiet and density.
+        val pace = if (hasPackets) activityRange.normalize(ln(1.0 + slow.value * 60.0)) else 0.0
+        val rateN = pace * dataConf
+        val utilN = ((util ?: 0.0) / UTIL_FULL_PCT).coerceIn(0.0, 1.0)
+        val density = clamp01(0.5 * rateN + 0.3 * senders * sendersConf + 0.2 * utilN)
+        val brightness = link
+        val tension = clamp01(0.4 * rateN + 0.3 * utilN + 0.3 * (1.0 - brightness))
+        val quiet = !warming && (dataConf <= 0.0 || pace < QUIET_ACTIVITY)
+
+        val tiltSource = if (pressureConf > 0) "pressure trend" else if (reachConf > 0) "reach" else null
+        val wobbleSource = if (windConf > 0) "wind" else if (sendersConf > 0) "senders" else null
+        val leanSource = if (linkConf > 0 && warmthConf > 0) "link quality and warmth" else if (linkConf > 0) "link quality" else if (warmthConf > 0) "warmth" else null
+        val shown = HashMap<String, String>()
+        if (dataConf > 0) shown["turn time"] = formatDecimal(activity, 2)
+        if (dataConf >= 0.5) shown["phrase speed"] = formatDecimal(activity, 2)
+        val directionSignal = when (choice.source) {
+            RotationTargets.DirectionSource.Pressure -> pressureTrendV
+            RotationTargets.DirectionSource.Temperature -> temperatureTrendV
+            RotationTargets.DirectionSource.Battery -> batteryTrendV
+            RotationTargets.DirectionSource.Activity -> trend
+            RotationTargets.DirectionSource.None -> null
+        }
+        if (directionSignal != null) shown["rotation direction"] = (if (directionSignal > 0) "+" else "") + formatDecimal(directionSignal, 2)
+        if (tiltSource != null) shown["tilt"] = formatDecimal(if (pressureConf > 0) pressureTrendV else reach, 2)
+        if (wobbleSource != null) shown["wobble"] = formatDecimal(if (windConf > 0) windV else senders, 2)
+        if (leanSource != null) {
+            shown["mode lean"] = when {
+                linkConf > 0 && warmthConf > 0 -> "${formatDecimal(link, 2)} and ${formatDecimal(warmthV, 2)}"
+                linkConf > 0 -> formatDecimal(link, 2)
+                else -> formatDecimal(warmthV, 2)
+            }
+        }
+        if (sendersConf > 0) shown["pentatonic bias"] = formatDecimal(senders, 2)
+
         val params = ParamValues(
             finalRotation.targetPeriodSeconds, finalRotation.direction, tilt, wobble,
             phraseSpeedFor(activity, dataConf), lean, penta.coerceIn(0.0, 1.0),
             ParamDrivers(
                 rotationSpeed = if (dataConf > 0) "activity" else null,
-                rotationDirection = if (pressureConf > 0) "pressure trend" else if (trendConf > 0) "activity trend" else null,
-                tilt = if (pressureConf > 0) "pressure trend" else if (reachConf > 0) "reach" else null,
-                wobble = if (windConf > 0) "wind" else null,
+                rotationDirection = choice.source.label,
+                tilt = tiltSource,
+                wobble = wobbleSource,
                 phraseSpeed = if (dataConf >= 0.5) "activity" else null,
-                modeLean = if (linkConf > 0 && warmthConf > 0) "link quality and warmth" else if (linkConf > 0) "link quality" else if (warmthConf > 0) "warmth" else null,
+                modeLean = leanSource,
                 scalePentatonicBias = if (sendersConf > 0) "senders" else null,
+                readings = shown,
             ),
+            choice.strength,
         )
         return MoodSnapshot(
-            now, ratePm, activity, dataConf, surge, surgeConf, silence, silenceConf, reach, reachConf, link, linkConf,
-            senders, sendersConf, chat, dataConf, arrival, dataConf, warmthV, warmthConf, windV, windConf,
-            pressureTrendV, pressureConf, trend, trendConf,
+            now, activity, dataConf, reach, reachConf, link, linkConf, senders, sendersConf, warmthV, warmthConf, windV, windConf,
+            pressureTrendV, pressureConf, temperatureTrendV, temperatureTrendConf, batteryTrendV, batteryTrendConf, trend, trendConf,
+            batteryMoved, quiet, warming, density, brightness, tension,
             finalRotation, params,
         )
     }
@@ -305,29 +373,53 @@ class MeshMood {
     private fun refreshSenders(now: Long) {
         if (sendersAt != Long.MIN_VALUE && now - sendersAt < 5_000L) return
         sendersAt = now
-        var n = 0
-        val it = lastHeard.values.iterator()
-        while (it.hasNext()) if (now - it.next() <= SENDERS_WINDOW_MS) n++
-        sendersCount = n
+        sendersCount = activeNodes(SENDERS_WINDOW_MS)
+    }
+
+    /**
+     * Each node's change over [TREND_WINDOW_MS] (scaled to exactly that window) for the nodes that reported within
+     * [freshMs]; a node with under that much history is left out, and with [skipFlat] so is one whose value did not move.
+     * Returns the count; the deltas are in the first entries of [out].
+     */
+    private fun deltas(map: HashMap<Long, Series>, now: Long, freshMs: Long, skipFlat: Boolean, out: DoubleArray): Int {
+        var nd = 0
+        for (s in map.values) {
+            if (s.at.isEmpty()) continue
+            val lastIdx = s.at.lastIndex
+            if (now - s.at[lastIdx] > freshMs) continue
+            var i = lastIdx - 1
+            while (i >= 0 && s.at[lastIdx] - s.at[i] < TREND_WINDOW_MS) i--
+            if (i < 0) continue
+            val change = s.value[lastIdx] - s.value[i]
+            if (skipFlat && change == 0.0) continue
+            out[nd++] = change * TREND_WINDOW_MS / (s.at[lastIdx] - s.at[i]).toDouble()
+        }
+        return nd
     }
 
     private fun refreshWeather(now: Long) {
         if (weatherAt != Long.MIN_VALUE && now - weatherAt < 30_000L) return
         weatherAt = now
 
-        val deltas = DoubleArray(pressure.size)
-        var nd = 0
-        for (s in pressure.values) {
-            if (s.at.isEmpty()) continue
-            val lastIdx = s.at.lastIndex
-            if (now - s.at[lastIdx] > FRESH_MS) continue
-            var i = lastIdx - 1
-            while (i >= 0 && s.at[lastIdx] - s.at[i] < TREND_WINDOW_MS) i--
-            if (i < 0) continue
-            deltas[nd++] = (s.value[lastIdx] - s.value[i]) * TREND_WINDOW_MS / (s.at[lastIdx] - s.at[i]).toDouble()
+        run {
+            val d = DoubleArray(pressure.size)
+            val nd = deltas(pressure, now, FRESH_MS, false, d)
+            pressureConf = ramp(nd.toDouble(), 3.0)
+            pressureTrendV = if (nd > 0) (median(d, nd) / RotationTargets.PRESSURE_FULL_SCALE_HPA).coerceIn(-1.0, 1.0) else 0.0
         }
-        pressureConf = ramp(nd.toDouble(), 3.0)
-        pressureTrendV = if (nd > 0) (median(deltas, nd) / RotationTargets.PRESSURE_FULL_SCALE_HPA).coerceIn(-1.0, 1.0) else 0.0
+        run {
+            val d = DoubleArray(temperatureSeries.size)
+            val n = deltas(temperatureSeries, now, TREND_FRESH_MS, false, d)
+            temperatureTrendConf = ramp(n.toDouble(), 3.0)
+            temperatureTrendV = if (n > 0) (median(d, n) / RotationTargets.TEMPERATURE_FULL_SCALE_C).coerceIn(-1.0, 1.0) else 0.0
+        }
+        run {
+            val d = DoubleArray(batterySeries.size)
+            val n = deltas(batterySeries, now, TREND_FRESH_MS, true, d)
+            batteryMoved = n
+            batteryTrendConf = ramp(n.toDouble(), 3.0)
+            batteryTrendV = if (n > 0) (median(d, n) / RotationTargets.BATTERY_FULL_SCALE_PCT).coerceIn(-1.0, 1.0) else 0.0
+        }
 
         val temps = freshValues(temperature, now, WARMTH_FRESH_MS)
         warmthConf = ramp(temps.size.toDouble(), 2.0)
@@ -355,10 +447,8 @@ class MeshMood {
 
     private companion object {
         const val ACTIVITY_TAU = 300.0
-        const val SURGE_TAU = 20.0
-        const val SURGE_STEP = 0.3
-        const val CHAT_TAU = 600.0
-        const val ARRIVAL_TAU = 900.0
+        const val FAST_TAU = 2.0
+        const val SLOW_TAU = 60.0
         const val REACH_TAU = 900.0
         const val LINK_TAU = 900.0
         const val MIN_WEIGHT = 1e-6
@@ -366,13 +456,21 @@ class MeshMood {
         const val STALE_TAU_S = 6.0 * 3600
         const val SENDERS_WINDOW_MS = 45L * 60_000
         const val SAMPLE_MS = 5L * 60_000
-        const val PRESSURE_KEEP_MS = 6L * 3_600_000
+        const val SERIES_KEEP_MS = 6L * 3_600_000
         const val TREND_WINDOW_MS = 3.0 * 3_600_000
         const val FRESH_MS = 3_600_000L
+        const val TREND_FRESH_MS = 2L * 3_600_000
         const val WARMTH_FRESH_MS = 3L * 3_600_000
         const val TREND_SLOTS = 40
         const val TREND_MINUTES = 30
         const val TREND_SLACK = 5
+
+        /** Relative pace under this reads quiet: the middle of the mesh's own 24 h range. */
+        const val QUIET_ACTIVITY = 0.5
+
+        /** Channel utilization (percent) that reads fully loaded; firmware itself backs off well below this. */
+        const val UTIL_FULL_PCT = 50.0
+        const val UTIL_SMOOTHING = 0.2
         val BAND_EDGES = doubleArrayOf(0.2, 0.45, 0.75)
         const val BAND_HYST = 0.04
         val BAND_SPEEDS = doubleArrayOf(0.5, 0.75, 1.0, 1.5)

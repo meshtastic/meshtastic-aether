@@ -468,7 +468,7 @@ class SceneModel(private val sampleRate: Int) {
         if (p.tiltDegrees.isFinite()) easedTilt += (p.tiltDegrees - easedTilt) * ease
         if (p.wobbleDegrees.isFinite()) easedWobble += (p.wobbleDegrees - easedWobble) * ease
         impulse *= exp(-dtSeconds / IMPULSE_TAU_SECONDS)
-        val strength = if (p.drivers.rotationDirection != null) 1.0 else 0.0
+        val strength = p.directionStrength
         rotation = integrator.step(
             dtSeconds,
             RotationTarget(easedPeriod, p.rotationDirection, easedTilt, easedWobble, impulse, strength),
@@ -668,8 +668,8 @@ class SceneModel(private val sampleRate: Int) {
         /** Smallest distance between two orb centers, as a fraction of the vertical half-height. */
         const val MIN_SEPARATION = 0.05
 
-        /** The least [nightDim] returns, at 02:00. */
-        const val NIGHT_DIM_MIN = 0.45
+        /** The least [nightDim] returns, from 00:00 to 05:00. */
+        const val NIGHT_DIM_MIN = 0.65
 
         private const val IDLE_FADE_SECONDS = 3600.0
         private const val FLASH_TAU_SECONDS = 12.0
@@ -740,10 +740,24 @@ class SceneModel(private val sampleRate: Int) {
             return Pair(radius * cos(angle), radius * sin(angle))
         }
 
-        /** 1.0 in the afternoon, down to [NIGHT_DIM_MIN] at 02:00, so OLED screens and dark rooms are not held at full light. */
+        /**
+         * 1.0 from 07:00 to 22:00, a smoothstep down to [NIGHT_DIM_MIN] by 00:00, held to 05:00, and a smoothstep back
+         * up by 07:00, so OLED screens and dark rooms are not held at full light but an evening is not dim.
+         */
         fun nightDim(minuteOfDay: Int): Double {
-            val phase = 2 * PI * ((minuteOfDay.coerceIn(0, 1439) / 1440.0) - 14.0 / 24.0)
-            return (1.0 + NIGHT_DIM_MIN) / 2 + (1.0 - NIGHT_DIM_MIN) / 2 * cos(phase)
+            val m = minuteOfDay.coerceIn(0, 1439)
+            val day = when {
+                m >= 22 * 60 -> 1.0 - smoothstep((m - 22 * 60) / 120.0)
+                m < 5 * 60 -> 0.0
+                m < 7 * 60 -> smoothstep((m - 5 * 60) / 120.0)
+                else -> 1.0
+            }
+            return NIGHT_DIM_MIN + (1.0 - NIGHT_DIM_MIN) * day
+        }
+
+        private fun smoothstep(x: Double): Double {
+            val t = x.coerceIn(0.0, 1.0)
+            return t * t * (3 - 2 * t)
         }
 
         private fun unit(bits: Long): Double = (bits ushr 11) * (1.0 / (1L shl 53))

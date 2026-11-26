@@ -4,9 +4,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -17,15 +14,15 @@ import org.meshtastic.ambient.mood.ParamInfo
 /** The live value with its unit; a parameter with no unit shows the value alone. */
 internal fun paramValueText(p: ParamInfo): String = if (p.unit.isEmpty()) p.value else "${p.value} ${p.unit}"
 
-/** What moves the parameter, or `no data` while it holds its neutral value. */
-internal fun paramDriverText(p: ParamInfo): String = p.driver ?: "no data"
+/** What moves the parameter with its own reading, or why it holds its neutral value. */
+internal fun paramDriverText(p: ParamInfo): String = p.driverText
 
-/** One row per mesh-driven parameter: name, live value and unit, and the signal driving it. Scrolls when the window is short. */
+/** One row per mesh-driven parameter: name, live value and unit, and the signal driving it. The overlay around it scrolls. */
 @Composable
 internal fun DriversPanel(rows: List<ParamInfo>, modifier: Modifier = Modifier) {
     val colors = MaterialTheme.colorScheme
     Column(
-        modifier.heightIn(max = DRIVERS_MAX_HEIGHT).verticalScroll(rememberScrollState()),
+        modifier,
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         for (p in rows) {
@@ -43,5 +40,3 @@ internal fun DriversPanel(rows: List<ParamInfo>, modifier: Modifier = Modifier) 
         }
     }
 }
-
-private val DRIVERS_MAX_HEIGHT = 240.dp

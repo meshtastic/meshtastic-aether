@@ -91,4 +91,25 @@ class ControlsTest {
     fun `only the volume keys repeat while held`() {
         assertEquals(setOf(KeyAction.VolumeUp, KeyAction.VolumeDown), KeyAction.entries.filter { it.repeats }.toSet())
     }
+
+    // Regression: the master started at full the instant the engine did; it must rise from silence over about 3 s.
+    @Test
+    fun `the fade rises in a straight line from silence to full over three seconds`() {
+        assertEquals(0f, fadeIn(0))
+        assertEquals(0.5f, fadeIn(1_500), 1e-6f)
+        assertEquals(1f, fadeIn(3_000))
+        assertEquals(1f, fadeIn(60_000))
+        assertEquals(0f, fadeIn(-100))
+    }
+
+    // Review item 9: 15 s idle closes the overlay, 60 s while Drivers is open; input restarts the idle clock.
+    @Test
+    fun `the overlay closes after fifteen idle seconds and sixty with drivers open`() {
+        assertFalse(overlayExpired(14_999, driversOpen = false))
+        assertTrue(overlayExpired(15_000, driversOpen = false))
+        assertFalse(overlayExpired(15_000, driversOpen = true))
+        assertFalse(overlayExpired(59_999, driversOpen = true))
+        assertTrue(overlayExpired(60_000, driversOpen = true))
+        assertFalse(overlayExpired(0, driversOpen = false))
+    }
 }

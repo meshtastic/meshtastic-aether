@@ -137,7 +137,7 @@ class ExpressionTest {
     fun `a busy mesh plays one note per packet and no motif`() {
         val c = malletComposer(3L, sr)
         c.advance(0, lookahead, moment(0))
-        for (i in 0 until 14) c.onEvent(heard(900L + i, atMs = t0 + i))
+        for (i in 0 until 14) c.onEvent(heard(900L + i, atMs = t0 + i * 400L))
         val notes = c.drive(step, 8).filter { it.voice == Voice.Mallet }
         assertEquals(14, notes.size)
         assertEquals(14, notes.map { it.node }.toSet().size)

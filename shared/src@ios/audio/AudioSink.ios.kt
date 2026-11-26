@@ -23,6 +23,7 @@ import platform.AVFAudio.setActive
 import platform.Foundation.NSNotificationCenter
 import platform.Foundation.NSThread
 import platform.darwin.NSObject
+import platform.darwin.NSObjectProtocol
 import kotlinx.cinterop.autoreleasepool
 
 private const val BLOCK_FRAMES = 1024
@@ -41,7 +42,7 @@ class IosAudioSink : AudioSink {
     @Volatile private var running = false
     private val outstanding = AtomicInt(0)
     private val playedFrames = AtomicLong(0L)
-    private val observers = ArrayList<NSObject>()
+    private val observers = ArrayList<NSObjectProtocol>()
 
     override fun start(renderer: BlockRenderer) {
         if (running) return
@@ -106,7 +107,7 @@ class IosAudioSink : AudioSink {
             AVAudioSessionRouteChangeNotification,
             AVAudioEngineConfigurationChangeNotification,
         )) {
-            observers += center.addObserverForName(name, null, null) { _ -> restartEngine() }
+            observers.add(center.addObserverForName(name, null, null) { _ -> restartEngine() })
         }
     }
 

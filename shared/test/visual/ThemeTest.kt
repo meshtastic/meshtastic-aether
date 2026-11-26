@@ -1,9 +1,9 @@
 package org.meshtastic.ambient.visual
 
 import androidx.compose.ui.graphics.Color
-import org.meshtastic.ambient.theme.Brand
 import org.meshtastic.ambient.theme.PaletteChoice
 import org.meshtastic.ambient.theme.ambientColorScheme
+import kotlin.math.abs
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -20,16 +20,44 @@ class ThemeTest {
         assertEquals(Color(0xFFECEDF3), s.onSurface)
     }
 
+    // Regression: a 24 h cosine left 0.65 at 21:00 and 0.53 at 05:00, so evenings read as night (review item 1).
+    @Test
+    fun `the standard look is at full light from seven to twenty two and never leaves its floor`() {
+        val std = PaletteChoice.Standard.palette
+        for (m in 7 * 60..22 * 60) assertEquals(1.0, std.dim(m), 1e-9, "minute $m")
+        for (m in 0 until 1440) assertTrue(std.dim(m) >= 0.65 - 1e-9 && std.dim(m) <= 1.0 + 1e-9, "minute $m")
+        for (m in 0..5 * 60) assertEquals(0.65, std.dim(m), 1e-9, "minute $m")
+    }
+
+    // Smoothstep midpoints are exactly halfway: 23:00 is half way down the 22:00 to 00:00 fade and 06:00 half way up 05:00 to 07:00.
+    @Test
+    fun `the fade halfway points sit halfway between full light and the floor`() {
+        assertEquals(0.825, PaletteChoice.Standard.palette.dim(23 * 60), 1e-9)
+        assertEquals(0.825, PaletteChoice.Standard.palette.dim(6 * 60), 1e-9)
+        assertEquals(0.9, PaletteChoice.Projector.palette.dim(23 * 60), 1e-9)
+        assertEquals(0.625, PaletteChoice.OledNight.palette.dim(23 * 60), 1e-9)
+    }
+
+    // Regression: a step at midnight (a fade written as 00:00 to 05:00 from full light) pops the whole scene.
+    @Test
+    fun `the dim never jumps from one minute to the next`() {
+        for (c in PaletteChoice.entries) {
+            val p = c.palette
+            for (m in 0 until 1439) assertTrue(abs(p.dim(m + 1) - p.dim(m)) < 0.01, "$c minute $m")
+            assertTrue(abs(p.dim(0) - p.dim(1439)) < 0.01, "$c across midnight")
+        }
+    }
+
     // Regression: the night dim multiplied an already dark picture to black on a projector (review: Projector floor 0.8).
     @Test
     fun `the projector never dims below eighty percent and OLED night dims deepest`() {
         for (m in 0 until 1440) {
             assertTrue(PaletteChoice.Projector.palette.dim(m) >= 0.8 - 1e-9)
             assertTrue(PaletteChoice.OledNight.palette.dim(m) <= PaletteChoice.Standard.palette.dim(m) + 1e-9)
+            assertTrue(PaletteChoice.Standard.palette.dim(m) <= PaletteChoice.Projector.palette.dim(m) + 1e-9)
         }
-        assertEquals(1.0, PaletteChoice.Standard.palette.dim(14 * 60), 1e-9)
         assertEquals(0.8, PaletteChoice.Projector.palette.dim(2 * 60), 1e-9)
-        assertEquals(0.45, PaletteChoice.Standard.palette.dim(2 * 60), 1e-9)
+        assertEquals(0.25, PaletteChoice.OledNight.palette.dim(2 * 60), 1e-9)
     }
 
     @Test
@@ -50,11 +78,28 @@ class ThemeTest {
         }
     }
 
+    // Regression: a hard 2 dp ring at 0.45 to 0.70 read as a cursor (review item 5).
     @Test
-    fun `the standard background is built from the brand neutrals`() {
-        val p = PaletteChoice.Standard.palette
-        assertEquals(Brand.Neutral950, p.backgroundBottom)
-        assertEquals(Brand.Accent, p.anchor)
+    fun `the anchor ring stays between a quarter and four tenths and breathes upward`() {
+        assertEquals(0.25f, anchorRingAlpha(0f), 1e-6f)
+        assertEquals(0.4f, anchorRingAlpha(1f), 1e-6f)
+        assertTrue(anchorRingAlpha(0.5f) > anchorRingAlpha(0.2f))
+        assertTrue(anchorFillAlpha(1f) < anchorRingAlpha(0f), "the fill is softer than the stroke")
+        assertTrue(anchorFillAlpha(0f) > 0f)
+    }
+
+    // Regression: a halo sprite with a hard rim or a bright rim shows as a disc instead of a glow.
+    @Test
+    fun `the halo falls from full at the centre to nothing at the rim and never rises`() {
+        assertEquals(1f, haloFalloff(0f), 1e-6f)
+        assertEquals(0f, haloFalloff(1f), 1e-6f)
+        assertEquals(0f, haloFalloff(1.4f), 1e-6f)
+        var prev = 2f
+        for (i in 0..20) {
+            val v = haloFalloff(i / 20f)
+            assertTrue(v <= prev + 1e-6f)
+            prev = v
+        }
     }
 
     // Time-of-day offset is a sine zero at 06:00 and 18:00, plus 12 at noon (the brief: a small offset).

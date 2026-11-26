@@ -89,3 +89,17 @@ internal class Controls(volume: Float = 1f) {
         const val VOLUME_STEP = 0.05f
     }
 }
+
+/** How long the master volume takes to rise from silence at the start of each session. */
+internal const val FADE_IN_MILLIS = 3_000L
+
+/** The master fade-in multiplier 0..1 [elapsedMillis] after the session started: a straight ramp from silence. */
+internal fun fadeIn(elapsedMillis: Long, rampMillis: Long = FADE_IN_MILLIS): Float =
+    (elapsedMillis.toDouble() / rampMillis).coerceIn(0.0, 1.0).toFloat()
+
+private const val OVERLAY_IDLE_MILLIS = 15_000L
+private const val DRIVERS_IDLE_MILLIS = 60_000L
+
+/** Whether the overlay should close: no input for 15 s, or for 60 s while the Drivers panel is open for reading. */
+internal fun overlayExpired(idleMillis: Long, driversOpen: Boolean): Boolean =
+    idleMillis >= if (driversOpen) DRIVERS_IDLE_MILLIS else OVERLAY_IDLE_MILLIS

@@ -8,7 +8,7 @@ Design: `docs/specs/`. Plan: `docs/plans/`. Prior art: `docs/prior-art.md`.
 
 ```sh
 ./kotlin run -m desktopApp                      # desktop
-./kotlin run -m desktopApp -- --fullscreen      # also: --demo, --replay, --tcp host[:port]
+./kotlin run -m desktopApp -- --fullscreen      # also: --demo, --replay, --tcp host[:port], --look standard|projector|oled
 ./kotlin run -m webApp                          # browser; tap to start audio
 ./kotlin run -m androidApp                      # device or emulator
 ./kotlin run -m iosApp                          # Mac only
@@ -21,11 +21,16 @@ Design: `docs/specs/`. Plan: `docs/plans/`. Prior art: `docs/prior-art.md`.
 - TCP: host and port on the connect screen, or `--tcp host[:port]` on desktop (port defaults to 4403).
 - Bluetooth: the connect screen scans and lists radios; pick one. Not on web.
 - WebSocket: under Advanced, a `ws://` or `wss://` address.
-- Saved link: desktop, Android and iOS remember the last demo, TCP or WebSocket link and reconnect after a 5 s countdown you can cancel. A Bluetooth pick and `--replay` are not saved.
+- Saved link: desktop, Android and iOS remember the last demo, TCP or WebSocket link and reconnect after a 5 s countdown you can cancel. A Bluetooth pick and `--replay` are not saved and leave the saved link as it was.
+- An unreachable host shows `Can't reach host:port - retrying` in the status line; the raw error goes to the log.
 
 ## Controls and keys
 
-Click or tap the scene to show the overlay (link, node count, key, mode, section, volume, palette, Drivers); it hides after 15 s. The pointer hides after 3 s idle.
+Click or tap the scene to show the overlay (link, node count, key, mode, section, volume, palette, Drivers); it hides after 15 s without input (60 s while Drivers is open), and scrolls when it is taller than the window. The pointer hides after 3 s idle.
+
+Volume and mute are remembered; each session ramps the master from silence over 3 s. `--look` picks the palette for that launch (Standard, Projector or OLED night); with `--fullscreen` and no saved choice the look is Projector, otherwise Standard.
+
+Status wording: Connecting, Listening (warming up), Connected, Demo mesh, Replaying a capture, Link lost.
 
 | Key | Action |
 | --- | --- |
@@ -50,11 +55,11 @@ Palettes: about 15 instruments (Bell, Marimba, Vibes, Kalimba, Glass chime, Harp
 
 Rotation controls:
 
-- Speed: one turn per 1200 s on a quiet mesh down to 150 s on a busy one, plus a small decaying push per packet.
-- Angle: axis tilt from the 3 h pressure trend (reach when no weather reports), wobble from wind; together never more than 20 degrees.
-- Direction: rising pressure turns it clockwise, falling counter-clockwise (the activity trend when there is no pressure data); a flip eases through a stop and needs 30 minutes since the last.
+- Turn time: one turn per 1200 s on a quiet mesh down to 150 s on a busy one, plus a small decaying push per packet.
+- Angle: axis tilt from the 3 h pressure trend (reach when no weather reports); wobble 1 to 6 degrees from wind, or from relative senders when there is no wind, neutral 3; together never more than 20 degrees.
+- Direction: the first signal with data wins: pressure trend (rising is clockwise), temperature trend (warming is clockwise), battery trend (only nodes whose level moved), activity trend. A flip eases through a stop and needs 30 minutes since the last.
 
-The Drivers button in the overlay lists each parameter with its live value, unit and the signal driving it, or `no data`; it scrolls and hides with the overlay. The demo sweeps these inputs in five minutes: traffic rises and falls, a router, tracker and sensor speak, one node runs low on battery, one sits on high ground, one packet arrives by MQTT, and a pressure fall reverses the rotation once per session (the first pass carries three hours of pressure history to make that possible).
+The Drivers button in the overlay lists each parameter with its live value, unit and the signal driving it, or a plain note such as `holding 8.0 deg - no wind reports` when its signal has no data; direction shows the way the cloud is turning, with the target when they differ. The demo sweeps these inputs in five minutes: traffic rises and falls, a router, tracker and sensor speak, one node runs low on battery, one sits on high ground, one packet arrives by MQTT, and a pressure fall reverses the rotation once per session (the first pass carries three hours of pressure history to make that possible).
 
 ## Log
 
@@ -83,10 +88,11 @@ The render tool runs the simulated mesh through the composer and synth offline. 
 
 | Target | Built | Tests | Run |
 | --- | --- | --- | --- |
-| jvm (Linux) | yes | 334 shared tests pass | desktop app not launched in this check; sound never heard |
-| wasmJs | compiles (`./kotlin build`) | not run in this check | never run in a browser |
+| jvm (Linux) | yes | 599 shared tests pass (521 common, 78 jvm only) | offline renders only on Linux |
+| jvm (macOS, M4) | yes | - | 6 h live run against a real mesh (about 210 nodes): 59.9 fps, p95 18 ms, 340 MB, about 27% of one core, LocalStats delivered, no warnings |
+| wasmJs | compiles (`./kotlin build`) | run with `-p wasmJs`; check for `ERROR` lines | never run in a browser |
 | android | compiles | not run | never run on a device |
-| iOS | never built | never run | never run |
-| Bluetooth, live radio | - | - | not exercised on a live radio from this workspace |
+| iOS | shared and its tests compile for the simulator (`build/ios-result.txt`) | not run | never run |
+| Bluetooth | - | - | not exercised on a live radio |
 
-No person has judged the sound or the visuals; only offline renders and their level statistics have been checked.
+The live run was watched through the log and frame statistics; no person has yet judged the sound or the visuals from it. The real mesh sent no pressure or wind reports (6 nodes with temperature, 20 with battery), so those paths are proven only by tests and the demo.

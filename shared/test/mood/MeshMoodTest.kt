@@ -1,6 +1,7 @@
 package org.meshtastic.ambient.mood
 
 import kotlin.math.abs
+import kotlin.math.exp
 import kotlin.math.ln
 import org.meshtastic.ambient.mesh.LinkState
 import org.meshtastic.ambient.mesh.MeshEvent
@@ -23,6 +24,11 @@ class MeshMoodTest {
         assertEquals(ParamValues.NEUTRAL, s.params)
         assertEquals(RotationTarget.NEUTRAL.copy(directionStrength = 0.0), s.rotation.copy(directionStrength = 0.0))
         assertEquals(600.0, s.rotation.targetPeriodSeconds)
+        assertEquals(0.0, s.density)
+        assertEquals(0.5, s.brightness)
+        assertEquals(0.15, s.tension, 1e-12)
+        assertTrue(s.quiet)
+        assertEquals(0, s.batteryMovedNodes)
     }
 
     @Test
@@ -84,40 +90,6 @@ class MeshMoodTest {
     }
 
     @Test
-    fun `silence follows the log of the time since the last packet from 10 seconds to 10 minutes`() {
-        val m = MeshMood()
-        repeat(3) { m.onEvent(packet(1L + it, 0L)) }
-        assertEquals(0.0, m.advance(10_000).silence, 1e-9)
-        assertEquals(ln(6.0) / ln(60.0), m.advance(60_000).silence, 1e-9)
-        assertEquals(1.0, m.advance(600_000).silence, 1e-9)
-        assertEquals(1.0, m.advance(3 * HOUR).silence, 1e-9)
-    }
-
-    @Test
-    fun `the surge from a packet decays with a 20 second time constant`() {
-        val m = MeshMood()
-        repeat(3) { m.onEvent(packet(1L + it, 0L)) }
-        val s0 = m.advance(0).surge
-        val s20 = m.advance(20_000).surge
-        assertTrue(s0 > 0.0 && s0 < 1.0)
-        assertEquals(kotlin.math.exp(-1.0), ln(1 - s20) / ln(1 - s0), 1e-9)
-    }
-
-    @Test
-    fun `chat counts texts and direct messages and decays with a 10 minute time constant`() {
-        val m = MeshMood()
-        m.onEvent(packet(1, 0, kind = PacketKind.Position))
-        m.onEvent(packet(2, 0, kind = PacketKind.Telemetry))
-        assertEquals(0.0, m.advance(0).chat)
-        m.onEvent(packet(3, 0, kind = PacketKind.Text))
-        m.onEvent(packet(4, 0, kind = PacketKind.Other, toUs = true))
-        val c0 = m.advance(0).chat
-        val c10 = m.advance(10 * MINUTE).chat
-        assertTrue(c0 > 0.0)
-        assertEquals(kotlin.math.exp(-1.0), ln(1 - c10) / ln(1 - c0), 1e-9)
-    }
-
-    @Test
     fun `senders counts distinct nodes heard in the last 45 minutes`() {
         val m = MeshMood()
         m.onEvent(packet(1, 0))
@@ -127,29 +99,6 @@ class MeshMoodTest {
         assertEquals(1.0, m.advance(44 * MINUTE).sendersConfidence, 1e-9)
         assertEquals(1.0 / 3.0, m.advance(50 * MINUTE).sendersConfidence, 1e-9)
         assertEquals(0.0, m.advance(80 * MINUTE).sendersConfidence, 1e-9)
-    }
-
-    @Test
-    fun `arrival ignores the warm up snapshot and counts each later new sender once`() {
-        val m = MeshMood()
-        m.onEvent(MeshEvent.Link(LinkState.WarmingUp, 0))
-        for (n in 1L..3L) m.onEvent(MeshEvent.NodeSeen(n, null, null, true, n))
-        m.onEvent(packet(2, 100))
-        m.onEvent(packet(50, 150))
-        m.onEvent(MeshEvent.Link(LinkState.Connected, 200))
-        assertEquals(0.0, m.advance(200).arrival)
-
-        m.onEvent(packet(1, 300))
-        m.onEvent(packet(3, 300))
-        assertEquals(0.0, m.advance(300).arrival)
-
-        m.onEvent(MeshEvent.NodeSeen(4, null, null, true, 400))
-        m.onEvent(MeshEvent.NodeSeen(4, null, null, true, 400))
-        m.onEvent(packet(4, 400))
-        assertEquals(1 - kotlin.math.exp(-0.5), m.advance(400).arrival, 1e-9)
-
-        m.onEvent(packet(99, 400))
-        assertEquals(1 - kotlin.math.exp(-1.0), m.advance(400).arrival, 1e-9)
     }
 
     @Test
@@ -208,6 +157,7 @@ class MeshMoodTest {
         assertEquals(1.0, s.pressureTrendConfidence, 1e-9)
         assertEquals(-1, s.rotation.direction)
         assertEquals(0.5, s.rotation.directionStrength, 1e-6)
+        assertEquals(0.5, s.params.directionStrength, 1e-6)
         assertEquals(9.0, s.rotation.tiltDegrees, 1e-6)
     }
 
@@ -263,6 +213,7 @@ class MeshMoodTest {
         assertTrue(s.activityTrend < -0.25, "trend ${s.activityTrend}")
         assertEquals(-1, s.rotation.direction)
         assertTrue(s.rotation.directionStrength >= 0.25)
+        assertEquals(s.rotation.directionStrength, s.params.directionStrength, 1e-12)
         assertEquals("activity trend", s.params.drivers.rotationDirection)
     }
 
@@ -331,10 +282,172 @@ class MeshMoodTest {
     fun `an ordinary mesh never gives an out of range value`() {
         val sim = Sim()
         val s = sim.run(3 * 60, 4.0)
-        for (v in listOf(s.activity, s.surge, s.silence, s.reach, s.linkQuality, s.senders, s.chat, s.arrival, s.warmth, s.wind)) {
+        for (v in listOf(s.activity, s.reach, s.linkQuality, s.senders, s.warmth, s.wind, s.density, s.brightness, s.tension)) {
             assertTrue(v in 0.0..1.0)
         }
         assertTrue(abs(s.params.modeLean) <= 1.0)
         assertTrue(s.rotation.tiltDegrees + s.rotation.wobbleDegrees <= 20.0)
+    }
+
+    private fun trendingSeries(m: MeshMood, nodes: List<Long>, perHour: Double, hours: Int = 3, make: (Long, Long, Double) -> MeshEvent) {
+        for (h in 0..hours) for (n in nodes) m.onEvent(make(n, h * HOUR, perHour * h))
+    }
+
+    @Test
+    fun `with no pressure a warming mesh turns the cloud clockwise and a cooling one counter clockwise`() {
+        val warm = MeshMood()
+        trendingSeries(warm, listOf(1, 2, 3), 2.5 / 3) { n, at, d -> environment(n, at, temperature = (10.0 + d).toFloat()) }
+        val w = warm.advance(3 * HOUR + MINUTE)
+        assertEquals(0.5, w.temperatureTrend, 1e-6)
+        assertEquals(1.0, w.temperatureTrendConfidence, 1e-9)
+        assertEquals(1, w.params.rotationDirection)
+        assertEquals(0.5, w.params.directionStrength, 1e-6)
+        assertEquals("temperature trend", w.params.drivers.rotationDirection)
+        val cool = MeshMood()
+        trendingSeries(cool, listOf(1, 2, 3), -2.5 / 3) { n, at, d -> environment(n, at, temperature = (10.0 + d).toFloat()) }
+        val c = cool.advance(3 * HOUR + MINUTE)
+        assertEquals(-1, c.params.rotationDirection)
+        assertEquals("temperature trend", c.params.drivers.rotationDirection)
+    }
+
+    @Test
+    fun `pressure outranks temperature for the direction`() {
+        val m = MeshMood()
+        fallingPressure(m, listOf(1, 2, 3), -1.0)
+        for (h in 0..3) for (n in 1L..3L) m.onEvent(environment(n, h * HOUR, temperature = (10.0 + h).toFloat()))
+        val s = m.advance((3.5 * HOUR).toLong())
+        assertEquals(-1, s.params.rotationDirection)
+        assertEquals("pressure trend", s.params.drivers.rotationDirection)
+    }
+
+    @Test
+    fun `with no weather a charging battery turns the cloud clockwise and only nodes whose level moved count`() {
+        val m = MeshMood()
+        trendingSeries(m, listOf(1, 2, 3), 2.0) { n, at, d -> health(n, at, (50 + d).toInt()) }
+        for (h in 0..3) for (n in 10L..14L) m.onEvent(health(n, h * HOUR, 80))
+        val s = m.advance(3 * HOUR + MINUTE)
+        assertEquals(3, s.batteryMovedNodes)
+        assertEquals(0.6, s.batteryTrend, 1e-9)
+        assertEquals(1.0, s.batteryTrendConfidence, 1e-9)
+        assertEquals(1, s.params.rotationDirection)
+        assertEquals("battery trend", s.params.drivers.rotationDirection)
+    }
+
+    @Test
+    fun `a draining battery turns the cloud counter clockwise and an externally powered one counts for nothing`() {
+        val m = MeshMood()
+        trendingSeries(m, listOf(1, 2, 3), -2.0) { n, at, d -> health(n, at, (60 + d).toInt()) }
+        for (h in 0..3) for (n in 10L..14L) m.onEvent(health(n, h * HOUR, 101))
+        val s = m.advance(3 * HOUR + MINUTE)
+        assertEquals(3, s.batteryMovedNodes)
+        assertEquals(-0.6, s.batteryTrend, 1e-9)
+        assertEquals(-1, s.params.rotationDirection)
+    }
+
+    @Test
+    fun `temperature outranks battery for the direction`() {
+        val m = MeshMood()
+        trendingSeries(m, listOf(1, 2, 3), 2.0) { n, at, d -> health(n, at, (50 + d).toInt()) }
+        trendingSeries(m, listOf(1, 2, 3), -2.5 / 3) { n, at, d -> environment(n, at, temperature = (10.0 + d).toFloat()) }
+        val s = m.advance(3 * HOUR + MINUTE)
+        assertEquals(-1, s.params.rotationDirection)
+        assertEquals("temperature trend", s.params.drivers.rotationDirection)
+    }
+
+    @Test
+    fun `without wind the wobble follows relative senders and reaches the driven maximum for a full mesh`() {
+        val m = MeshMood()
+        for (n in 1L..30L) m.onEvent(packet(n, n))
+        val s = m.advance(MINUTE)
+        assertEquals("senders", s.params.drivers.wobble)
+        assertEquals(6.0, s.rotation.wobbleDegrees, 1e-9)
+        assertEquals(6.0, s.params.wobbleDegrees, 1e-9)
+    }
+
+    @Test
+    fun `the neutral wobble sits inside the driven range and wind wins over senders`() {
+        val none = MeshMood().advance(MINUTE)
+        assertEquals(3.0, none.params.wobbleDegrees, 1e-9)
+        assertNull(none.params.drivers.wobble)
+        val m = MeshMood()
+        for (n in 1L..30L) m.onEvent(packet(n, n))
+        m.onEvent(environment(1, 0, wind = 0f))
+        m.onEvent(environment(2, 0, wind = 0f))
+        val s = m.advance(MINUTE)
+        assertEquals("wind", s.params.drivers.wobble)
+        assertEquals(1.0, s.params.wobbleDegrees, 1e-9)
+    }
+
+    @Test
+    fun `a connect burst during warm up feeds no signal`() {
+        val m = MeshMood()
+        m.onEvent(MeshEvent.Link(LinkState.WarmingUp, 0))
+        for (i in 0 until 60) m.onEvent(packet(1L + i % 20, 100L + i * 10))
+        val warming = m.advance(2000)
+        assertTrue(m.warmingUp)
+        assertTrue(warming.warmingUp)
+        assertEquals(0.0, warming.activityConfidence)
+        assertEquals(0.0, warming.sendersConfidence)
+        assertEquals(0.0, warming.density)
+        assertEquals(0.0, m.fastRate)
+        assertEquals(0, m.activeNodes(HOUR))
+        assertTrue(!warming.quiet, "warming up is never quiet")
+        m.onEvent(MeshEvent.Link(LinkState.Connected, 3000))
+        m.onEvent(packet(1, 3100))
+        assertEquals(0.1, m.advance(3100).activityConfidence, 1e-9)
+        assertEquals(1, m.activeNodes(HOUR))
+    }
+
+    @Test
+    fun `the fast rate is one packet over the 2 second time constant and decays by it`() {
+        val m = MeshMood()
+        m.onEvent(packet(1, 0))
+        assertEquals(0.5, m.fastRate, 1e-9)
+        m.advance(2000)
+        assertEquals(0.5 * exp(-1.0), m.fastRate, 1e-9)
+    }
+
+    @Test
+    fun `active nodes counts the nodes heard inside the window parameter`() {
+        val m = MeshMood()
+        m.onEvent(packet(1, 0))
+        m.onEvent(packet(2, 10 * MINUTE))
+        m.advance(20 * MINUTE)
+        assertEquals(1, m.activeNodes(15 * MINUTE))
+        assertEquals(2, m.activeNodes(30 * MINUTE))
+        assertEquals(0, m.activeNodes(5 * MINUTE))
+    }
+
+    @Test
+    fun `channel utilization at 50 percent adds its full weight to density and tension`() {
+        val m = MeshMood()
+        m.onEvent(MeshEvent.Vitals(50f, null, 0))
+        val s = m.advance(MINUTE)
+        assertEquals(0.2, s.density, 1e-9)
+        assertEquals(0.3 + 0.3 * 0.5, s.tension, 1e-9)
+    }
+
+    @Test
+    fun `a better link than usual is brighter and a worse one is more tense by the link weight`() {
+        val good = Sim()
+        good.run(12 * 60, 2.0, snr = -10f)
+        val g = good.run(90, 2.0, snr = 10f)
+        val bad = Sim()
+        bad.run(12 * 60, 2.0, snr = 10f)
+        val b = bad.run(90, 2.0, snr = -10f)
+        assertEquals(1.0, g.brightness, 1e-9)
+        assertEquals(0.0, b.brightness, 1e-9)
+        assertEquals(0.3, b.tension - g.tension, 1e-9)
+    }
+
+    @Test
+    fun `a rate that is high for this mesh is not quiet however small it is in absolute terms`() {
+        val sim = Sim()
+        sim.run(23 * 60, 0.5)
+        val busy = sim.run(60, 4.0)
+        assertTrue(!busy.quiet, "activity ${busy.activity}")
+        val calm = Sim()
+        calm.run(23 * 60, 12.0)
+        assertTrue(calm.run(60, 3.0).quiet)
     }
 }

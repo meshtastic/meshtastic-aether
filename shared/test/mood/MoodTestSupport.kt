@@ -49,9 +49,12 @@ internal class Sim(val mood: MeshMood = MeshMood(), private val nodes: Int = 10)
 }
 
 internal fun MoodSnapshot.allFinite(): Boolean = listOf(
-    packetsPerMinute, activity, activityConfidence, surge, surgeConfidence, silence, silenceConfidence, reach, reachConfidence,
-    linkQuality, linkQualityConfidence, senders, sendersConfidence, chat, chatConfidence, arrival, arrivalConfidence,
-    warmth, warmthConfidence, wind, windConfidence, pressureTrend, pressureTrendConfidence, activityTrend, activityTrendConfidence,
+    activity, activityConfidence, reach, reachConfidence, linkQuality, linkQualityConfidence, senders, sendersConfidence,
+    warmth, warmthConfidence, wind, windConfidence, pressureTrend, pressureTrendConfidence, temperatureTrend, temperatureTrendConfidence,
+    batteryTrend, batteryTrendConfidence, activityTrend, activityTrendConfidence, density, brightness, tension,
     rotation.targetPeriodSeconds, rotation.tiltDegrees, rotation.wobbleDegrees, rotation.impulse, rotation.directionStrength,
+    params.directionStrength,
     params.rotationPeriodSeconds, params.tiltDegrees, params.wobbleDegrees, params.phraseSpeed, params.modeLean, params.scalePentatonicBias,
 ).all { it.isFinite() }
+
+internal fun health(node: Long, at: Long, battery: Int?) = MeshEvent.Health(node, battery, null, null, at)

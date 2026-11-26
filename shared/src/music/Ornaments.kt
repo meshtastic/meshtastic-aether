@@ -53,8 +53,14 @@ object Ornaments {
     const val CALL_BRIGHTNESS_LIFT = 0.15f
     const val BROADCAST_WIDEN = 0.05f
 
-    /** Smoothed packets per second above which per-packet notes thin to a sample. */
-    const val THIN_RATE = 25.0
+    /**
+     * Smoothed (2 s) packets per second above which per-packet notes thin to a sample: the 15 slots carry about 4 packets
+     * a second at one note and an echo each, so this is where a burst starts to drop notes.
+     */
+    const val THIN_RATE = 4.0
+
+    /** No ornament sits further from the centre than this, channel offset included. */
+    const val MAX_PAN = 0.7f
 
     /** Centre of the filtered noise for an encrypted breath; the same for every node, so it carries no melody. */
     const val BREATH_HZ = 1500.0
@@ -73,11 +79,14 @@ object Ornaments {
     fun pitchHz(role: Int, band: Int, chord: Chord, rootHz: Double): Double =
         rootHz * Theory.justRatio(chord.roleSemitone(role)) * 2.0.pow(band)
 
-    /** SNR -20..10 dB maps to 0.2..0.9; null (unknown) is the middle of the range. */
+    /** SNR -20..10 dB maps to 0.25..0.6 (under 9 dB of loudness); null (unknown) is the middle of the range. */
     fun velocityFor(snr: Float?): Float {
         val frac = if (snr == null) 0.5 else ((snr + 20.0) / 30.0).coerceIn(0.0, 1.0)
-        return (0.2 + 0.7 * frac).toFloat()
+        return (MIN_VELOCITY + (MAX_VELOCITY - MIN_VELOCITY) * frac).toFloat()
     }
+
+    const val MIN_VELOCITY = 0.25
+    const val MAX_VELOCITY = 0.6
 
     /** Unknown hops sit at the middle distance; MQTT adds one more hop. */
     fun effectiveHops(hops: Int?, viaMqtt: Boolean): Int =
@@ -102,12 +111,12 @@ object Ornaments {
         PacketKind.Encrypted -> Articulation(Voice.Breath, 1.5, 0.3)
     }
 
-    /** Pan -0.8 (west) to 0.8 (east) from the bearing of [from] relative to [reference]; centre when either is unknown. */
+    /** Pan -[MAX_PAN] (west) to [MAX_PAN] (east) from the bearing of [from] relative to [reference]; centre when either is unknown. */
     fun panFor(from: GeoPoint?, reference: GeoPoint?): Float {
         if (from == null || reference == null) return 0f
         val dx = (from.lon - reference.lon) * cos(reference.lat * kotlin.math.PI / 180.0)
         val dy = from.lat - reference.lat
         val len = hypot(dx, dy)
-        return if (len < 1e-9) 0f else (0.8 * dx / len).toFloat()
+        return if (len < 1e-9) 0f else (MAX_PAN * dx / len).toFloat()
     }
 }

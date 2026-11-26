@@ -10,6 +10,8 @@ import org.meshtastic.ambient.mesh.MeshEvent
 internal class CoverageReporter(
     private val coverage: Coverage = Coverage(),
     private val write: (String) -> Unit,
+    /** Appended to each line, for example a count the mood knows and the tally does not. */
+    private val extra: () -> String = { "" },
 ) {
     private var nextMillis = Long.MIN_VALUE
 
@@ -20,7 +22,7 @@ internal class CoverageReporter(
 
     fun tick(nowMillis: Long) {
         if (nextMillis == Long.MIN_VALUE || nowMillis < nextMillis) return
-        write(coverage.describe())
+        write(coverage.describe() + extra())
         nextMillis = nowMillis + PERIOD_MILLIS
     }
 

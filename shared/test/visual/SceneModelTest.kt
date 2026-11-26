@@ -350,10 +350,11 @@ class SceneModelTest {
     }
 
     @Test
-    fun `the scene is dimmer at 2am than at 2pm and never fully dark`() {
-        assertTrue(SceneModel.nightDim(2 * 60) < SceneModel.nightDim(14 * 60))
-        assertEquals(1.0, SceneModel.nightDim(14 * 60), 1e-9)
-        assertTrue((0 until 1440).all { SceneModel.nightDim(it) in 0.4..1.0 })
+    fun `the night dim holds full light all day and the floor after midnight`() {
+        for (m in 7 * 60..22 * 60) assertEquals(1.0, SceneModel.nightDim(m), 1e-9)
+        for (m in 0..5 * 60) assertEquals(SceneModel.NIGHT_DIM_MIN, SceneModel.nightDim(m), 1e-9)
+        assertTrue((0 until 1440).all { SceneModel.nightDim(it) in SceneModel.NIGHT_DIM_MIN..1.0 })
+        assertTrue(SceneModel.nightDim(23 * 60) < 1.0 && SceneModel.nightDim(23 * 60) > SceneModel.NIGHT_DIM_MIN)
     }
 
     private val me = 0x00AA0001L

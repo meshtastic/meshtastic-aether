@@ -9,12 +9,28 @@ import kotlin.js.ExperimentalWasmJsInterop
 @JsFun("() => { if (document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen(); }")
 private external fun toggleBrowserFullscreen()
 
-@JsFun("() => { try { if (navigator.wakeLock) navigator.wakeLock.request('screen').catch(() => {}); } catch (e) {} }")
-private external fun requestWakeLock()
+@JsFun(
+    """() => {
+  let lock = null;
+  const request = async () => {
+    if (lock && !lock.released) return;
+    if (!navigator.wakeLock) { console.warn('keepawake: the browser has no wake lock; the screen may blank'); return; }
+    try {
+      lock = await navigator.wakeLock.request('screen');
+      console.info('keepawake: wake lock held');
+    } catch (e) {
+      console.warn('keepawake: wake lock refused: ' + e);
+    }
+  };
+  request();
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') request(); });
+}""",
+)
+private external fun keepAwake()
 
 @OptIn(ExperimentalComposeUiApi::class)
 fun main() {
-    requestWakeLock()
+    keepAwake()
     ComposeViewport {
         App(onToggleFullscreen = ::toggleBrowserFullscreen)
     }

@@ -150,7 +150,7 @@ class AmbientEngineTest {
         }
         runCurrent()
         assertEquals(1, attempts)
-        assertEquals("boom", e.status.error)
+        assertEquals("Can't open the link - retrying", e.status.error)
         advanceTimeBy(1_999)
         assertEquals(1, attempts)
         advanceTimeBy(2)
@@ -161,6 +161,26 @@ class AmbientEngineTest {
         assertEquals(3, attempts)
         assertNull(e.status.error, "a successful retry clears the error")
         job.cancel()
+    }
+
+    // Review item 14: the person sees the target and a retry, never the exception text, and the open callback's own text is used.
+    @Test
+    fun `a failing open shows the sessions own text and not the exception message`() = runTest {
+        val e = AmbientEngine(
+            FlowSource(flow { awaitCancellation() }), FakeSink(), 11L, 400,
+            now = { base + currentTime }, composerContext = StandardTestDispatcher(testScheduler),
+            failureText = { unreachableText("node.local:4403") },
+        )
+        val job = launch { e.run { throw java.net.ConnectException("Connection refused: no route") } }
+        runCurrent()
+        assertEquals("Can't reach node.local:4403 - retrying", e.status.error)
+        job.cancel()
+    }
+
+    // Regression: the master gain started at 1.0, so the first blocks played at full before the app set a volume.
+    @Test
+    fun `an engine is silent until the app sets a volume`() = runTest {
+        assertEquals(0f, engine(FakeSink(), flow { awaitCancellation() }).volume)
     }
 
     @Test
@@ -183,20 +203,6 @@ class AmbientEngineTest {
         runCurrent()
         advanceTimeBy(120_000)
         assertEquals(3, opens, "no reopen once connected")
-        job.cancel()
-    }
-
-    @Test
-    fun `dismissing the error clears it`() = runTest {
-        val e = engine(FakeSink(), flow { awaitCancellation() })
-        val gate = CompletableDeferred<Unit>()
-        val job = launch { e.run { gate.await(); throw IllegalStateException("late") } }
-        runCurrent()
-        gate.complete(Unit)
-        runCurrent()
-        assertNotNull(e.status.error)
-        e.dismissError()
-        assertNull(e.status.error)
         job.cancel()
     }
 

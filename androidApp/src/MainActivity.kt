@@ -8,6 +8,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import kotlinx.coroutines.CompletableDeferred
 import org.meshtastic.ambient.ble.AndroidBlePermissions
+import org.meshtastic.ambient.log.Log
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.core.view.WindowCompat
@@ -30,6 +31,7 @@ class MainActivity : ComponentActivity() {
         }
         AndroidAppContext.context = applicationContext
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        Log.i("keepawake", "screen-on flag set")
         var immersive = true
         val controller = WindowCompat.getInsetsController(window, window.decorView)
         controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE

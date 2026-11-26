@@ -26,14 +26,14 @@ class RotationTest {
     }
 
     @Test
-    fun `the neutral target reproduces today's yaw and pitch swing`() {
+    fun `the neutral target turns once in ten minutes and swings the pitch three degrees every ninety seconds`() {
         val r = RotationIntegrator()
         var s = r.step(0.0, RotationTarget.NEUTRAL)
         for (i in 1..3000) {
             s = r.step(0.1, RotationTarget.NEUTRAL)
             val t = i * 0.1
             assertEquals(2 * PI * t / 600.0, s.yawRadians, 1e-9)
-            assertEquals(8.0 * deg * sin(2 * PI * t / 90.0), s.tiltRadians + s.wobbleRadians, 1e-9)
+            assertEquals(3.0 * deg * sin(2 * PI * t / 90.0), s.tiltRadians + s.wobbleRadians, 1e-9)
         }
         assertEquals(1, s.direction)
     }

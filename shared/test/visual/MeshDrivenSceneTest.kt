@@ -3,6 +3,7 @@ package org.meshtastic.ambient.visual
 import org.meshtastic.ambient.mesh.GeoPoint
 import org.meshtastic.ambient.mesh.MeshEvent
 import org.meshtastic.ambient.mesh.PacketKind
+import org.meshtastic.ambient.mood.MeshMood
 import org.meshtastic.ambient.mood.ParamDrivers
 import org.meshtastic.ambient.mood.ParamValues
 import org.meshtastic.ambient.mood.RotationIntegrator
@@ -35,22 +36,22 @@ class MeshDrivenSceneTest {
     private fun heard(node: Long, kind: PacketKind = PacketKind.Text, rssi: Int? = -80, viaMqtt: Boolean = false, payload: Int? = null, text: Int? = null, channel: Int? = null) =
         MeshEvent.PacketHeard(node, kind, 5f, rssi, 0, viaMqtt, 0, payloadBytes = payload, textLength = text, channel = channel)
 
-    private fun driven(period: Double = 600.0, dir: Int = 1, tilt: Double = 0.0, wobble: Double = 8.0) = ParamValues(
+    private fun driven(period: Double = 600.0, dir: Int = 1, tilt: Double = 0.0, wobble: Double = 8.0, strength: Double = 1.0) = ParamValues(
         rotationPeriodSeconds = period, rotationDirection = dir, tiltDegrees = tilt, wobbleDegrees = wobble,
-        drivers = ParamDrivers(rotationDirection = "pressure trend"),
+        drivers = ParamDrivers(rotationDirection = "pressure trend"), directionStrength = strength,
     )
 
-    // Regression: neutral params must reproduce today's closed form: one turn in 600 s, an 8 degree pitch swing every 90 s.
+    // Regression: neutral params must reproduce today's closed form: one turn in 600 s, a 3 degree pitch swing every 90 s (review item 4: neutral wobble 3).
     @Test
-    fun `neutral params turn once in ten minutes and swing the pitch eight degrees every ninety seconds`() {
+    fun `neutral params turn once in ten minutes and swing the pitch three degrees every ninety seconds`() {
         val s = scene()
         s.at(0.0)
         s.run(0.0, 22.5, 0.5)
-        assertEquals(8.0 * deg, s.rotation.tiltRadians + s.rotation.wobbleRadians, 1e-9)
+        assertEquals(3.0 * deg, s.rotation.tiltRadians + s.rotation.wobbleRadians, 1e-9)
         s.run(22.5, 45.0, 0.5)
         assertEquals(0.0, s.rotation.tiltRadians + s.rotation.wobbleRadians, 1e-9)
         s.run(45.0, 67.5, 0.5)
-        assertEquals(-8.0 * deg, s.rotation.tiltRadians + s.rotation.wobbleRadians, 1e-9)
+        assertEquals(-3.0 * deg, s.rotation.tiltRadians + s.rotation.wobbleRadians, 1e-9)
         s.run(67.5, 300.0, 0.5)
         assertEquals(PI, s.rotation.yawRadians, 1e-9)
         s.run(300.0, 600.0)
@@ -126,6 +127,39 @@ class MeshDrivenSceneTest {
     }
 
     // Comfort cap: tilt plus wobble at most 20 degrees off level, however large the request.
+    private fun pressureMood(perHour: Double): MeshMood {
+        val m = MeshMood()
+        val hour = 3_600_000L
+        var t = 0L
+        while (t <= 7 * hour / 2) {
+            for (n in 1L..3L) m.onEvent(MeshEvent.Environment(n, null, null, (1010.0 + perHour * t / hour).toFloat(), null, null, t))
+            t += hour / 2
+        }
+        return m
+    }
+
+    // Regression: the scene passed strength 1.0 whenever a driver existed, so a 0.2 trend flipped the cloud (review item 2).
+    // A pressure fall of 0.4 hPa an hour is a trend of 0.2, below the 0.25 band; 1.0 an hour is 0.5, above it.
+    @Test
+    fun `a faint pressure fall from the mood never turns the cloud and a clear one does`() {
+        val faint = pressureMood(-0.4).advance(7 * 3_600_000L / 2)
+        assertEquals(-1, faint.params.rotationDirection)
+        assertEquals(0.2, faint.params.directionStrength, 1e-4)
+        val a = scene()
+        a.onParams(faint.params)
+        a.at(0.0)
+        a.run(0.0, 600.0)
+        assertEquals(1, a.rotation.direction, "inside the hysteresis band it keeps turning clockwise")
+
+        val clear = pressureMood(-1.0).advance(7 * 3_600_000L / 2)
+        assertEquals(0.5, clear.params.directionStrength, 1e-6)
+        val b = scene()
+        b.onParams(clear.params)
+        b.at(0.0)
+        b.run(0.0, 120.0)
+        assertEquals(-1, b.rotation.direction, "a clear fall turns it counter-clockwise")
+    }
+
     @Test
     fun `tilt plus wobble never leave twenty degrees`() {
         val s = scene()
@@ -233,22 +267,21 @@ class MeshDrivenSceneTest {
         assertEquals(now, s.anchorBreath, 1e-6, "the linked 8 s cycle at scale 3 takes 24 s")
     }
 
-    // Neutral: cloud breath today is 1 + 0.03 sin(2 pi t / 60), hand-evaluated at the quarter points.
+    // The cloud breath is 1 plus or minus 0.03 over 60 s and the drift at most 0.012 (the brief); neither may leave that.
     @Test
-    fun `neutral breathing and drift equal the closed forms they replaced`() {
+    fun `neutral breathing repeats every sixty seconds inside three percent and drift stays small`() {
         val s = scene()
         s.at(0.0)
-        s.run(0.0, 15.0, 0.5)
-        assertEquals(1.03, s.cloudBreath, 1e-9)
-        s.run(15.0, 45.0, 0.5)
-        assertEquals(0.97, s.cloudBreath, 1e-9)
-        val node = 0x1234L
-        assertEquals(0.012 * kotlin.math.sin(45.0 * 0.037 + driftPhase(node, 1)), s.driftX(node), 1e-9)
-    }
-
-    private fun driftPhase(node: Long, salt: Int): Double {
-        val bits = org.meshtastic.ambient.music.Rng.mix(node + salt)
-        return (bits ushr 11) * (1.0 / (1L shl 53)) * 2 * PI
+        val first = ArrayList<Double>()
+        s.run(0.0, 60.0, 0.5) { first += s.cloudBreath }
+        val second = ArrayList<Double>()
+        s.run(60.0, 120.0, 0.5) { second += s.cloudBreath }
+        for (i in first.indices) assertEquals(first[i], second[i], 1e-9, "sample $i")
+        assertTrue(first.all { it in 0.97 - 1e-9..1.03 + 1e-9 })
+        assertTrue(first.max() > 1.029 && first.min() < 0.971, "it uses the full range")
+        for (node in listOf(0x1234L, 7L, 99L)) {
+            assertTrue(abs(s.driftX(node)) <= 0.012 + 1e-9 && abs(s.driftY(node)) <= 0.012 + 1e-9)
+        }
     }
 
     // Regression: absent attributes must leave the orb and the ripple exactly as drawn before.

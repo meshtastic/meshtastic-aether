@@ -1,7 +1,6 @@
 package org.meshtastic.ambient.music
 
 import org.meshtastic.ambient.mesh.GeoPoint
-import org.meshtastic.ambient.mesh.LinkState
 import org.meshtastic.ambient.mesh.MeshEvent
 import org.meshtastic.ambient.mesh.PacketKind
 import org.meshtastic.ambient.mesh.resolveRelay
@@ -53,8 +52,6 @@ class Composer(seed: Long, private val sampleRate: Int, pinFormFull: Boolean = f
     private val rng = Rng.stream(seed, 3)
     private val harmony = Harmony(seed)
     private val form = Form(seed, pinFormFull)
-    /** Short-window pace (thinning, quiet detection, density) the 5 minute mood cannot give; warm-up state lives here. */
-    private val crowd = Crowd()
     private val mood = MeshMood()
     private val scales = ScalePicker()
     private var snapshot = MoodSnapshot.NEUTRAL
@@ -108,14 +105,14 @@ class Composer(seed: Long, private val sampleRate: Int, pinFormFull: Boolean = f
     fun onEvent(e: MeshEvent) {
         mood.onEvent(e)
         when (e) {
-            is MeshEvent.Link -> crowd.warmingUp = e.state == LinkState.WarmingUp
+            is MeshEvent.Link -> Unit
             is MeshEvent.NodeSeen -> {
                 val info = nodes.getOrPut(e.node) { NodeInfo(null, Long.MIN_VALUE) }
                 info.position?.let { sumLat -= it.lat; sumLon -= it.lon; positioned-- }
                 info.position = e.position
                 e.position?.let { sumLat += it.lat; sumLon += it.lon; positioned++ }
                 onNodeTraits(e)
-                if (e.firstThisSession && !crowd.warmingUp) {
+                if (e.firstThisSession && !mood.warmingUp) {
                     swells++
                     sessionVoices.remove(e.node)
                     sessionVoices += e.node
@@ -124,7 +121,6 @@ class Composer(seed: Long, private val sampleRate: Int, pinFormFull: Boolean = f
             }
             is MeshEvent.NodeGone -> {
                 nodes.remove(e.node)?.position?.let { sumLat -= it.lat; sumLon -= it.lon; positioned-- }
-                crowd.forget(e.node)
                 traits.remove(e.node)?.altitudeM?.let { altitudeSum -= it; altitudeCount-- }
                 readings.remove(e.node)
                 sessionVoices.remove(e.node)
@@ -137,13 +133,12 @@ class Composer(seed: Long, private val sampleRate: Int, pinFormFull: Boolean = f
                 observe(e.node, Quantity.Wind, e.windMps, e.atMillis)
                 observe(e.node, Quantity.Lux, e.lux, e.atMillis)
             }
-            is MeshEvent.Vitals -> crowd.onVitals(e.channelUtilPct)
             is MeshEvent.Self -> {
                 selfNode = e.node
                 e.position?.let { origin = it }
             }
             is MeshEvent.Neighbors -> onNeighbors(e)
-            is MeshEvent.Route -> if (!crowd.warmingUp && e.nodes.isNotEmpty()) {
+            is MeshEvent.Route -> if (!mood.warmingUp && e.nodes.isNotEmpty()) {
                 pendingRoutes += e.nodes.take(MAX_ROUTE_NODES)
             }
             is MeshEvent.PacketHeard -> onPacket(e)
@@ -152,7 +147,7 @@ class Composer(seed: Long, private val sampleRate: Int, pinFormFull: Boolean = f
                 it.voltage = e.voltage ?: it.voltage
                 it.uptimeSeconds = e.uptimeSeconds ?: it.uptimeSeconds
             }
-            is MeshEvent.Stats -> Unit
+            is MeshEvent.Stats, is MeshEvent.Vitals -> Unit
         }
     }
 
@@ -179,7 +174,7 @@ class Composer(seed: Long, private val sampleRate: Int, pinFormFull: Boolean = f
     private fun observe(node: Long, q: Quantity, v: Float?, at: Long) {
         if (v == null || !v.isFinite()) return
         weather.observe(q, v, at)
-        if (q == Quantity.Wind && !crowd.warmingUp) {
+        if (q == Quantity.Wind && !mood.warmingUp) {
             val prev = readings[node]?.get(q)
             if (prev != null && at - prev.atMillis <= WEATHER_MS && v - prev.value >= GUST_DELTA_MPS) {
                 pendingGusts += node to v - prev.value
@@ -199,7 +194,7 @@ class Composer(seed: Long, private val sampleRate: Int, pinFormFull: Boolean = f
 
     /** At most one dyad a minute: the reporter and the first neighbor the composer already knows. */
     private fun onNeighbors(e: MeshEvent.Neighbors) {
-        if (crowd.warmingUp) return
+        if (mood.warmingUp) return
         if (lastDyadMs != Long.MIN_VALUE && e.atMillis - lastDyadMs < DYAD_MS) return
         val other = e.neighbors.firstOrNull { it != e.node && it in nodes } ?: return
         lastDyadMs = e.atMillis
@@ -207,12 +202,12 @@ class Composer(seed: Long, private val sampleRate: Int, pinFormFull: Boolean = f
     }
 
     private fun onPacket(e: MeshEvent.PacketHeard) {
-        if (crowd.warmingUp) return
-        crowd.onPacket(e.atMillis, e.from, e.snr)
+        if (mood.warmingUp) return
         nodes.getOrPut(e.from) { NodeInfo(null, Long.MIN_VALUE) }.lastHeard = e.atMillis
         farewelled.remove(e.from)
         if (e.kind == PacketKind.Text) forceChord = true
-        val keep = crowd.fastRate <= Ornaments.THIN_RATE || rng.nextDouble() < Ornaments.THIN_RATE / crowd.fastRate
+        val fastRate = mood.fastRate
+        val keep = fastRate <= Ornaments.THIN_RATE || rng.nextDouble() < Ornaments.THIN_RATE / fastRate
         if (!keep && e.kind != PacketKind.Text) return
         pending.addLast(e)
         if (pending.size > MAX_PENDING) pending.removeFirst()
@@ -221,7 +216,6 @@ class Composer(seed: Long, private val sampleRate: Int, pinFormFull: Boolean = f
     fun advance(nowFrame: Long, lookaheadFrames: Long, moment: LocalMoment): ComposerOutput {
         val windowEnd = nowFrame + lookaheadFrames
         val day = Day.at(moment)
-        crowd.advanceTo(moment.epochMillis)
         snapshot = mood.advance(moment.epochMillis)
         val notes = ArrayList<NoteEvent>()
         val controls = ArrayList<ControlEvent>()
@@ -243,7 +237,7 @@ class Composer(seed: Long, private val sampleRate: Int, pinFormFull: Boolean = f
         runDayEvents(nowFrame, moment, day, notes)
         runGestures(nowFrame, moment, notes)
         runFarewells(nowFrame, moment, notes)
-        if (swells > 0 && !crowd.warmingUp) {
+        if (swells > 0 && !mood.warmingUp) {
             swells = 0
             val level = form.levels(nowFrame / sampleRate.toDouble()).getValue(Voice.Pad)
             val length = clip(nowFrame, sec(NEW_NODE_SWELL_SECONDS))
@@ -359,9 +353,8 @@ class Composer(seed: Long, private val sampleRate: Int, pinFormFull: Boolean = f
     private fun runLoops(nowFrame: Long, to: Long, day: DayState, moment: LocalMoment, notes: MutableList<NoteEvent>) {
         val chord = harmony.current
         val tonesPerLoop = chord.voiceSemitones
-        val crowdDensity = crowd.density(moment.epochMillis)
-        val active = (LOOP_DAY_WEIGHT * day.density + (1 - LOOP_DAY_WEIGHT) * crowdDensity).coerceIn(0.0, 1.0)
-        val quiet = crowd.rate < QUIET_RATE && !crowd.warmingUp
+        val active = (LOOP_DAY_WEIGHT * day.density + (1 - LOOP_DAY_WEIGHT) * snapshot.density).coerceIn(0.0, 1.0)
+        val quiet = snapshot.quiet
         for (loop in loops) {
             while (loop.nextFrame < to) {
                 val at = max(loop.nextFrame, nowFrame)
@@ -494,7 +487,7 @@ class Composer(seed: Long, private val sampleRate: Int, pinFormFull: Boolean = f
         val baseBrightness = Ornaments.brightnessFor(e.kind, e.hopsTaken, e.viaMqtt)
         val brightness = ((if (call) min(1f, baseBrightness + Ornaments.CALL_BRIGHTNESS_LIFT) else baseBrightness) +
             Traits.rssiBrightnessDelta(e.rssi) + Traits.powerBrightnessDelta(tr?.voltage, tr?.batteryPct)).coerceIn(0f, 1f)
-        val pan = (Ornaments.panFor(nodes[e.from]?.position, reference()) + Traits.channelPanOffset(e.channel)).coerceIn(-1f, 1f)
+        val pan = (Ornaments.panFor(nodes[e.from]?.position, reference()) + Traits.channelPanOffset(e.channel)).coerceIn(-Ornaments.MAX_PAN, Ornaments.MAX_PAN)
         val chord = harmony.current
         val band = (Ornaments.band(e.from) + Traits.registerOffset(tr?.altitudeM, meanAltitude())).coerceIn(0, MAX_BAND)
         val wobble = Traits.batteryDetuneCents(tr?.batteryPct)
@@ -527,7 +520,7 @@ class Composer(seed: Long, private val sampleRate: Int, pinFormFull: Boolean = f
         var anchor = start
         var slack = 0L
         var firstAt = -1L
-        if (!breath && crowd.rate < QUIET_RATE) {
+        if (!breath && snapshot.quiet) {
             val motif = Motifs.of(e.from)
             var offset = 0.0
             var played = 0
@@ -663,7 +656,7 @@ class Composer(seed: Long, private val sampleRate: Int, pinFormFull: Boolean = f
     /** A pressure drop is a low pad swell, a wind gust a breath of noise, a temperature crossing a bell on the new mode color. */
     private fun runGestures(nowFrame: Long, moment: LocalMoment, notes: MutableList<NoteEvent>) {
         val ms = moment.epochMillis
-        if (!crowd.warmingUp && ms >= nextGestureMs) {
+        if (!mood.warmingUp && ms >= nextGestureMs) {
             nextGestureMs = ms + GESTURE_SAMPLE_MS
             weatherNow(Quantity.Pressure, ms)?.let { if (pressure.sample(ms, it)) lowSwellUntilMs = ms + LOW_SWELL_WAIT_MS }
             weatherNow(Quantity.Temperature, ms)?.let {
@@ -704,7 +697,7 @@ class Composer(seed: Long, private val sampleRate: Int, pinFormFull: Boolean = f
     /** One farewell at a time for a node silent over an hour: its pitch and a chord tone below it, falling. */
     private fun runFarewells(nowFrame: Long, moment: LocalMoment, notes: MutableList<NoteEvent>) {
         val ms = moment.epochMillis
-        if (crowd.warmingUp || ms < nextFarewellMs || !bedVisible(nowFrame)) return
+        if (mood.warmingUp || ms < nextFarewellMs || !bedVisible(nowFrame)) return
         nextFarewellMs = ms + FAREWELL_CHECK_MS
         var gone: Long? = null
         var oldest = Long.MAX_VALUE
@@ -733,18 +726,18 @@ class Composer(seed: Long, private val sampleRate: Int, pinFormFull: Boolean = f
     private fun texture(day: DayState, tSec: Double, nowMs: Long): Texture {
         fun scaled(q: Quantity): Double = weatherNow(q, nowMs)?.let { weather.scale(q, it).toDouble() } ?: 0.5
         val levels = form.levels(tSec)
-        val density = crowd.density(nowMs)
+        val density = snapshot.density
         val pad = min(1f, levels.getValue(Voice.Pad) * (1f + 0.4f * density.toFloat()))
         val decayN = (day.decayScale - 1.0) / 0.6
         val humidity = scaled(Quantity.Humidity)
         return Texture(
             rootHz = keyHz,
-            brightness = unit(0.3 * scaled(Quantity.Temperature) + 0.4 * day.brightness + 0.3 * crowd.brightness),
+            brightness = unit(0.3 * scaled(Quantity.Temperature) + 0.4 * day.brightness + 0.3 * snapshot.brightness),
             reverbSize = unit(0.3 + 0.4 * humidity + 0.3 * decayN),
             reverbWet = unit(0.3 + 0.4 * humidity + 0.2 * decayN),
             detune = unit(0.1 + 0.5 * (1 - scaled(Quantity.Pressure))),
             shimmer = unit(0.5 * scaled(Quantity.Lux) + 0.5 * levels.getValue(Voice.Shimmer)),
-            noise = unit(0.1 + 0.5 * scaled(Quantity.Wind) + 0.2 * crowd.tension),
+            noise = unit(0.1 + 0.5 * scaled(Quantity.Wind) + 0.2 * snapshot.tension),
             layerLevels = mapOf(
                 Voice.Drone to levels.getValue(Voice.Drone),
                 Voice.Pad to pad,
@@ -765,7 +758,6 @@ class Composer(seed: Long, private val sampleRate: Int, pinFormFull: Boolean = f
         val PERIODS = listOf(17.0, 19.0, 23.0, 29.0, 31.0, 37.0, 41.0, 43.0, 47.0, 53.0, 59.0)
         val PAD_PANS = floatArrayOf(-0.5f, -0.17f, 0.17f, 0.5f)
         const val TEXTURE_SECONDS = 5.0
-        const val QUIET_RATE = 0.1
         const val MAX_PENDING = 512
         const val DAY_MS = 24L * 3600 * 1000
         const val WEATHER_MS = 3600L * 1000

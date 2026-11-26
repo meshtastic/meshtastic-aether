@@ -14,9 +14,9 @@ object RotationTargets {
     /** Hard floor: one turn never faster than this. */
     const val MIN_PERIOD_SECONDS = 150.0
 
-    /** Today's pitch swing is 8 degrees about level: no steady tilt, an 8 degree wobble. */
+    /** No steady tilt and a 3 degree wobble, inside the driven 1 to 6 range (today's pitch swing was 8, past its own maximum). */
     const val NEUTRAL_TILT_DEGREES = 0.0
-    const val NEUTRAL_WOBBLE_DEGREES = 8.0
+    const val NEUTRAL_WOBBLE_DEGREES = 3.0
 
     const val TILT_MIN_DEGREES = 4.0
     const val TILT_MAX_DEGREES = 14.0
@@ -25,6 +25,12 @@ object RotationTargets {
 
     /** A pressure change of this many hPa per 3 h (very rapid in meteorology) is the full trend range. */
     const val PRESSURE_FULL_SCALE_HPA = 6.0
+
+    /** A temperature change of this many degrees per 3 h (a fast morning warm-up) is the full trend range. */
+    const val TEMPERATURE_FULL_SCALE_C = 5.0
+
+    /** A battery level change of this many points per 3 h (a solar node charging) is the full trend range. */
+    const val BATTERY_FULL_SCALE_PCT = 10.0
 
     /** Wind speed that gives the largest wobble. */
     const val WIND_FULL_SCALE_MPS = 15.0
@@ -48,22 +54,40 @@ object RotationTargets {
         return lerp(fromReach, fromPressure, clamp01(pressureConfidence))
     }
 
-    /** Wobble amplitude from wind (0..1 of full scale), 1 to 6 degrees when driven. */
-    fun wobbleDegrees(wind: Double, confidence: Double): Double =
-        lerp(NEUTRAL_WOBBLE_DEGREES, WOBBLE_MIN_DEGREES + (WOBBLE_MAX_DEGREES - WOBBLE_MIN_DEGREES) * clamp01(wind), clamp01(confidence))
-
-    /** The sign of the pressure trend if known, else of the activity trend, else +1 (today's way). */
-    fun direction(pressureTrend: Double, pressureConfidence: Double, activityTrend: Double, activityTrendConfidence: Double): Int = when {
-        pressureConfidence > 0.0 -> sign(pressureTrend)
-        activityTrendConfidence > 0.0 -> sign(activityTrend)
-        else -> 1
+    /**
+     * Wobble amplitude, 1 to 6 degrees when driven: from wind (0..1 of full scale) when it is reported, else from relative
+     * senders (0..1), else the neutral 3 degrees. Each blends toward the next as its confidence falls.
+     */
+    fun wobbleDegrees(wind: Double, windConfidence: Double, senders: Double = 0.5, sendersConfidence: Double = 0.0): Double {
+        val fromSenders = lerp(NEUTRAL_WOBBLE_DEGREES, wobbleFor(senders), clamp01(sendersConfidence))
+        return lerp(fromSenders, wobbleFor(wind), clamp01(windConfidence))
     }
 
-    /** How far the evidence behind [direction] is from neutral, 0..1; the integrator needs 0.25. */
-    fun directionStrength(pressureTrend: Double, pressureConfidence: Double, activityTrend: Double, activityTrendConfidence: Double): Double = when {
-        pressureConfidence > 0.0 -> clamp01(abs(pressureTrend))
-        activityTrendConfidence > 0.0 -> clamp01(abs(activityTrend))
-        else -> 0.0
+    private fun wobbleFor(unit: Double) = WOBBLE_MIN_DEGREES + (WOBBLE_MAX_DEGREES - WOBBLE_MIN_DEGREES) * clamp01(unit)
+
+    /** Where the rotation direction comes from, in priority order. */
+    enum class DirectionSource(val label: String?) { Pressure("pressure trend"), Temperature("temperature trend"), Battery("battery trend"), Activity("activity trend"), None(null) }
+
+    /** The target direction (+1 or -1), how far past neutral its evidence is (0..1) and which signal supplied it. */
+    data class DirectionChoice(val direction: Int, val strength: Double, val source: DirectionSource)
+
+    /**
+     * The sign of the first trend that has data and is not flat: pressure (rising clockwise), then temperature (warming
+     * clockwise), then battery (charging clockwise, only nodes whose level moved), then the activity trend once its
+     * strength reaches [RotationIntegrator.HYSTERESIS]. With none, clockwise at strength 0 (today's way).
+     */
+    fun chooseDirection(
+        pressure: Double, pressureConfidence: Double,
+        temperature: Double, temperatureConfidence: Double,
+        battery: Double, batteryConfidence: Double,
+        activity: Double, activityConfidence: Double,
+    ): DirectionChoice = when {
+        pressureConfidence > 0.0 && pressure != 0.0 -> DirectionChoice(sign(pressure), clamp01(abs(pressure)), DirectionSource.Pressure)
+        temperatureConfidence > 0.0 && temperature != 0.0 -> DirectionChoice(sign(temperature), clamp01(abs(temperature)), DirectionSource.Temperature)
+        batteryConfidence > 0.0 && battery != 0.0 -> DirectionChoice(sign(battery), clamp01(abs(battery)), DirectionSource.Battery)
+        activityConfidence > 0.0 && abs(activity) >= RotationIntegrator.HYSTERESIS ->
+            DirectionChoice(sign(activity), clamp01(abs(activity)), DirectionSource.Activity)
+        else -> DirectionChoice(1, 0.0, DirectionSource.None)
     }
 
     /** [tilt] limited to 0..20 degrees; non-finite counts as 0. */

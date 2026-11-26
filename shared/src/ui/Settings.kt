@@ -30,23 +30,41 @@ internal class MemoryStore : KeyValueStore {
     }
 }
 
-/** What the app remembers between launches: the last link choice and the palette. */
+/** What the app remembers between launches: the last link choice, the palette, the volume and the mute. */
 internal class Settings(private val store: KeyValueStore) {
-    /** The link to reconnect to; null when none was chosen or the last one cannot be saved. */
+    /** The link to reconnect to; null when none was saved. A choice that cannot be encoded leaves the saved link as it was. */
     var link: LinkChoice?
         get() = store.get(KEY_LINK)?.let(::decodeLink)
         set(value) {
-            val encoded = value?.let(::encodeLink)
-            if (encoded == null) store.remove(KEY_LINK) else store.put(KEY_LINK, encoded)
+            if (value == null) {
+                store.remove(KEY_LINK)
+                return
+            }
+            encodeLink(value)?.let { store.put(KEY_LINK, it) }
         }
 
+    /** The palette the person chose, or null when none was ever saved. */
+    val savedPalette: PaletteChoice?
+        get() = PaletteChoice.entries.firstOrNull { it.name == store.get(KEY_PALETTE) }
+
     var palette: PaletteChoice
-        get() = PaletteChoice.entries.firstOrNull { it.name == store.get(KEY_PALETTE) } ?: PaletteChoice.Standard
+        get() = savedPalette ?: PaletteChoice.Standard
         set(value) = store.put(KEY_PALETTE, value.name)
+
+    /** Master volume 0..1 before muting; full when nothing valid is saved. */
+    var volume: Float
+        get() = store.get(KEY_VOLUME)?.toFloatOrNull()?.takeIf { it.isFinite() }?.coerceIn(0f, 1f) ?: 1f
+        set(value) = store.put(KEY_VOLUME, value.coerceIn(0f, 1f).toString())
+
+    var muted: Boolean
+        get() = store.get(KEY_MUTED) == "1"
+        set(value) = store.put(KEY_MUTED, if (value) "1" else "0")
 
     private companion object {
         const val KEY_LINK = "link"
         const val KEY_PALETTE = "palette"
+        const val KEY_VOLUME = "volume"
+        const val KEY_MUTED = "muted"
     }
 }
 

@@ -5,6 +5,7 @@ import org.meshtastic.ambient.mood.ParamValues
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 class DriversPanelTest {
     // Regression: the direction row has no unit, and a joined "value unit" would end in a space.
@@ -26,7 +27,8 @@ class DriversPanelTest {
         for (p in ParamValues.NEUTRAL.describe()) {
             assertFalse(paramValueText(p).isBlank(), p.name)
             assertFalse(paramValueText(p).endsWith(" "), p.name)
-            assertEquals("no data", paramDriverText(p), p.name)
+            val text = paramDriverText(p)
+            assertTrue(text == "no data" || text.startsWith("holding "), "${p.name}: $text")
         }
     }
 }

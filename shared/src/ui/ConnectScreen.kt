@@ -31,7 +31,13 @@ private const val DEFAULT_WS_URL = "ws://meshtastic.local:80/ws"
 private const val DEFAULT_HOST = "meshtastic.local"
 
 /** A pending automatic reconnect: shown as a banner with a cancel button while [countdown] runs. */
-internal class PendingConnect(val label: String, val countdown: Countdown)
+internal class PendingConnect(val link: LinkChoice, val countdown: Countdown) {
+    val label: String get() = link.label()
+
+    /** The banner line for [seconds] left. */
+    fun text(seconds: Int): String =
+        if (link == LinkChoice.Demo) "Starting the demo in $seconds s" else "Connecting to $label in $seconds s"
+}
 
 /** A short name for a link, for the countdown banner. */
 internal fun LinkChoice.label(): String = when (this) {
@@ -40,6 +46,34 @@ internal fun LinkChoice.label(): String = when (this) {
     is LinkChoice.Tcp -> "$host:$port"
     is LinkChoice.WebSocket -> url
     is LinkChoice.Ble -> radio.name ?: radio.address
+}
+
+/** The TCP fields read as a link, or the reason they cannot be: a blank port means the default, anything else must be 1..65535. */
+internal sealed interface TcpEntry {
+    data class Valid(val link: LinkChoice.Tcp) : TcpEntry
+
+    data class Invalid(val message: String) : TcpEntry
+}
+
+internal const val PORT_ERROR = "Port must be a number from 1 to 65535"
+
+internal fun tcpEntry(host: String, port: String): TcpEntry {
+    val h = host.trim()
+    if (h.isEmpty()) return TcpEntry.Invalid("Enter the node's host")
+    val p = port.trim()
+    if (p.isEmpty()) return TcpEntry.Valid(LinkChoice.Tcp(h, LinkChoice.DEFAULT_TCP_PORT))
+    val number = p.toIntOrNull()
+    return if (number == null || number !in 1..MAX_TCP_PORT) TcpEntry.Invalid(PORT_ERROR) else TcpEntry.Valid(LinkChoice.Tcp(h, number))
+}
+
+private const val MAX_TCP_PORT = 65_535
+
+/** Which button of the connect screen was pressed last, so a failure shows beside it. */
+private enum class Section { Demo, Tcp, Ble, WebSocket }
+
+@Composable
+private fun FailureText(failure: String?, show: Boolean) {
+    if (show && failure != null) Text(failure, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
 }
 
 /**
@@ -55,10 +89,18 @@ internal fun ConnectScreen(
     modifier: Modifier = Modifier,
 ) {
     val platform = remember { getPlatform() }
+    val bluetooth = remember { bleSupported() }
     var host by remember { mutableStateOf(lastTcp?.host ?: DEFAULT_HOST) }
     var port by remember { mutableStateOf((lastTcp?.port ?: LinkChoice.DEFAULT_TCP_PORT).toString()) }
     var ws by remember { mutableStateOf(DEFAULT_WS_URL) }
     var advanced by remember { mutableStateOf(false) }
+    var chosen by remember { mutableStateOf<Section?>(null) }
+    fun choose(section: Section, link: LinkChoice) {
+        chosen = section
+        onChoose(link)
+    }
+    val tcp = tcpEntry(host, port)
+    val directLink = platform.supportsTcp || bluetooth
     Column(
         modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(ScreenGutter),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -66,42 +108,63 @@ internal fun ConnectScreen(
     ) {
         Text("Meshtastic Ambient", style = MaterialTheme.typography.headlineMedium)
         Text(
-            "Listen-only. Nothing leaves this device but the radio link.",
+            "It only listens. Nothing is sent to the mesh.",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Column(Modifier.widthIn(max = MaxContentWidth).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            FailureText(failure, show = chosen == null)
             if (pending != null && !pending.countdown.cancelled) {
                 val seconds = pending.countdown.secondsLeft
                 Text(
-                    "Connecting to ${pending.label} in $seconds s",
+                    pending.text(seconds),
                     style = MaterialTheme.typography.bodyLarge,
-                    modifier = Modifier.semantics { contentDescription = "Connecting to ${pending.label} in $seconds seconds" },
+                    modifier = Modifier.semantics { contentDescription = pending.text(seconds).replace(" s", " seconds") },
                 )
                 TextButton(pending.countdown::cancel, Modifier.heightIn(min = MinTouch)) { Text("Cancel") }
             }
-            Button({ onChoose(LinkChoice.Demo) }, Modifier.fillMaxWidth().heightIn(min = MinTouch)) { Text("Start the demo") }
-            Text("Connect a radio", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 12.dp))
-            if (platform.supportsTcp) {
-                OutlinedTextField(host, { host = it }, Modifier.fillMaxWidth(), label = { Text("Node host") }, singleLine = true)
-                OutlinedTextField(port, { port = it.filter(Char::isDigit) }, Modifier.fillMaxWidth(), label = { Text("Port") }, singleLine = true)
-                Button(
-                    { onChoose(LinkChoice.parseTcp("${host.trim()}:$port") ?: LinkChoice.Tcp(host.trim(), LinkChoice.DEFAULT_TCP_PORT)) },
-                    Modifier.fillMaxWidth().heightIn(min = MinTouch),
-                    enabled = host.isNotBlank(),
-                ) { Text("Connect over TCP") }
+            Button({ choose(Section.Demo, LinkChoice.Demo) }, Modifier.fillMaxWidth().heightIn(min = MinTouch)) { Text("Start the demo") }
+            FailureText(failure, show = chosen == Section.Demo)
+            if (directLink) {
+                Text("Connect a radio", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 12.dp))
+            } else {
+                Text("Connect to a node's WebSocket", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 12.dp))
             }
-            if (bleSupported()) BluetoothSection { onChoose(LinkChoice.Ble(it)) }
-            TextButton({ advanced = !advanced }, Modifier.heightIn(min = MinTouch)) { Text(if (advanced) "Hide advanced" else "Advanced") }
-            if (advanced) {
+            if (platform.supportsTcp) {
+                val portError = (tcp as? TcpEntry.Invalid)?.message?.takeIf { host.isNotBlank() }
+                OutlinedTextField(host, { host = it }, Modifier.fillMaxWidth(), label = { Text("Node host") }, singleLine = true)
+                OutlinedTextField(
+                    port,
+                    { port = it.filter(Char::isDigit) },
+                    Modifier.fillMaxWidth(),
+                    label = { Text("Port") },
+                    singleLine = true,
+                    isError = portError != null,
+                    supportingText = portError?.let { { Text(it) } },
+                )
+                Button(
+                    { (tcp as? TcpEntry.Valid)?.let { choose(Section.Tcp, it.link) } },
+                    Modifier.fillMaxWidth().heightIn(min = MinTouch),
+                    enabled = tcp is TcpEntry.Valid,
+                ) { Text("Connect over TCP") }
+                FailureText(failure, show = chosen == Section.Tcp)
+            }
+            if (bluetooth) {
+                BluetoothSection { choose(Section.Ble, LinkChoice.Ble(it)) }
+                FailureText(failure, show = chosen == Section.Ble)
+            }
+            if (directLink) {
+                TextButton({ advanced = !advanced }, Modifier.heightIn(min = MinTouch)) { Text(if (advanced) "Hide advanced" else "Advanced") }
+            }
+            if (advanced || !directLink) {
                 OutlinedTextField(ws, { ws = it }, Modifier.fillMaxWidth(), label = { Text("WebSocket URL") }, singleLine = true)
                 Button(
-                    { onChoose(LinkChoice.WebSocket(ws.trim())) },
+                    { choose(Section.WebSocket, LinkChoice.WebSocket(ws.trim())) },
                     Modifier.fillMaxWidth().heightIn(min = MinTouch),
                     enabled = ws.isNotBlank(),
                 ) { Text("Connect over WebSocket") }
+                FailureText(failure, show = chosen == Section.WebSocket)
             }
-            failure?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
         }
     }
 }

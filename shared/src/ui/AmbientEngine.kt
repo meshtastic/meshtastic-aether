@@ -51,6 +51,8 @@ data class EngineStatus(
     val error: String? = null,
     /** The mesh-driven parameters in force; the overlay's Drivers panel lists them. */
     val params: ParamValues = ParamValues.NEUTRAL,
+    /** The way the cloud is actually turning: -1, 0 or +1; null before the first frame. The Drivers panel shows it next to the target. */
+    val turningDirection: Int? = null,
 )
 
 /** Whether the radio link is up: everything but `Connecting` and `Lost` shows the field in full color. */
@@ -65,6 +67,7 @@ private class TickResult(
     val mode: String,
     val section: String,
     val params: ParamValues,
+    val batteryMoved: Int,
 )
 
 /**
@@ -73,7 +76,8 @@ private class TickResult(
  * `[rendered, rendered + lookahead)`, hands the notes to the synth and the same notes back to the main thread
  * through a second channel. The scene and the status are touched only by the coroutine that calls [run]. A packet's
  * ripple fires when the sink's playback frame reaches the frame its note was scheduled for. [pinFormFull] holds the
- * long form at its full level (demo mode).
+ * long form at its full level (demo mode). [failureText] turns a failed link open into the line the person sees; the raw exception goes
+ * to the log only. The engine starts silent: the app raises [volume].
  */
 class AmbientEngine(
     private val source: MeshSource,
@@ -84,6 +88,7 @@ class AmbientEngine(
     private val now: () -> Long = ::nowMillis,
     pinFormFull: Boolean = false,
     private val composerContext: CoroutineContext = Dispatchers.Default,
+    private val failureText: (Throwable) -> String = { unreachableText(null) },
 ) {
     private val sampleRate = sink.sampleRate
     private val lookaheadFrames = lookaheadMillis.toLong() * sampleRate / 1000
@@ -91,13 +96,14 @@ class AmbientEngine(
     private val composer = Composer(seed, sampleRate, pinFormFull)
     private val synth = Synth(sampleRate)
     private val rendered = AtomicLong(0L)
-    private val gainBits = AtomicInt(1f.toRawBits())
-    private var smoothedGain = 1f
+    private val gainBits = AtomicInt(0f.toRawBits())
+    private var smoothedGain = 0f
     private val inbound = Channel<MeshEvent>(Channel.UNLIMITED)
     private val outbound = Channel<TickResult>(Channel.UNLIMITED)
     private val link = MutableStateFlow(LinkState.Connecting)
     private val tally = Tally()
-    private val coverage = CoverageReporter(write = { Log.i(TAG, it) })
+    private var batteryMoved = 0
+    private val coverage = CoverageReporter(write = { Log.i(TAG, it) }, extra = { " batt_moved=$batteryMoved" })
     private var notesThisMinute = 0
     private var nextSummaryMillis = Long.MIN_VALUE
     private var lastLogged = ""
@@ -112,7 +118,7 @@ class AmbientEngine(
     var texture: Texture? = null
         private set
 
-    /** Master volume 0..1, applied after the synth's limiter with a short glide. */
+    /** Master volume 0..1, applied after the synth's limiter with a short glide; silent until set. */
     var volume: Float
         get() = Float.fromBits(gainBits.load())
         set(v) = gainBits.store(v.coerceIn(0f, 1f).toRawBits())
@@ -136,11 +142,6 @@ class AmbientEngine(
     /** [playbackFrame] in seconds. */
     fun playbackSeconds(): Double = playbackFrame().toDouble() / sampleRate
 
-    /** Clears the shown error; the overlay calls this once its auto-hide time has passed. */
-    fun dismissError() {
-        status = status.copy(error = null)
-    }
-
     /**
      * Runs until cancelled; [afterStart] opens a live link once the sink and source collector are up. A failure is
      * shown and retried with backoff, and a lost link is re-opened the same way.
@@ -160,7 +161,7 @@ class AmbientEngine(
                     throw e
                 } catch (e: Throwable) {
                     Log.e(TAG, "mesh source failed", e)
-                    status = status.copy(error = e.message ?: e::class.simpleName)
+                    status = status.copy(error = SOURCE_FAILED)
                 }
             }
             launch { keepLinkOpen(afterStart) }
@@ -182,7 +183,7 @@ class AmbientEngine(
                 throw e
             } catch (e: Throwable) {
                 Log.e(TAG, "link open failed", e)
-                status = status.copy(error = e.message ?: e::class.simpleName)
+                status = status.copy(error = failureText(e))
                 delay(backoff.next())
             }
         }
@@ -233,7 +234,11 @@ class AmbientEngine(
         }
         scene.minuteOfDay = r.minuteOfDay
         scene.onParams(r.params)
-        status = status.copy(nodes = scene.orbs.size, key = r.key, mode = r.mode, section = r.section, params = r.params)
+        batteryMoved = r.batteryMoved
+        status = status.copy(
+            nodes = scene.orbs.size, key = r.key, mode = r.mode, section = r.section, params = r.params,
+            turningDirection = scene.rotation.direction,
+        )
     }
 
     private suspend fun composerLoop(firstTick: CompletableDeferred<Unit>) {
@@ -265,7 +270,7 @@ class AmbientEngine(
         val day = Day.at(moment)
         val key = NOTE_NAMES[day.rootSemitones.roundToInt().mod(12)]
         val section = composer.sectionAt(renderedNow.toDouble() / sampleRate)
-        outbound.trySend(TickResult(out.notes, texture, moment.minuteOfDay, key, day.mode.name, section, composer.params()))
+        outbound.trySend(TickResult(out.notes, texture, moment.minuteOfDay, key, day.mode.name, section, composer.params(), composer.moodSnapshot().batteryMovedNodes))
         logSummary(ms, key, day.mode.name, section)
     }
 
@@ -292,6 +297,7 @@ class AmbientEngine(
         const val GAIN_GLIDE = 0.002f
         const val SUMMARY_MILLIS = 60_000L
         const val TAG = "engine"
+        const val SOURCE_FAILED = "The mesh source stopped"
         val NOTE_NAMES = listOf("C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B")
     }
 }

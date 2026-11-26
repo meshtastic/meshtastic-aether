@@ -88,6 +88,9 @@ class OrnamentsTest {
     fun `unknown SNR gives the middle velocity and the range is limited`() {
         val lo = Ornaments.velocityFor(-20f)
         val hi = Ornaments.velocityFor(10f)
+        assertEquals(0.25f, lo, 1e-6f)
+        assertEquals(0.6f, hi, 1e-6f)
+        assertTrue(20 * kotlin.math.log10(hi / lo) < 9f, "the SNR span is under 9 dB of loudness")
         assertEquals((lo + hi) / 2, Ornaments.velocityFor(null), 1e-6f)
         assertEquals(lo, Ornaments.velocityFor(-60f))
         assertEquals(hi, Ornaments.velocityFor(40f))
@@ -98,8 +101,8 @@ class OrnamentsTest {
     @Test
     fun `pan follows the bearing east right west left and centre when unknown`() {
         val here = GeoPoint(45.0, 10.0)
-        assertTrue(Ornaments.panFor(GeoPoint(45.0, 10.5), here) > 0.7f)
-        assertTrue(Ornaments.panFor(GeoPoint(45.0, 9.5), here) < -0.7f)
+        assertEquals(0.7f, Ornaments.panFor(GeoPoint(45.0, 10.5), here), 1e-6f)
+        assertEquals(-0.7f, Ornaments.panFor(GeoPoint(45.0, 9.5), here), 1e-6f)
         assertEquals(0f, Ornaments.panFor(GeoPoint(45.5, 10.0), here), 1e-6f)
         assertEquals(0f, Ornaments.panFor(null, here))
         assertEquals(0f, Ornaments.panFor(here, null))

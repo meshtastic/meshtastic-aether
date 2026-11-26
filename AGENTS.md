@@ -24,8 +24,8 @@ Run `./kotlin --help` to see the available commands, or `./kotlin <command> --he
 `MeshSource` -> `Composer` -> `Synth` -> `AudioSink`. `visual` and `ui` read the engine; nothing flows back.
 
 - `shared/src/mesh`: `MeshEvent` and the sources (SDK, simulated, demo, replay) plus the packet, payload and telemetry mappers. Nothing downstream sees a protobuf.
-- `shared/src/mood`: `MeshMood` folds events into slow, self-normalized signals and the rotation target; `ParamValues` is the immutable result (value, unit and driver per parameter) that the composer, scene and overlay read. Neutral equals today's constants.
-- `shared/src/music`: the pure, deterministic `Composer` (theory, harmony, form, day, weather, ornaments, crowd). It schedules by sample frame.
+- `shared/src/mood`: `MeshMood` folds events into slow, self-normalized signals and the rotation target; `ParamValues` is the immutable result (with the rotation direction and its strength) (value, unit and driver per parameter) that the composer, scene and overlay read. Neutral equals today's constants.
+- `shared/src/music`: the pure, deterministic `Composer` (theory, harmony, form, day, weather, ornaments); mesh activity, SNR and channel utilization come from `MeshMood`, not a separate crowd model. It schedules by sample frame.
 - `shared/src/synth`: pure Kotlin DSP; `Synth` renders `NoteEvent`s and `Texture` changes to stereo float blocks.
 - `shared/src/audio`: `AudioSink` plus the block pump; `shared/src@<platform>/audio` holds the per-platform output.
 - `shared/src/ui`: `AmbientEngine` (owns the clock, composer, synth and sink; each tick carries `composer.params()` to the scene and the overlay's Drivers panel; feeds `Coverage` and logs its line), connect screen, controls, overlay, settings.
@@ -34,6 +34,8 @@ Run `./kotlin --help` to see the available commands, or `./kotlin <command> --he
 - Apps: `desktopApp`, `androidApp`, `iosApp`, `webApp`. Tools: `tools` (offline render and analyze), `blescan` (Bluetooth scan check).
 
 The contracts `MeshEvent.kt`, `NoteEvent.kt` and `AudioSink.kt` change only on purpose, with every consumer updated.
+
+Launch flags: `--demo`, `--replay`, `--tcp host[:port]`, `--fullscreen`, `--look standard|projector|oled` (`shared/src/ui/LaunchArgs.kt`). Volume and mute persist in `Settings`; the master fades in over 3 s each session.
 
 ## Commands
 
@@ -50,7 +52,7 @@ iOS builds only on a Mac: `./kotlin build -m iosApp`.
 
 ## Agent build rule
 
-In the agent workspace run every build and test as `flock $TMPDIR/aether-kotlin.lock ./kotlin <args>` from the repo root, one at a time, with `KOTLIN_CLI_NO_WELCOME_BANNER=1`. Never run `git commit`, `git add`, `git checkout`, `git reset` or `git stash`; edit only the paths you own.
+In the agent workspace run every build and test as `flock /tmp/meshtastic-ambient-kotlin.lock ./kotlin <args>` from the repo root, one at a time, with `KOTLIN_CLI_NO_WELCOME_BANNER=1`. Never run `git commit`, `git add`, `git checkout`, `git reset` or `git stash`; edit only the paths you own. The lock file is any path every agent shares; `/tmp/meshtastic-ambient-kotlin.lock` is the one used here.
 
 ## Test rules
 

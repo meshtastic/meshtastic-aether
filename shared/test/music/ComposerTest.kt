@@ -145,9 +145,17 @@ class ComposerTest {
 
     @Test
     fun `a slow trickle of packets is not thinned and every packet sounds its note and one echo`() {
-        val stream = malletComposer(3L, sr).drivePackets(10, 10, PacketKind.Routing)
+        val stream = malletComposer(3L, sr).drivePackets(2, 10, PacketKind.Routing)
         // Only the first few packets meet a quiet mesh and play a 3 to 4 note motif instead of one note.
-        assertTrue(stream.notes.size in 2 * 100..2 * 100 + 6 * 3, "${stream.notes.size} notes for 100 packets")
+        assertTrue(stream.notes.size in 2 * 20..2 * 20 + 6 * 3, "${stream.notes.size} notes for 20 packets")
+    }
+
+    // Regression: a thinning threshold no LoRa channel can reach (25 a second) never thins.
+    @Test
+    fun `eight packets a second is thinned to roughly half`() {
+        val stream = malletComposer(3L, sr).drivePackets(8, 10, PacketKind.Routing)
+        assertTrue(stream.notes.size < 130, "${stream.notes.size} notes for 80 packets of two notes each")
+        assertTrue(stream.notes.size > 40, "${stream.notes.size} notes: thinning must keep a sample")
     }
 
     @Test
@@ -156,7 +164,7 @@ class ComposerTest {
         val notes = stream.notes
         for (second in 1..9) {
             val inSecond = notes.count { it.atFrame in (second * sr.toLong())..((second + 1) * sr.toLong() - 1) }
-            assertTrue(inSecond >= 5, "second $second sounded $inSecond notes")
+            assertTrue(inSecond >= 2, "second $second sounded $inSecond notes")
         }
         assertTrue(notes.size < 450, "nothing was thinned: ${notes.size} notes for 1000 packets")
         assertTrue(stream.waits.average() < 1.0, "notes waited ${stream.waits.average()} s: the slot queue is pinned at its TTL")
@@ -193,7 +201,7 @@ class ComposerTest {
         c.onEvent(heard(77L, snr = null, hops = null))
         val n = c.drive(sr / 4L, 3).notes.first { it.voice == Voice.Mallet }
         assertEquals(0f, n.pan)
-        assertEquals(0.55f, n.velocity, 1e-6f)
+        assertEquals(0.425f, n.velocity, 1e-6f)
         assertEquals(0.5f, n.reverbSend, 1e-6f)
         assertTrue(n.pitchHz.isFinite() && n.pitchHz > 0.0)
     }
@@ -456,7 +464,7 @@ class ComposerTest {
         c.advance(f, lookahead, moment(f))
         c.onEvent(heard(77L, atMs = moment(f).epochMillis))
         val mallet = c.drive(f + step, 3).notes.first { it.voice == Voice.Mallet }
-        assertEquals(0.55f, mallet.velocity, 1e-6f)
+        assertEquals(0.425f, mallet.velocity, 1e-6f)
         assertTrue(c.drive(f + 4L * sr, 20).controls.filterIsInstance<ControlEvent.SetTexture>().all { it.texture.layerLevels.keys == bedVoices })
     }
 

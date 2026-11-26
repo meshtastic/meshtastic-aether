@@ -8,7 +8,6 @@ import platform.Foundation.NSUserDefaults
 import platform.Foundation.NSTimeZone
 import platform.Foundation.dateWithTimeIntervalSince1970
 import platform.Foundation.localTimeZone
-import platform.Foundation.secondsFromGMTForDate
 import platform.UIKit.UIDevice
 
 internal class IOSPlatform : Platform {

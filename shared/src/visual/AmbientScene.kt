@@ -25,6 +25,7 @@ import org.meshtastic.ambient.theme.LocalAmbientPalette
 import org.meshtastic.ambient.ui.AmbientEngine
 import androidx.compose.ui.unit.dp
 import kotlin.math.sin
+import kotlin.math.sqrt
 
 private const val DITHER_SIZE = 96
 
@@ -58,6 +59,7 @@ fun AmbientScene(engine: AmbientEngine, modifier: Modifier = Modifier) {
     val pa = remember { Projected() }
     val pb = remember { Projected() }
     val buffers = remember { OrbBuffers() }
+    val halos = remember { HaloPainter(haloSprite()) }
     LaunchedEffect(engine) {
         while (true) {
             androidx.compose.runtime.withFrameNanos { scene.frameStats.record(it) }
@@ -79,6 +81,7 @@ fun AmbientScene(engine: AmbientEngine, modifier: Modifier = Modifier) {
         val t = engine.playbackSeconds()
         val minute = scene.minuteOfDay
         val dim = palette.dim(minute).toFloat()
+        val coreDim = sqrt(dim)
         scene.aspect = size.width.toDouble() / size.height.coerceAtLeast(1f)
         val sat = scene.saturation
         val hueDeg = timeHueOffset(minute) + scene.hueShift
@@ -173,13 +176,15 @@ fun AmbientScene(engine: AmbientEngine, modifier: Modifier = Modifier) {
             )
         }
         val ring = scene.anchorBreath.toFloat()
-        val ringAlpha = if (scene.linked) 0.45f + 0.25f * ring else 0.2f + 0.6f * ring
         resolve(null, pa)
+        val ringCenter = Offset(pa.x.toFloat(), pa.y.toFloat())
+        val ringRadius = radius * ANCHOR_RING * (0.9f + 0.2f * ring) * pa.scale.toFloat()
+        halos.draw(this, ringCenter, ringRadius * 1.6f, palette.anchor, anchorFillAlpha(ring) * coreDim)
         drawCircle(
-            palette.anchor.copy(alpha = ringAlpha * dim),
-            radius = radius * ANCHOR_RING * (0.9f + 0.2f * ring) * pa.scale.toFloat(),
-            center = Offset(pa.x.toFloat(), pa.y.toFloat()),
-            style = Stroke(width = 2.dp.toPx() * pa.scale.toFloat()),
+            palette.anchor.copy(alpha = anchorRingAlpha(ring) * coreDim),
+            radius = ringRadius,
+            center = ringCenter,
+            style = Stroke(width = dp1 * pa.scale.toFloat()),
         )
         for (idx in 0 until n) {
             val o = buffers.orbs[buffers.order[idx]] ?: continue
@@ -193,18 +198,10 @@ fun AmbientScene(engine: AmbientEngine, modifier: Modifier = Modifier) {
             val haloColor = if (o.haloHueDegrees == 0) color else cool(desaturate(shiftedColor(o.node, o.haloHueDegrees), sat), CloudMotion.coolMix(depthT))
             val haloR = radius * 0.04f * (1f + g.toFloat()) * breath * s * o.haloScale.toFloat()
             val haloAlpha = (orbHaloAlpha(g) * CloudMotion.brightness(depthT) * lift).coerceAtMost(ORB_ALPHA_CAP / 2)
-            drawCircle(
-                Brush.radialGradient(
-                    listOf(haloColor.copy(alpha = haloAlpha * dim), Color.Transparent),
-                    center = c,
-                    radius = haloR * 3f,
-                ),
-                radius = haloR * 3f,
-                center = c,
-            )
+            halos.draw(this, c, haloR * 3f, haloColor, haloAlpha * dim)
             val coreR = maxOf(1.5.dp.toPx(), radius * 0.008f * (0.9f + g.toFloat() * 0.6f)) * breath * s * o.coreSize.toFloat()
             val coreA = (CloudMotion.shadeAlpha(orbCoreAlpha(g), depthT) * o.coreAlpha.toFloat() * lift).coerceAtMost(ORB_ALPHA_CAP)
-            drawCircle(color.copy(alpha = coreA * dim), radius = coreR, center = c)
+            drawCircle(color.copy(alpha = coreA * coreDim), radius = coreR, center = c)
         }
         for (pu in scene.pulses) {
             if (!resolve(pu.fromNode, pa) || !resolve(pu.toNode, pb)) continue

@@ -56,7 +56,7 @@ class ComposerTraitsTest {
     @Test
     fun `a packet with no attributes sounds exactly as before`() {
         val n = first(event = heard(77L))
-        assertEquals(0.55f, n.velocity, 1e-6f)
+        assertEquals(0.425f, n.velocity, 1e-6f)
         assertEquals(0.5f, n.reverbSend, 1e-6f)
         assertEquals(0.31f, n.brightness, 1e-6f)
         assertEquals(0f, n.pan)
@@ -74,11 +74,23 @@ class ComposerTraitsTest {
         assertEquals(0.41f, strong.brightness, 1e-6f)
     }
 
-    // Base velocity for unknown SNR is 0.2 + 0.7 * 0.5 = 0.55; the payload trim is 0.9 empty and 1.1 full.
+    // Base velocity for unknown SNR is the middle of 0.25..0.6 = 0.425; the payload trim is 0.9 empty and 1.1 full.
     @Test
     fun `payload size trims the velocity of the note`() {
-        assertEquals(0.605f, first(event = heard(5L, payload = 237)).velocity, 1e-5f)
-        assertEquals(0.495f, first(event = heard(5L, payload = 0)).velocity, 1e-5f)
+        assertEquals(0.4675f, first(event = heard(5L, payload = 237)).velocity, 1e-5f)
+        assertEquals(0.3825f, first(event = heard(5L, payload = 0)).velocity, 1e-5f)
+    }
+
+    // Regression: a node at the far east or west plus a channel offset used to reach the speaker edge.
+    @Test
+    fun `an ornament never pans past 0 point 7 whatever the channel`() {
+        val setup: Composer.() -> Unit = {
+            origin = GeoPoint(45.0, 10.0)
+            onEvent(MeshEvent.NodeSeen(5L, null, GeoPoint(45.0, 10.5), false, t0))
+            onEvent(MeshEvent.NodeSeen(6L, null, GeoPoint(45.0, 9.5), false, t0))
+        }
+        assertEquals(0.7f, first(setup, heard(5L, channel = 3)).pan, 1e-6f)
+        assertEquals(-0.7f, first(setup, heard(6L, channel = 2)).pan, 1e-6f)
     }
 
     @Test
@@ -259,7 +271,7 @@ class ComposerTraitsTest {
         c.advance(30L * sr, lookahead, moment(30L * sr))
         val snap = c.moodSnapshot()
         assertEquals(t0 + 30_000L, snap.nowMillis)
-        assertTrue(snap.packetsPerMinute > 0.0)
+        assertTrue(snap.activityConfidence > 0.0 && snap.density > 0.0)
         assertEquals(snap.params, c.params())
     }
 

@@ -9,6 +9,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -20,26 +22,16 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
-import org.meshtastic.ambient.mesh.LinkState
 import org.meshtastic.ambient.theme.PaletteChoice
 import kotlin.math.roundToInt
 
 private const val OVERLAY_ALPHA = 0.88f
 private const val PERCENT = 100
 
-internal fun linkText(s: LinkState): String = when (s) {
-    LinkState.Connecting -> "connecting"
-    LinkState.WarmingUp -> "warming up"
-    LinkState.Connected -> "connected"
-    LinkState.Simulated -> "demo mesh"
-    LinkState.Replaying -> "replaying a capture"
-    LinkState.Lost -> "link lost"
-}
-
 /** The shortcut line shown where a keyboard is the usual input. */
 internal const val SHORTCUTS = "H overlay - F fullscreen - M mute - Up and Down volume - D disconnect - Esc close"
 
-/** The hidden overlay: link, node count, key, mode and section, volume, palette, and the way out. Not part of the scene. */
+/** The hidden overlay: link, node count, key, mode and section, volume, palette, and the way out; the whole column scrolls. Not part of the scene. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun StatusOverlay(
@@ -54,10 +46,11 @@ internal fun StatusOverlay(
 ) {
     val colors = MaterialTheme.colorScheme
     Column(
-        modifier.widthIn(max = MaxContentWidth).background(colors.surface.copy(alpha = OVERLAY_ALPHA)).padding(ScreenGutter),
+        modifier.widthIn(max = MaxContentWidth).background(colors.surface.copy(alpha = OVERLAY_ALPHA))
+            .verticalScroll(rememberScrollState()).padding(ScreenGutter),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        Text("Link: ${linkText(status.link)}", style = MaterialTheme.typography.bodyLarge, color = colors.onSurface)
+        Text("Link: ${linkStatusText(status.link)}", style = MaterialTheme.typography.bodyLarge, color = colors.onSurface)
         Text("Nodes: ${status.nodes}", style = MaterialTheme.typography.bodyLarge, color = colors.onSurface)
         Text("Key: ${status.key} ${status.mode.lowercase()}", style = MaterialTheme.typography.bodyLarge, color = colors.onSurface)
         Text("Section: ${status.section}", style = MaterialTheme.typography.bodyLarge, color = colors.onSurface)
@@ -100,7 +93,7 @@ internal fun StatusOverlay(
                 OutlinedButton(onToggleFullscreen, Modifier.heightIn(min = MinTouch)) { Text("Fullscreen", style = MaterialTheme.typography.labelLarge) }
             }
         }
-        if (controls.driversOpen) DriversPanel(status.params.describe())
+        if (controls.driversOpen) DriversPanel(status.params.describe(status.turningDirection))
         Text(
             if (hasKeyboard) SHORTCUTS else "Tap to hide",
             style = MaterialTheme.typography.bodySmall,

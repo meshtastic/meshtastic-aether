@@ -16,7 +16,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -27,6 +29,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerEventType
@@ -60,16 +63,23 @@ import org.meshtastic.ambient.ui.PendingConnect
 import org.meshtastic.ambient.ui.ScreenGutter
 import org.meshtastic.ambient.ui.Settings
 import org.meshtastic.ambient.ui.StatusOverlay
+import org.meshtastic.ambient.ui.controlsHint
+import org.meshtastic.ambient.ui.fadeIn
+import org.meshtastic.ambient.ui.overlayExpired
+import org.meshtastic.ambient.ui.resolveLook
+import org.meshtastic.ambient.ui.startFailureText
+import org.meshtastic.ambient.ui.statusLineText
+import org.meshtastic.ambient.ui.unreachableText
 import org.meshtastic.ambient.ui.keyActionFor
-import org.meshtastic.ambient.ui.label
 import org.meshtastic.ambient.ui.nowMillis
 import org.meshtastic.ambient.visual.AmbientScene
 import org.meshtastic.ambient.mesh.DemoCapture
 
 private const val AUTO_CONNECT_SECONDS = 5
 private const val SECOND_MS = 1_000L
-private const val OVERLAY_AUTO_HIDE_MS = 15_000L
-private const val ERROR_AUTO_HIDE_MS = 30_000L
+private const val IDLE_CHECK_MS = 1_000L
+private const val FADE_STEP_MS = 33L
+private const val SAVE_DEBOUNCE_MS = 500L
 private const val CURSOR_HIDE_MS = 3_000L
 private const val HINT_SHOW_MS = 8_000L
 private const val HINT_FADE_MS = 1_500
@@ -83,6 +93,7 @@ private class Session(
     val close: suspend () -> Unit = {},
     val seed: Long = nowMillis(),
     val demo: Boolean = false,
+    val failureText: (Throwable) -> String = { unreachableText(null) },
 )
 
 private fun sessionFor(choice: LinkChoice): Session = when (choice) {
@@ -97,22 +108,20 @@ private fun sessionFor(choice: LinkChoice): Session = when (choice) {
     is LinkChoice.Tcp -> {
         val link = LiveLink.tcp(choice.host, choice.port) ?: error("TCP is not available on this target")
         Log.i("app", "session tcp ${choice.host}:${choice.port}")
-        Session(link.source, link::connect, link::disconnect)
+        Session(link.source, link::connect, link::disconnect, failureText = { unreachableText("${choice.host}:${choice.port}") })
     }
     is LinkChoice.Ble -> {
         val link = LiveLink.ble(choice.radio) ?: error("Bluetooth is not available on this target")
         Log.i("app", "session ble ${choice.radio.name} ${choice.radio.address}")
-        Session(link.source, link::connect, link::disconnect)
+        Session(link.source, link::connect, link::disconnect, failureText = { unreachableText(choice.radio.name ?: choice.radio.address) })
     }
     is LinkChoice.WebSocket -> {
         require(choice.url.startsWith("ws://") || choice.url.startsWith("wss://")) { "WebSocket address must start with ws:// or wss://" }
         val link = LiveLink.webSocket(choice.url)
         Log.i("app", "session websocket ${choice.url}")
-        Session(link.source, link::connect, link::disconnect)
+        Session(link.source, link::connect, link::disconnect, failureText = { unreachableText(choice.url) })
     }
 }
-
-private fun failureText(e: Throwable): String = e.message ?: e::class.simpleName ?: "could not start"
 
 /**
  * The app: a tap-to-start screen where the browser needs a gesture, then the connect screen, then the scene.
@@ -120,6 +129,8 @@ private fun failureText(e: Throwable): String = e.message ?: e::class.simpleName
  * - [onToggleFullscreen] is the host's fullscreen switch, null where the target has none; [isFullscreen] is its state.
  * - [initialLink] skips the connect screen; [startupError] is a launch argument the host could not read, shown as a
  *   failure on the connect screen.
+ * - [look] is a launch flag that overrides the saved look; with no flag and nothing saved a [launchedFullscreen] start uses
+ *   the Projector look.
  * - [hiddenCursor] is a blank pointer icon the app shows after 3 s without pointer movement, null where the host
  *   cannot hide the cursor.
  */
@@ -130,17 +141,19 @@ fun App(
     startupError: String? = null,
     isFullscreen: Boolean = false,
     hiddenCursor: PointerIcon? = null,
+    look: PaletteChoice? = null,
+    launchedFullscreen: Boolean = false,
 ) {
     val platform = remember { getPlatform() }
     val settings = remember { Settings(createKeyValueStore()) }
-    var palette by remember { mutableStateOf(settings.palette) }
+    var palette by remember { mutableStateOf(resolveLook(look, settings.savedPalette, launchedFullscreen)) }
     AmbientTheme(palette) {
         val startup = remember { initialLink?.let { runCatching { sessionFor(it) } } }
         var started by remember { mutableStateOf(!platform.needsTapToStart) }
         var session by remember { mutableStateOf(startup?.getOrNull()) }
-        var failure by remember { mutableStateOf(startupError ?: startup?.exceptionOrNull()?.let(::failureText)) }
+        var failure by remember { mutableStateOf(startupError ?: startup?.exceptionOrNull()?.let(::startFailureText)) }
         val saved = remember { if (platform.autoConnects && initialLink == null && startupError == null) settings.link else null }
-        var pending by remember { mutableStateOf(saved?.let { PendingConnect(it.label(), Countdown(AUTO_CONNECT_SECONDS)) }) }
+        var pending by remember { mutableStateOf(saved?.let { PendingConnect(it, Countdown(AUTO_CONNECT_SECONDS)) }) }
 
         fun start(choice: LinkChoice) {
             try {
@@ -150,7 +163,7 @@ fun App(
                 settings.link = choice
             } catch (e: Exception) {
                 Log.e("app", "could not start session", e)
-                failure = failureText(e)
+                failure = startFailureText(e)
             }
         }
 
@@ -190,6 +203,7 @@ fun App(
 
                 else -> Running(
                     session = current,
+                    settings = settings,
                     platform = platform,
                     palette = palette,
                     onPalette = {
@@ -212,6 +226,7 @@ fun App(
 @Composable
 private fun Running(
     session: Session,
+    settings: Settings,
     platform: Platform,
     palette: PaletteChoice,
     onPalette: (PaletteChoice) -> Unit,
@@ -221,7 +236,7 @@ private fun Running(
     onStop: () -> Unit,
 ) {
     val engine = remember(session) {
-        AmbientEngine(session.source, createAudioSink(), session.seed, platform.lookaheadMillis, pinFormFull = session.demo)
+        AmbientEngine(session.source, createAudioSink(), session.seed, platform.lookaheadMillis, pinFormFull = session.demo, failureText = session.failureText)
             .also { platform.resumeAudio() }
     }
     LaunchedEffect(engine) {
@@ -231,25 +246,30 @@ private fun Running(
             withContext(NonCancellable) { session.close() }
         }
     }
-    val controls = remember(engine) { Controls(engine.volume) }
-    LaunchedEffect(controls.effectiveVolume) { engine.volume = controls.effectiveVolume }
+    val controls = remember(engine) { Controls(settings.volume).also { it.muted = settings.muted } }
+    LaunchedEffect(controls.volume, controls.muted) {
+        delay(SAVE_DEBOUNCE_MS)
+        settings.volume = controls.volume
+        settings.muted = controls.muted
+    }
+    var fade by remember(engine) { mutableFloatStateOf(0f) }
+    LaunchedEffect(engine) {
+        val start = nowMillis()
+        while (fade < 1f) {
+            delay(FADE_STEP_MS)
+            fade = fadeIn(nowMillis() - start)
+        }
+    }
+    LaunchedEffect(controls.effectiveVolume, fade) { engine.volume = controls.effectiveVolume * fade }
     val focus = remember { FocusRequester() }
     LaunchedEffect(Unit) { focus.requestFocus() }
 
-    val error = engine.status.error
-    LaunchedEffect(error) {
-        if (error != null) {
-            controls.overlayOpen = true
-            delay(ERROR_AUTO_HIDE_MS)
-            engine.dismissError()
-            controls.overlayOpen = false
-        }
-    }
-    LaunchedEffect(controls.overlayOpen, error) {
-        if (error == null && controls.overlayOpen) {
-            delay(OVERLAY_AUTO_HIDE_MS)
-            controls.overlayOpen = false
-        }
+    var lastInput by remember { mutableLongStateOf(nowMillis()) }
+    LaunchedEffect(controls.overlayOpen) {
+        if (!controls.overlayOpen) return@LaunchedEffect
+        lastInput = nowMillis()
+        while (!overlayExpired(nowMillis() - lastInput, controls.driversOpen)) delay(IDLE_CHECK_MS)
+        controls.overlayOpen = false
     }
 
     var cursorVisible by remember { mutableStateOf(true) }
@@ -266,6 +286,10 @@ private fun Running(
             .pointerHoverIcon(cursorIcon)
             .focusRequester(focus)
             .focusable()
+            .onPreviewKeyEvent {
+                lastInput = nowMillis()
+                false
+            }
             .onKeyEvent { event ->
                 val action = keyActionFor(event.key) ?: return@onKeyEvent false
                 val wanted = if (action.repeats) KeyEventType.KeyDown else KeyEventType.KeyUp
@@ -282,6 +306,7 @@ private fun Running(
                 awaitPointerEventScope {
                     while (true) {
                         val e = awaitPointerEvent(PointerEventPass.Initial)
+                        if (e.type != PointerEventType.Enter && e.type != PointerEventType.Exit) lastInput = nowMillis()
                         if (e.type == PointerEventType.Move || e.type == PointerEventType.Press) {
                             cursorVisible = true
                             pointerMoves++
@@ -292,7 +317,7 @@ private fun Running(
             .pointerInput(Unit) { detectTapGestures { controls.overlayOpen = !controls.overlayOpen } },
     ) {
         AmbientScene(engine, Modifier.fillMaxSize())
-        StatusLine(engine.status.link, Modifier.align(Alignment.TopCenter))
+        StatusLine(engine.status.link, engine.status.error, Modifier.align(Alignment.TopCenter))
         ControlsHint(platform.hasKeyboard, Modifier.align(Alignment.BottomCenter))
         if (controls.overlayOpen) {
             StatusOverlay(
@@ -309,15 +334,10 @@ private fun Running(
     }
 }
 
-/** A small line while the link is not up; the field itself is desaturated by the scene. */
+/** A small line while the link is not up or failing to open; the field itself is desaturated by the scene. */
 @Composable
-private fun StatusLine(link: LinkState, modifier: Modifier = Modifier) {
-    val text = when (link) {
-        LinkState.Connecting -> "Connecting"
-        LinkState.WarmingUp -> "Listening"
-        LinkState.Lost -> "Link lost, retrying"
-        else -> return
-    }
+private fun StatusLine(link: LinkState, error: String?, modifier: Modifier = Modifier) {
+    val text = statusLineText(link, error) ?: return
     Text(
         text,
         modifier = modifier.padding(top = ScreenGutter),
@@ -326,7 +346,7 @@ private fun StatusLine(link: LinkState, modifier: Modifier = Modifier) {
     )
 }
 
-/** "Tap or H for controls", shown for the first [HINT_SHOW_MS] and then faded out. */
+/** "Click or press H for controls", shown for the first [HINT_SHOW_MS] and then faded out. */
 @Composable
 private fun ControlsHint(hasKeyboard: Boolean, modifier: Modifier = Modifier) {
     var show by remember { mutableStateOf(true) }
@@ -337,7 +357,7 @@ private fun ControlsHint(hasKeyboard: Boolean, modifier: Modifier = Modifier) {
     val alpha by animateFloatAsState(if (show) HINT_ALPHA else 0f, tween(HINT_FADE_MS))
     if (alpha > 0f) {
         Text(
-            if (hasKeyboard) "Tap or press H for controls" else "Tap for controls",
+            controlsHint(hasKeyboard),
             modifier = modifier.padding(bottom = ScreenGutter + 4.dp),
             style = MaterialTheme.typography.bodyMedium,
             color = LocalAmbientPalette.current.text.copy(alpha = alpha),

@@ -4,7 +4,9 @@ import org.meshtastic.ambient.ble.BleRadio
 import org.meshtastic.ambient.theme.PaletteChoice
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class SettingsTest {
     // Regression: the saved link is what a relaunch reconnects to; a lossy encoding would reconnect to the wrong node.
@@ -24,14 +26,56 @@ class SettingsTest {
         assertEquals(LinkChoice.WebSocket("ws://10.0.0.5:80/ws?a=b|c"), Settings(store).link)
     }
 
-    // Regression: a Bluetooth scan handle cannot be saved, so choosing one must not leave an older TCP link to auto-connect.
+    // Regression: picking Bluetooth or the replay erased the saved TCP link, so the next launch had nothing to reconnect to.
     @Test
-    fun `choosing bluetooth clears the saved link instead of keeping the previous one`() {
-        val store = MemoryStore()
-        val settings = Settings(store)
+    fun `choosing a link that cannot be saved keeps the saved one`() {
+        val settings = Settings(MemoryStore())
         settings.link = LinkChoice.Tcp("a.local", 4403)
         settings.link = LinkChoice.Ble(BleRadio("Radio", -50, "AA:BB", Any()))
+        assertEquals(LinkChoice.Tcp("a.local", 4403), settings.link)
+        settings.link = LinkChoice.Replay
+        assertEquals(LinkChoice.Tcp("a.local", 4403), settings.link)
+        settings.link = LinkChoice.WebSocket("ws://b.local/ws")
+        assertEquals(LinkChoice.WebSocket("ws://b.local/ws"), settings.link)
+    }
+
+    @Test
+    fun `an unsaveable choice with nothing saved leaves no link`() {
+        val settings = Settings(MemoryStore())
+        settings.link = LinkChoice.Replay
         assertNull(settings.link)
+    }
+
+    // Regression: volume and mute were forgotten on every launch, so the app always started at full.
+    @Test
+    fun `volume and mute read back and default to full and unmuted`() {
+        val store = MemoryStore()
+        assertEquals(1f, Settings(store).volume)
+        assertFalse(Settings(store).muted)
+        Settings(store).volume = 0.35f
+        Settings(store).muted = true
+        assertEquals(0.35f, Settings(store).volume)
+        assertTrue(Settings(store).muted)
+        Settings(store).muted = false
+        assertFalse(Settings(store).muted)
+    }
+
+    @Test
+    fun `a corrupt or out of range saved volume reads as a valid level`() {
+        val store = MemoryStore()
+        for ((junk, expected) in listOf("loud" to 1f, "" to 1f, "NaN" to 1f, "Infinity" to 1f, "7" to 1f, "-2" to 0f)) {
+            store.put("volume", junk)
+            assertEquals(expected, Settings(store).volume, "junk '$junk'")
+        }
+    }
+
+    // Regression: the Projector default for a fullscreen launch must yield to a look the person saved or flagged.
+    @Test
+    fun `the saved look is null until one is chosen`() {
+        val store = MemoryStore()
+        assertNull(Settings(store).savedPalette)
+        Settings(store).palette = PaletteChoice.Standard
+        assertEquals(PaletteChoice.Standard, Settings(store).savedPalette)
     }
 
     @Test

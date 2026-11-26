@@ -76,7 +76,7 @@ data class AmbientPalette(
     val text: Color,
     val dimFloor: Double,
 ) {
-    /** Scene brightness multiplier at [minuteOfDay]: 1.0 in the afternoon, [dimFloor] at 02:00. */
+    /** Scene brightness multiplier at [minuteOfDay]: 1.0 from 07:00 to 22:00, [dimFloor] from 00:00 to 05:00. */
     fun dim(minuteOfDay: Int): Double {
         val night = ((SceneModel.nightDim(minuteOfDay) - SceneModel.NIGHT_DIM_MIN) / (1.0 - SceneModel.NIGHT_DIM_MIN)).coerceIn(0.0, 1.0)
         return dimFloor + (1.0 - dimFloor) * night
@@ -106,7 +106,7 @@ private val STANDARD = AmbientPalette(
     edge = Brand.Neutral300,
     anchor = Brand.Accent,
     text = Brand.Neutral100,
-    dimFloor = 0.45,
+    dimFloor = 0.65,
 )
 
 /** Brighter background value and a high dim floor: a projector washes out a dark picture and a lit room adds to it. */
