@@ -1,5 +1,7 @@
 package org.meshtastic.ambient.ui
 
+import org.meshtastic.ambient.ble.BleRadio
+import org.meshtastic.ambient.ble.createBleTransport
 import org.meshtastic.ambient.createTcpTransport
 import org.meshtastic.ambient.mesh.SdkMeshSource
 import org.meshtastic.sdk.InMemoryStorageProvider
@@ -23,6 +25,8 @@ class LiveLink(transport: RadioTransport) {
 
     companion object {
         fun webSocket(url: String): LiveLink = LiveLink(WebSocketTransport(url))
+
+        fun ble(radio: BleRadio): LiveLink? = createBleTransport(radio)?.let { LiveLink(it) }
 
         fun tcp(host: String, port: Int): LiveLink? = createTcpTransport(host, port)?.let { LiveLink(it) }
     }

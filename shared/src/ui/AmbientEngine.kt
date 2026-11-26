@@ -12,6 +12,8 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import org.meshtastic.ambient.audio.AudioSink
 import org.meshtastic.ambient.audio.BlockRenderer
+import org.meshtastic.ambient.log.Log
+import org.meshtastic.ambient.log.Tally
 import org.meshtastic.ambient.mesh.LinkState
 import org.meshtastic.ambient.mesh.MeshEvent
 import org.meshtastic.ambient.mesh.MeshSource
@@ -60,6 +62,10 @@ class AmbientEngine(
     private val rendered = AtomicLong(0L)
     private val gainBits = AtomicInt(1f.toRawBits())
     private var smoothedGain = 1f
+    private val tally = Tally()
+    private var notesThisMinute = 0
+    private var nextSummaryMillis = Long.MIN_VALUE
+    private var lastLogged = ""
 
     val scene = SceneModel(sampleRate)
 
@@ -96,6 +102,7 @@ class AmbientEngine(
 
     /** Runs until cancelled; [afterStart] runs once the sink and source collector are up (a live link connects there). */
     suspend fun run(afterStart: suspend () -> Unit = {}) = coroutineScope {
+        Log.i(TAG, "start sampleRate=$sampleRate lookaheadMs=${lookaheadFrames * 1000 / sampleRate}")
         tick()
         sink.start(renderer)
         try {
@@ -105,6 +112,7 @@ class AmbientEngine(
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Throwable) {
+                    Log.e(TAG, "mesh source failed", e)
                     status = status.copy(error = e.message ?: e::class.simpleName)
                 }
             }
@@ -114,6 +122,7 @@ class AmbientEngine(
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Throwable) {
+                    Log.e(TAG, "link open failed", e)
                     status = status.copy(error = e.message ?: e::class.simpleName)
                 }
             }
@@ -123,13 +132,18 @@ class AmbientEngine(
             }
         } finally {
             sink.stop()
+            Log.i(TAG, "stop")
         }
     }
 
     private fun onEvent(e: MeshEvent) {
         composer.onEvent(e)
         scene.onEvent(e, if (e is MeshEvent.PacketHeard) dueFrameFor() else 0L)
-        if (e is MeshEvent.Link) status = status.copy(link = e.state)
+        if (e is MeshEvent.PacketHeard) tally.add(e.kind)
+        if (e is MeshEvent.Link) {
+            if (e.state != status.link) Log.i(TAG, "link ${status.link} -> ${e.state}")
+            status = status.copy(link = e.state)
+        }
     }
 
     /** The composer takes a packet on its next tick and quantizes it to a quarter-second grid; so does this estimate. */
@@ -145,6 +159,7 @@ class AmbientEngine(
         val renderedNow = rendered.load()
         val out = composer.advance(renderedNow, lookaheadFrames, moment)
         synth.schedule(out)
+        notesThisMinute += out.notes.size
         for (c in out.controls) if (c is ControlEvent.SetTexture) texture = c.texture
         scene.minuteOfDay = moment.minuteOfDay
         val day = Day.at(moment)
@@ -155,6 +170,26 @@ class AmbientEngine(
             mode = day.mode.name,
             section = sectionLabel(tSec),
         )
+        logSummary(ms)
+    }
+
+    /** One line a minute: what was heard, how much was scheduled, and the key, mode and section in force. */
+    private fun logSummary(ms: Long) {
+        if (nextSummaryMillis == Long.MIN_VALUE) nextSummaryMillis = ms + SUMMARY_MILLIS
+        if (ms < nextSummaryMillis) return
+        nextSummaryMillis = ms + SUMMARY_MILLIS
+        Log.i(
+            TAG,
+            "minute heard=${tally.total} (${tally.describe()}) notes=$notesThisMinute nodes=${status.nodes} " +
+                "link=${status.link} ${status.key} ${status.mode} section=${status.section} volume=${volume}",
+        )
+        tally.reset()
+        notesThisMinute = 0
+        val shape = "${status.key} ${status.mode}"
+        if (shape != lastLogged) {
+            if (lastLogged.isNotEmpty()) Log.i(TAG, "key/mode $lastLogged -> $shape")
+            lastLogged = shape
+        }
     }
 
     private fun sectionLabel(tSec: Double): String {
@@ -177,6 +212,8 @@ class AmbientEngine(
 
     private companion object {
         const val GAIN_GLIDE = 0.002f
+        const val SUMMARY_MILLIS = 60_000L
+        const val TAG = "engine"
         val NOTE_NAMES = listOf("C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B")
     }
 }

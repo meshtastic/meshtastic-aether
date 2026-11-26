@@ -19,6 +19,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import org.meshtastic.ambient.ble.BleRadio
+import org.meshtastic.ambient.ble.bleSupported
 import org.meshtastic.ambient.getPlatform
 
 /** What the person picked on the connect screen. */
@@ -30,6 +32,8 @@ sealed interface LinkChoice {
     data class Tcp(val host: String, val port: Int) : LinkChoice
 
     data class WebSocket(val url: String) : LinkChoice
+
+    data class Ble(val radio: BleRadio) : LinkChoice
 }
 
 @Composable
@@ -57,6 +61,7 @@ fun ConnectScreen(onChoose: (LinkChoice) -> Unit, modifier: Modifier = Modifier)
                     enabled = host.isNotBlank(),
                 ) { Text("Connect over TCP") }
             }
+            if (bleSupported()) BluetoothSection { onChoose(LinkChoice.Ble(it)) }
             OutlinedTextField(ws, { ws = it }, Modifier.fillMaxWidth(), label = { Text("WebSocket URL") }, singleLine = true)
             Button({ onChoose(LinkChoice.WebSocket(ws.trim())) }, Modifier.fillMaxWidth(), enabled = ws.isNotBlank()) {
                 Text("Connect over WebSocket")
@@ -65,7 +70,7 @@ fun ConnectScreen(onChoose: (LinkChoice) -> Unit, modifier: Modifier = Modifier)
                 if (platform.name.startsWith("Web")) {
                     "TODO: WebSerial link (needs a transport on the SDK's RadioTransport)."
                 } else {
-                    "TODO: USB serial and Bluetooth links need a device picker and are not wired yet."
+                    "TODO: USB serial link is not wired yet."
                 },
                 style = MaterialTheme.typography.bodySmall,
             )

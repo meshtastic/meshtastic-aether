@@ -54,7 +54,14 @@ private fun kindHue(kind: PacketKind): Float = when (kind) {
     PacketKind.Other, PacketKind.Encrypted -> 0f
 }
 
-private fun orbHue(node: Long): Float = 170f + (Rng.mix(node) ushr 40).mod(130L).toFloat()
+private fun nodeColor(node: Long): Color = nodeRgb(node).let { Color(it.r / 255f, it.g / 255f, it.b / 255f) }
+
+/** A node's ripples wear its color, Text rings pushed toward white; encrypted and other traffic stays neutral. */
+private fun rippleColor(node: Long, kind: PacketKind): Color = when (kind) {
+    PacketKind.Encrypted, PacketKind.Other -> Color.hsv(kindHue(kind), if (kind == PacketKind.Other) 0f else 0.55f, 1f)
+    PacketKind.Text -> nodeRgb(node).towardWhite(0.5).let { Color(it.r / 255f, it.g / 255f, it.b / 255f) }
+    else -> nodeColor(node)
+}
 
 /** The full-screen ambient scene: gradient, haze, orbs and ripples, redrawn every frame on the audio clock. */
 @Composable
@@ -115,7 +122,7 @@ fun AmbientScene(engine: AmbientEngine, modifier: Modifier = Modifier) {
             val g = scene.glow(o).toFloat()
             val r = radius * 0.035f * (0.7f + g)
             val c = place(o)
-            val color = Color.hsv(orbHue(o.node), 0.5f, 1f)
+            val color = nodeColor(o.node)
             drawCircle(
                 Brush.radialGradient(
                     listOf(color.copy(alpha = (g * dim).coerceIn(0f, 1f)), Color.Transparent),
@@ -132,7 +139,7 @@ fun AmbientScene(engine: AmbientEngine, modifier: Modifier = Modifier) {
             val fade = (1f - p) * (1f - p) * (if (rp.echo == 0) 0.8f else 0.35f) * dim
             val maxR = radius * (0.12f + 0.25f * rp.strength)
             drawCircle(
-                Color.hsv(kindHue(rp.kind), if (rp.kind == PacketKind.Other) 0f else 0.55f, 1f).copy(alpha = fade),
+                rippleColor(rp.node, rp.kind).copy(alpha = fade),
                 radius = maxR * p,
                 center = place(o),
                 style = Stroke(width = 2f + 3f * (1f - p)),

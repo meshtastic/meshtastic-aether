@@ -1,0 +1,12 @@
+product: jvm/app
+
+apply:
+  - //common.module-template.yaml
+
+dependencies:
+  - //shared
+  - $libs.kotlinx.coroutines.core
+
+settings:
+  jvm:
+    mainClass: org.meshtastic.ambient.blescan.MainKt

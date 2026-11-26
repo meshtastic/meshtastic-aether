@@ -5,6 +5,9 @@ product:
 apply:
   - //common.module-template.yaml
 
+aliases:
+  - ble: [jvm, android, iosArm64, iosSimulatorArm64]
+
 dependencies:
   - $compose.runtime
   - $compose.foundation

@@ -36,6 +36,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.jetbrains.compose.reload.DevelopmentEntryPoint
 import org.meshtastic.ambient.audio.createAudioSink
+import org.meshtastic.ambient.log.Log
 import org.meshtastic.ambient.mesh.MeshSource
 import org.meshtastic.ambient.mesh.SimulatedMeshSource
 import org.meshtastic.ambient.ui.AmbientEngine
@@ -58,27 +59,30 @@ private class Session(
 
 private fun sessionFor(choice: LinkChoice): Session = when (choice) {
     LinkChoice.Simulated -> {
+        Log.i("app", "session simulated")
         val seed = nowMillis()
         Session(SimulatedMeshSource(seed, nowMillis = ::nowMillis), seed = seed)
     }
-    LinkChoice.Replay -> Session(LoopingReplaySource(DemoCapture::lines, speed = 1.0, nowMillis = ::nowMillis))
-    is LinkChoice.Tcp -> LiveLink.tcp(choice.host, choice.port)?.let { Session(it.source, it::connect, it::disconnect) }
+    LinkChoice.Replay -> Log.i("app", "session replay").let { Session(LoopingReplaySource(DemoCapture::lines, speed = 1.0, nowMillis = ::nowMillis)) }
+    is LinkChoice.Tcp -> LiveLink.tcp(choice.host, choice.port)?.also { Log.i("app", "session tcp ${choice.host}:${choice.port}") }?.let { Session(it.source, it::connect, it::disconnect) }
         ?: error("TCP is not available on this target")
-    is LinkChoice.WebSocket -> LiveLink.webSocket(choice.url).let { Session(it.source, it::connect, it::disconnect) }
+    is LinkChoice.Ble -> LiveLink.ble(choice.radio)?.also { Log.i("app", "session ble ${choice.radio.name} ${choice.radio.address}") }?.let { Session(it.source, it::connect, it::disconnect) }
+        ?: error("Bluetooth is not available on this target")
+    is LinkChoice.WebSocket -> LiveLink.webSocket(choice.url).also { Log.i("app", "session websocket ${choice.url}") }.let { Session(it.source, it::connect, it::disconnect) }
 }
 
 /**
  * The app: a tap-to-start screen where the browser needs a gesture, then the connect screen, then the scene.
- * [onToggleFullscreen] is the host's fullscreen switch, null where the target has none.
+ * [onToggleFullscreen] is the host's fullscreen switch, null where the target has none; [initialLink] skips the connect screen.
  */
 @Composable
 @Preview
 @DevelopmentEntryPoint
-fun App(onToggleFullscreen: (() -> Unit)? = null) {
+fun App(onToggleFullscreen: (() -> Unit)? = null, initialLink: LinkChoice? = null) {
     val platform = remember { getPlatform() }
     MaterialTheme(colorScheme = darkColorScheme()) {
         var started by remember { mutableStateOf(!platform.needsTapToStart) }
-        var session by remember { mutableStateOf<Session?>(null) }
+        var session by remember { mutableStateOf(initialLink?.let { runCatching { sessionFor(it) }.getOrNull() }) }
         var failure by remember { mutableStateOf<String?>(null) }
         Box(Modifier.fillMaxSize().background(Color.Black).safeContentPadding()) {
             val current = session
@@ -97,6 +101,7 @@ fun App(onToggleFullscreen: (() -> Unit)? = null) {
                             session = sessionFor(choice)
                             failure = null
                         } catch (e: Exception) {
+                            Log.e("app", "could not start session", e)
                             failure = e.message
                         }
                     })
