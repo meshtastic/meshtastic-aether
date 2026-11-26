@@ -13,7 +13,7 @@ sealed interface LinkChoice {
     /** A node's TCP phone API: [host] is a name or address, [port] is 1..65535 (4403 by default). */
     data class Tcp(val host: String, val port: Int) : LinkChoice
 
-    /** A node's WebSocket endpoint, for example `ws://meshtastic.local:80/ws`. */
+    /** A node's WebSocket endpoint, for example `wss://meshtastic.local/api/v1/ws`. */
     data class WebSocket(val url: String) : LinkChoice
 
     /** A scanned Bluetooth radio; it cannot be saved, because the scan handle does not outlive the scan. */

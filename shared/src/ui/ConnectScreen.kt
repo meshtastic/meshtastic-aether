@@ -45,7 +45,11 @@ import androidx.compose.ui.unit.dp
 import org.meshtastic.aether.ble.bleSupported
 import org.meshtastic.aether.getPlatform
 
-private const val DEFAULT_WS_URL = "ws://meshtastic.local:80/ws"
+/**
+ * The firmware's WebSocket phone API path (ESP32 and meshtasticd both serve it), secure by default: an HTTPS
+ * page, such as the hosted web app, may only open `wss://`, and an ESP32 node serves it on 443 as well as 80.
+ */
+private const val DEFAULT_WS_URL = "wss://meshtastic.local/api/v1/ws"
 private const val DEFAULT_HOST = "meshtastic.local"
 private const val TAGLINE = "The mesh, on the ether."
 private val GLYPH_SIZE = 56.dp

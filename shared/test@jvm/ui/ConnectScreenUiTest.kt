@@ -98,6 +98,15 @@ class ConnectScreenUiTest {
         assertEquals(listOf(LinkKind.Demo), kinds)
     }
 
+    // An HTTPS page can only open wss://, so the prefilled address must already work from the hosted web app.
+    @Test
+    fun `the WebSocket pane is prefilled with a secure address`() = runComposeUiTest {
+        show()
+        onNode(hasText("WebSocket") and hasClickAction()).performClick()
+        waitForIdle()
+        onNode(hasSetTextAction() and hasText("wss://meshtastic.local/api/v1/ws")).assertExists()
+    }
+
     // Regression: editing the host left the countdown running and it connected to the saved link.
     @Test
     fun `typing in the host cancels the countdown`() = runComposeUiTest {

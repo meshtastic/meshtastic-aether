@@ -49,7 +49,7 @@ class ConnectLinkTest {
     // Regression: the URL was checked only by an exception after submit.
     @Test
     fun `a websocket url needs a ws or wss scheme and a host`() {
-        assertNull(webSocketError("ws://meshtastic.local:80/ws"))
+        assertNull(webSocketError("ws://meshtastic.local:80/api/v1/ws"))
         assertNull(webSocketError("  WSS://node.example/ws "))
         assertEquals(WS_BLANK_ERROR, webSocketError("  "))
         for (bad in listOf("http://node/ws", "node.local", "ws://", "ws:///ws")) assertEquals(WS_SCHEME_ERROR, webSocketError(bad), bad)
