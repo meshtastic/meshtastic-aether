@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.Aether" parent="@android:style/Theme.Material.NoActionBar">
+        <item name="android:windowBackground">#0F1017</item>
+        <item name="android:windowSplashScreenBackground">#0F1017</item>
+    </style>
+</resources>

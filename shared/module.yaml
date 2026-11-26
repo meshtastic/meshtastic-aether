@@ -20,6 +20,10 @@ dependencies:
 test-dependencies:
   - $libs.kotlinx.coroutines.test
 
+test-dependencies@jvm:
+  - $compose.uiTest
+  - $compose.desktop.currentOs
+
 dependencies@jvm:
   - $libs.meshtastic.sdk.transport.tcp
   - $libs.meshtastic.sdk.transport.serial

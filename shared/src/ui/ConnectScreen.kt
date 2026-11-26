@@ -29,6 +29,8 @@ import org.meshtastic.aether.getPlatform
 
 private const val DEFAULT_WS_URL = "ws://meshtastic.local:80/ws"
 private const val DEFAULT_HOST = "meshtastic.local"
+private const val TAGLINE = "The mesh, on the ether."
+private val GLYPH_SIZE = 56.dp
 
 /** A pending automatic reconnect: shown as a banner with a cancel button while [countdown] runs. */
 internal class PendingConnect(val link: LinkChoice, val countdown: Countdown) {
@@ -73,7 +75,7 @@ private enum class Section { Demo, Tcp, Ble, WebSocket }
 
 @Composable
 private fun FailureText(failure: String?, show: Boolean) {
-    if (show && failure != null) Text(failure, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
+    if (show && failure != null) Text(failure, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyLarge)
 }
 
 /**
@@ -106,10 +108,12 @@ internal fun ConnectScreen(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterVertically),
     ) {
+        AetherGlyph(GLYPH_SIZE)
         Text("Meshtastic Aether", style = MaterialTheme.typography.headlineMedium)
+        Text(TAGLINE, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Text(
             "It only listens. Nothing is sent to the mesh.",
-            style = MaterialTheme.typography.bodyMedium,
+            style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Column(Modifier.widthIn(max = MaxContentWidth).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {

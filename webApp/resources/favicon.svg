@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <defs>
+    <radialGradient id="bg" cx="512" cy="430" r="760" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#2C2D3C"/>
+      <stop offset="1" stop-color="#0F1017"/>
+    </radialGradient>
+    <radialGradient id="halo" cx="512" cy="512" r="400" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#67EA94" stop-opacity="0.36"/>
+      <stop offset="1" stop-color="#67EA94" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="orb" cx="470" cy="466" r="190" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ECEDF3"/>
+      <stop offset="0.3" stop-color="#B5F5CE"/>
+      <stop offset="0.7" stop-color="#67EA94"/>
+      <stop offset="1" stop-color="#2D8F52"/>
+    </radialGradient>
+  </defs>
+  <rect width="1024" height="1024" rx="224" fill="url(#bg)"/>
+  <circle cx="512" cy="512" r="400" fill="url(#halo)"/>
+  <g transform="translate(512 512) rotate(-24)">
+    <path d="M -340 0 A 340 120 0 0 1 340 0" fill="none" stroke="#67EA94" stroke-opacity="0.5" stroke-width="56" stroke-linecap="round"/>
+  </g>
+  <circle cx="512" cy="512" r="150" fill="url(#orb)"/>
+  <g transform="translate(512 512) rotate(-24)">
+    <path d="M -340 0 A 340 120 0 0 0 340 0" fill="none" stroke="#0F1017" stroke-opacity="0.45" stroke-width="84" stroke-linecap="round"/>
+    <path d="M -340 0 A 340 120 0 0 0 340 0" fill="none" stroke="#8FF0B2" stroke-width="56" stroke-linecap="round"/>
+    <circle cx="-261" cy="77" r="38" fill="#B5F5CE"/>
+    <circle cx="261" cy="77" r="52" fill="#ECEDF3"/>
+  </g>
+</svg>

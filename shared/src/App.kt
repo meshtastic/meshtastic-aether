@@ -341,7 +341,7 @@ private fun StatusLine(link: LinkState, error: String?, modifier: Modifier = Mod
     Text(
         text,
         modifier = modifier.padding(top = ScreenGutter),
-        style = MaterialTheme.typography.bodyMedium,
+        style = MaterialTheme.typography.bodyLarge,
         color = LocalAmbientPalette.current.text.copy(alpha = STATUS_ALPHA),
     )
 }
@@ -359,7 +359,7 @@ private fun ControlsHint(hasKeyboard: Boolean, modifier: Modifier = Modifier) {
         Text(
             controlsHint(hasKeyboard),
             modifier = modifier.padding(bottom = ScreenGutter + 4.dp),
-            style = MaterialTheme.typography.bodyMedium,
+            style = MaterialTheme.typography.bodyLarge,
             color = LocalAmbientPalette.current.text.copy(alpha = alpha),
         )
     }

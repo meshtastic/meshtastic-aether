@@ -18,6 +18,14 @@ This project uses the [Kotlin Toolchain](https://kotlin-toolchain.org/) (a dedic
 - Check a wasm run by its `ERROR` lines as well as `Passed` and `Failed`: the browser runner stops a run at 30 s, so keep long renders in `shared/test@jvm`.
 - Commits are Conventional, signed off (`git commit -s`), carry no attribution trailers, and the license is GPL-3.0-or-later.
 
+## Branding rules
+
+- Colors come from the brand palette in the design standards (`design/standards`, section 7), and `shared/test/theme/PaletteSourceTest.kt` enforces it.
+- The icon is an own glyph; the Meshtastic M mark is never altered or recolored.
+- `branding/*.svg` are the sources, and `scripts/icons.sh` regenerates every raster asset; the Android icon is hand-ported XML.
+- The theme is dark-only, a documented waiver of the light theme and dynamic color.
+- The name is written `Meshtastic Aether`.
+
 ## Behavior that holds
 
 - With zero packets the composer still emits notes and controls: the autonomous piece sounds complete alone.

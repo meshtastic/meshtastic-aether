@@ -17,3 +17,4 @@ All notable changes to Meshtastic Aether are documented here. The format is base
 - Launch flags `--demo`, `--replay`, `--tcp host[:port]`, `--fullscreen` and `--look standard|projector|oled` on desktop.
 - A local log with a session summary every minute and a coverage line that counts which telemetry fields the mesh reports.
 - The `tools` module renders the simulated mesh to a WAV file and analyzes it, and the `blescan` module scans for nodes over Bluetooth.
+- App icons for Android, iOS, desktop and web with branded launch backgrounds, and the in-app glyph and tagline.

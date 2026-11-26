@@ -1,6 +1,7 @@
 package org.meshtastic.aether.theme
 
 import androidx.compose.material3.ColorScheme
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
@@ -98,9 +99,9 @@ enum class PaletteChoice(val label: String) {
         }
 }
 
-/** Neutral 900 toward Primary at the top, down to Neutral 950. */
+/** Neutral 900 at the top, down to Neutral 950. */
 private val STANDARD = AmbientPalette(
-    backgroundTop = Color(0xFF1F2030),
+    backgroundTop = Brand.Neutral900,
     backgroundBottom = Brand.Neutral950,
     haze = Brand.Neutral100,
     edge = Brand.Neutral300,
@@ -120,9 +121,9 @@ private val PROJECTOR = AmbientPalette(
     dimFloor = 0.8,
 )
 
-/** True black at the bottom so an OLED pixel is off, and a deep dim at night. */
+/** Neutral 950 over true black (standards section 2 allows pure black in dark mode) so an OLED pixel is off, and a deep dim at night. */
 private val OLED_NIGHT = AmbientPalette(
-    backgroundTop = Color(0xFF07070B),
+    backgroundTop = Brand.Neutral950,
     backgroundBottom = Color(0xFF000000),
     haze = Brand.Neutral400,
     edge = Brand.Neutral400,
@@ -136,7 +137,11 @@ val LocalAmbientPalette = staticCompositionLocalOf { PaletteChoice.Standard.pale
 /** Material theme with the standards' dark scheme, and the chosen [AmbientPalette] for the scene. */
 @Composable
 fun AmbientTheme(choice: PaletteChoice = PaletteChoice.Standard, content: @Composable () -> Unit) {
+    val scheme = ambientColorScheme()
     CompositionLocalProvider(LocalAmbientPalette provides choice.palette) {
-        MaterialTheme(colorScheme = ambientColorScheme(), content = content)
+        MaterialTheme(colorScheme = scheme) {
+            // Plain Text outside a Surface would take the default content color, black, and vanish on the dark field.
+            CompositionLocalProvider(LocalContentColor provides scheme.onSurface, content = content)
+        }
     }
 }

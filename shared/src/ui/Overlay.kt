@@ -3,6 +3,7 @@ package org.meshtastic.aether.ui
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -17,6 +18,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -27,6 +29,7 @@ import kotlin.math.roundToInt
 
 private const val OVERLAY_ALPHA = 0.88f
 private const val PERCENT = 100
+private val OVERLAY_GLYPH_SIZE = 28.dp
 
 /** The shortcut line shown where a keyboard is the usual input. */
 internal const val SHORTCUTS = "H overlay - F fullscreen - M mute - Up and Down volume - D disconnect - Esc close"
@@ -50,6 +53,10 @@ internal fun StatusOverlay(
             .verticalScroll(rememberScrollState()).padding(ScreenGutter),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            AetherGlyph(OVERLAY_GLYPH_SIZE)
+            Text("Meshtastic Aether", style = MaterialTheme.typography.titleMedium, color = colors.onSurface)
+        }
         Text("Link: ${linkStatusText(status.link)}", style = MaterialTheme.typography.bodyLarge, color = colors.onSurface)
         Text("Nodes: ${status.nodes}", style = MaterialTheme.typography.bodyLarge, color = colors.onSurface)
         Text("Key: ${status.key} ${status.mode.lowercase()}", style = MaterialTheme.typography.bodyLarge, color = colors.onSurface)
@@ -96,7 +103,7 @@ internal fun StatusOverlay(
         if (controls.driversOpen) DriversPanel(status.params.describe(status.turningDirection))
         Text(
             if (hasKeyboard) SHORTCUTS else "Tap to hide",
-            style = MaterialTheme.typography.bodySmall,
+            style = MaterialTheme.typography.bodyLarge,
             color = colors.onSurfaceVariant,
         )
     }

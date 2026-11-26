@@ -5,7 +5,7 @@
 
 *The mesh, on the ether.* A slow piece of music and visuals that plays on its own and is nudged by live Meshtastic® traffic: packets are soft ornaments, nodes are voices, and mesh activity is the crowd. It targets desktop, Android, iOS and the web, and it only listens: nothing is sent to the mesh.
 
-Meshtastic® is a registered trademark of Meshtastic LLC. This project is not affiliated with or endorsed by the Meshtastic project.
+Meshtastic® is a registered trademark of Meshtastic LLC. Meshtastic Aether is a Meshtastic project.
 
 ## What this is
 
@@ -65,6 +65,12 @@ The clock skeleton stays under the mesh: weekday picks the key, and time of day 
 The palette is about 15 instruments, 8 scales (never Locrian) and 4 tempo bands. The Drivers button in the overlay lists each parameter with its live value, unit and the signal driving it, or a plain note such as `holding 8.0 deg - no wind reports` when its signal has no data. The demo sweeps these inputs in five minutes, including a pressure fall that reverses the rotation once per session.
 
 [`docs/mesh-driven-parameters.md`](docs/mesh-driven-parameters.md) has the instruments, scales, signals, mappings and rotation rules.
+
+## Branding
+
+The icon is an own glyph in the brand palette: a luminous green orb with a tilted orbit ring and bright nodes. It is not the Meshtastic M mark, which is never altered or recolored. The sources are `branding/icon.svg`, `branding/icon-small.svg` and `branding/icon-foreground.svg`, and `scripts/icons.sh` regenerates the iOS, desktop and web raster assets from them. The Android icon is hand-ported VectorDrawable XML that follows the foreground source.
+
+The app is dark-only by design: it is a calm projector and night piece. The design standards ask for light and dark themes and for dynamic color on Android 12+, and both are waived here. The name is written as `Meshtastic Aether`.
 
 ## Logs
 

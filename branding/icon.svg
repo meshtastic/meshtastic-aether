@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <defs>
+    <radialGradient id="bg" cx="512" cy="430" r="760" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#2C2D3C"/>
+      <stop offset="0.5" stop-color="#1A1B26"/>
+      <stop offset="1" stop-color="#0F1017"/>
+    </radialGradient>
+    <radialGradient id="halo" cx="512" cy="512" r="340" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#67EA94" stop-opacity="0.34"/>
+      <stop offset="0.55" stop-color="#67EA94" stop-opacity="0.10"/>
+      <stop offset="1" stop-color="#67EA94" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="orb" cx="474" cy="470" r="170" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ECEDF3"/>
+      <stop offset="0.3" stop-color="#B5F5CE"/>
+      <stop offset="0.7" stop-color="#67EA94"/>
+      <stop offset="1" stop-color="#2D8F52"/>
+    </radialGradient>
+    <linearGradient id="ring" x1="-292" y1="0" x2="292" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#67EA94" stop-opacity="0.6"/>
+      <stop offset="0.6" stop-color="#8FF0B2"/>
+      <stop offset="1" stop-color="#B5F5CE"/>
+    </linearGradient>
+    <radialGradient id="spark" cx="224" cy="59" r="64" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#B5F5CE" stop-opacity="0.9"/>
+      <stop offset="1" stop-color="#B5F5CE" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="1024" height="1024" fill="url(#bg)"/>
+  <g fill="#B8BAC8">
+    <circle cx="170" cy="236" r="7" fill-opacity="0.45"/>
+    <circle cx="842" cy="168" r="5" fill-opacity="0.35"/>
+    <circle cx="884" cy="770" r="8" fill-opacity="0.4"/>
+    <circle cx="214" cy="842" r="5" fill-opacity="0.3"/>
+    <circle cx="96" cy="560" r="4" fill-opacity="0.3"/>
+  </g>
+  <g transform="translate(512 512) scale(1.2) translate(-512 -512)">
+  <circle cx="512" cy="512" r="340" fill="url(#halo)"/>
+  <g transform="translate(512 512) rotate(34)">
+    <path d="M -250 0 A 250 70 0 0 1 250 0" fill="none" stroke="#B5F5CE" stroke-opacity="0.22" stroke-width="7" stroke-linecap="round"/>
+  </g>
+  <g transform="translate(512 512) rotate(-24)">
+    <path d="M -292 0 A 292 92 0 0 1 292 0" fill="none" stroke="#67EA94" stroke-opacity="0.45" stroke-width="16" stroke-linecap="round"/>
+    <circle cx="-253" cy="-46" r="16" fill="#8FF0B2" fill-opacity="0.75"/>
+    <circle cx="100" cy="-87" r="11" fill="#B5F5CE" fill-opacity="0.6"/>
+    <circle cx="274" cy="-32" r="8" fill="#B5F5CE" fill-opacity="0.5"/>
+  </g>
+  <circle cx="512" cy="512" r="108" fill="url(#orb)"/>
+  <g transform="translate(512 512) rotate(34)">
+    <path d="M -250 0 A 250 70 0 0 0 250 0" fill="none" stroke="#B5F5CE" stroke-opacity="0.3" stroke-width="7" stroke-linecap="round"/>
+  </g>
+  <g transform="translate(512 512) rotate(-24)">
+    <path d="M -292 0 A 292 92 0 0 0 292 0" fill="none" stroke="#0F1017" stroke-opacity="0.4" stroke-width="30" stroke-linecap="round"/>
+    <path d="M -292 0 A 292 92 0 0 0 292 0" fill="none" stroke="url(#ring)" stroke-width="16" stroke-linecap="round"/>
+    <circle cx="-224" cy="59" r="14" fill="#8FF0B2"/>
+    <circle cx="25" cy="92" r="9" fill="#ECEDF3"/>
+    <circle cx="224" cy="59" r="64" fill="url(#spark)"/>
+    <circle cx="224" cy="59" r="26" fill="#ECEDF3"/>
+  </g>
+  </g>
+</svg>

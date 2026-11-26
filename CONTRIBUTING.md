@@ -106,6 +106,10 @@ docs(readme): list the launch flags
 
 The squash-merge subject is what ships, so keep it readable.
 
+## Icons and branding
+
+Edit `branding/*.svg`, run `scripts/icons.sh` and commit the regenerated outputs. The script needs `rsvg-convert` (or Nix, which it falls back to) and ImageMagick (`magick`). Never alter or recolor the Meshtastic M mark, and use only palette colors from the design standards.
+
 ## Reusing code from other projects
 
 Meshtastic Aether is GPL-3.0-or-later, so ported code must be MIT, BSD, Apache-2.0, public domain or another GPL-compatible license. Keep the original copyright and license notice, and add the source and the files it became to [`NOTICE`](NOTICE). Never port Shadertoy code, Faust `vital_rev` or `kb_rom_rev1`. Code from Meshtastic projects under GPL-3.0 can be reused with the origin noted in the commit message.
