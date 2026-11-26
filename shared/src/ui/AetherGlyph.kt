@@ -13,6 +13,8 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.drawscope.translate
+import androidx.compose.ui.graphics.drawscope.withTransform
+import androidx.compose.ui.graphics.vector.PathParser
 import androidx.compose.ui.unit.Dp
 import org.meshtastic.aether.theme.Brand
 
@@ -50,7 +52,26 @@ internal object GlyphGeometry {
         Node(150f / 1024f, -83f / 1024f, 14f / 1024f),
     )
     val brightNode = Node(212f / 1024f, 68f / 1024f, 30f / 1024f, glowRadius = 58f / 1024f)
+
+    /** The M mark on the orb: its width and its center's lift above the orb's center, as fractions of the orb's radius. */
+    const val MARK_WIDTH = 240f / 216f
+    const val MARK_LIFT = 10f / 108f
+
+    /** The mark's own box, the official artwork's 100 x 55 viewBox. */
+    const val MARK_BOX_WIDTH = 100f
+    const val MARK_BOX_HEIGHT = 55f
 }
+
+/**
+ * The Meshtastic M mark as the official artwork draws it (`design/logo/svg/Mesh_Logo_*.svg`): its two paths with their
+ * transforms applied, in its 100 x 55 box. Unaltered: the glyph only scales and places it.
+ */
+internal const val M_MARK_PATH =
+    "M64.716,13.073L37.867,52.447L32.204,48.585L61.878,5.068C62.516,4.132 63.575,3.572 64.707,3.571" +
+        "C65.839,3.570 66.899,4.128 67.538,5.062L97.281,48.512L91.625,52.384L64.716,13.073Z" +
+        "M8.379,52.406L39.741,6.415L34.078,2.553L2.716,48.544L8.379,52.406Z"
+
+private val markPath = PathParser().parsePathString(M_MARK_PATH).toPath()
 
 private val GlyphSurface = Brand.Neutral950
 private val Green300 = Color(0xFFB5F5CE)
@@ -96,6 +117,7 @@ private fun DrawScope.drawGlyph(side: Float) {
         radius = side * g.ORB_RADIUS,
         center = c,
     )
+    drawMark(side, c)
     translate(c.x, c.y) {
         rotate(g.RING_ROTATION_DEGREES, Offset.Zero) {
             drawArcPair(side, front = true)
@@ -114,6 +136,19 @@ private fun DrawScope.drawGlyph(side: Float) {
             drawCircle(Brand.Neutral100, radius = n.radius * side, center = p)
         }
     }
+}
+
+/** The M mark on the orb in the official dark-on-green colorway, over the highlight and above the front ring. */
+private fun DrawScope.drawMark(side: Float, center: Offset) {
+    val g = GlyphGeometry
+    val orb = side * g.ORB_RADIUS
+    val scale = orb * g.MARK_WIDTH / g.MARK_BOX_WIDTH
+    val left = center.x - g.MARK_BOX_WIDTH * scale / 2
+    val top = center.y - orb * g.MARK_LIFT - g.MARK_BOX_HEIGHT * scale / 2
+    withTransform({
+        translate(left, top)
+        scale(scale, scale, Offset.Zero)
+    }) { drawPath(markPath, Brand.Primary) }
 }
 
 private fun DrawScope.drawNode(side: Float, n: GlyphGeometry.Node, color: Color) {

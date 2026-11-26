@@ -42,8 +42,10 @@
                     android:fillColor="#FFFFFF"
                     android:fillAlpha="0.8"/>
         </group>
+        <!-- The orb with the Meshtastic M mark (official artwork, unaltered) cut out of it: a themed icon is one tint. -->
         <path
-                android:pathData="M404,512a108,108 0 1,0 216,0a108,108 0 1,0 -216,0z"
+                android:pathData="M404,512a108,108 0 1,0 216,0a108,108 0 1,0 -216,0zM529.66,484.69L497.44,531.94L490.64,527.30L526.25,475.08C527.02,473.96 528.29,473.29 529.65,473.29C531.01,473.28 532.28,473.95 533.05,475.07L568.74,527.21L561.95,531.86L529.66,484.69ZM462.05,531.89L499.69,476.70L492.89,472.06L455.26,527.25L462.05,531.89Z"
+                android:fillType="evenOdd"
                 android:fillColor="#FFFFFF"
                 android:fillAlpha="0.55"/>
         <group android:rotation="34" android:pivotX="512" android:pivotY="512">

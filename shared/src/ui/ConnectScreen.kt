@@ -354,7 +354,7 @@ private const val ONE_SECOND_MS = 1_000
 @Composable
 private fun Brand() {
     AetherGlyph(GLYPH_SIZE)
-    Text("Meshtastic Aether", style = MaterialTheme.typography.headlineMedium, modifier = Modifier.semantics { heading() })
+    Text("Aether", style = MaterialTheme.typography.headlineMedium, modifier = Modifier.semantics { heading() })
     Text(TAGLINE, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
     Text(
         "It only listens. Nothing is sent to the mesh.",

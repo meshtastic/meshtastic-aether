@@ -201,7 +201,7 @@ private fun StatusSurface(status: EngineStatus, hasKeyboard: Boolean, isTelevisi
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 AetherGlyph(OVERLAY_GLYPH_SIZE)
-                Text("Meshtastic Aether", style = MaterialTheme.typography.titleMedium)
+                Text("Aether", style = MaterialTheme.typography.titleMedium)
             }
             Text("Link: ${linkStatusText(status.link)}", style = MaterialTheme.typography.bodyLarge)
             Text("Nodes: ${status.nodes}", style = MaterialTheme.typography.bodyLarge)

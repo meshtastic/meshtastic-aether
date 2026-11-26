@@ -64,7 +64,11 @@ private fun setDockIcon(icon: BufferedImage) {
     }
 }
 
+private const val APP_NAME = "Aether"
+
 fun main(args: Array<String>) {
+    // macOS names the menu bar's app menu and the Dock entry from this, read once when AWT starts; without it they show the JVM class.
+    System.setProperty("apple.awt.application.name", APP_NAME)
     val launch = parseLaunchArgs(args)
     KeepAwake.start()
     val icon = loadIcon()
@@ -85,7 +89,7 @@ fun main(args: Array<String>) {
                 KeepAwake.stop()
                 exitApplication()
             },
-            title = "Meshtastic Aether",
+            title = APP_NAME,
             icon = windowIcon,
             state = state,
         ) {

@@ -1,11 +1,11 @@
-# Meshtastic Aether
+# Aether
 
 [![License: GPL-3.0-or-later](https://img.shields.io/badge/License-GPL--3.0--or--later-blue.svg)](LICENSE)
 [![Kotlin Multiplatform](https://img.shields.io/badge/Kotlin-Multiplatform-blue.svg?logo=kotlin)](https://kotlinlang.org)
 
 *The mesh, on the ether.* A slow piece of music and visuals that plays on its own and is nudged by live Meshtastic® traffic: packets are soft ornaments, nodes are voices, and mesh activity is the crowd. It targets desktop, Android (phones, tablets, Android TV and Google TV), iOS and the web, and it only listens: nothing is sent to the mesh.
 
-Meshtastic® is a registered trademark of Meshtastic LLC. Meshtastic Aether is a Meshtastic project.
+Meshtastic® is a registered trademark of Meshtastic LLC. Aether is a Meshtastic project.
 
 ## What this is
 
@@ -36,7 +36,7 @@ The 90 second demo above has sound. Below, the scene while it listens to a gener
 ./kotlin test -m shared -p jvm                  # shared tests (wasmJs: -p wasmJs)
 ```
 
-[Releases](https://github.com/meshtastic/meshtastic-aether/releases) carry the Android APK and AAB, a desktop jar for Linux and for macOS (run it with Java 25: `java -jar meshtastic-aether-X.Y.Z-desktop-<os>.jar`) and a zipped web build to serve from any static host. The `snapshot` prerelease carries the same files built from the latest `main` that passed CI. The `./kotlin` wrapper downloads the Kotlin Toolchain on first use. [`CONTRIBUTING.md`](CONTRIBUTING.md) lists the build and test commands.
+[Releases](https://github.com/meshtastic/meshtastic-aether/releases) carry the Android APK and AAB, a desktop jar for Linux and for macOS (run it with Java 25: `java -jar aether-X.Y.Z-desktop-<os>.jar`) and a zipped web build to serve from any static host. The `snapshot` prerelease carries the same files built from the latest `main` that passed CI. The `./kotlin` wrapper downloads the Kotlin Toolchain on first use. [`CONTRIBUTING.md`](CONTRIBUTING.md) lists the build and test commands.
 
 ### Android TV and Google TV
 
@@ -132,9 +132,9 @@ The palette is about 15 instruments, 8 scales (never Locrian) and 4 tempo bands.
 
 ## Branding
 
-The icon is an own glyph in the brand palette: a luminous green orb with a tilted orbit ring and bright nodes. It is not the Meshtastic M mark, which is never altered or recolored. The sources are `branding/icon.svg`, `branding/icon-small.svg` and `branding/icon-foreground.svg`, and `scripts/icons.sh` regenerates the iOS, desktop and web raster assets and the Android TV banner from them. The Android icon is hand-ported VectorDrawable XML that follows the foreground source.
+The icon is an own glyph in the brand palette: a luminous green orb with a tilted orbit ring and bright nodes, with the Meshtastic M mark on the orb. The mark is the official artwork from `meshtastic/design` (`logo/svg`), only scaled and placed, in its official dark-on-green colorway; it is never redrawn, distorted or recolored. On the Android themed icon, which is one tint, it is cut out of the orb. The sources are `branding/icon.svg`, `branding/icon-small.svg` and `branding/icon-foreground.svg`, and `scripts/icons.sh` regenerates the iOS, desktop and web raster assets and the Android TV banner from them. The Android icon is hand-ported VectorDrawable XML that follows the foreground source.
 
-The app is dark-only by design: it is a calm projector and night piece. The design standards ask for light and dark themes and for dynamic color on Android 12+, and both are waived here. The name is written as `Meshtastic Aether`.
+The app is dark-only by design: it is a calm projector and night piece. The design standards ask for light and dark themes and for dynamic color on Android 12+, and both are waived here. The app is called `Aether`. `Meshtastic` is named once, in the trademark line at the top; the identifiers (`org.meshtastic.aether`, the `meshtastic-aether` repository and file names, the `MeshtasticAether` log folder and tag) keep the long form.
 
 ## Logs
 

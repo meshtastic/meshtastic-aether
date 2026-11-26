@@ -42,5 +42,4 @@ tv=$root/androidApp/res/drawable-xhdpi
 mkdir -p "$tv"
 svg 104 "$icon" "$tmp/tv-glyph.png"
 magick -size 320x180 xc:'#0F1017' "$tmp/tv-glyph.png" -gravity west -geometry +20+0 -composite \
-    -fill '#FFFFFF' -font DejaVu-Sans-Bold -pointsize 23 -gravity west -annotate +138-14 'Meshtastic' \
-    -fill '#67EA94' -annotate +138+16 'Aether' "PNG24:$tv/tv_banner.png"
+    -fill '#67EA94' -font DejaVu-Sans-Bold -pointsize 40 -gravity west -annotate +140+0 'Aether' "PNG24:$tv/tv_banner.png"

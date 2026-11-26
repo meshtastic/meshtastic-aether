@@ -20,7 +20,7 @@ internal object KeepAwake {
         val command = when {
             "mac" in os -> listOf("caffeinate", "-d", "-i", "-w", pid)
             "linux" in os -> listOf(
-                "systemd-inhibit", "--what=idle:sleep", "--who=Meshtastic Aether", "--why=Ambient display", "--mode=block",
+                "systemd-inhibit", "--what=idle:sleep", "--who=Aether", "--why=Ambient display", "--mode=block",
                 "tail", "--pid=$pid", "-f", "/dev/null",
             )
             else -> {

@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to Meshtastic Aether are documented here. The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+All notable changes to Aether are documented here. The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
@@ -24,4 +24,4 @@ All notable changes to Meshtastic Aether are documented here. The format is base
 - A local log with a session summary every minute and a coverage line that counts which telemetry fields the mesh reports, including channel use.
 - Desktop: `AETHER_RECORD_AUDIO=out.wav` records what the app plays for demo videos, across reconnects; an `out.wav.start` file holds the wall-clock start in epoch milliseconds.
 - The `tools` module renders the simulated mesh to a WAV file and analyzes it, and the `blescan` module scans for nodes over Bluetooth.
-- App icons for Android, iOS, desktop and web with branded launch backgrounds, an Android TV banner, and the in-app glyph and tagline.
+- App icons for Android, iOS, desktop and web with branded launch backgrounds, an Android TV banner, and the in-app glyph and tagline, each with the Meshtastic M mark on the orb.

@@ -1,4 +1,4 @@
-# meshtastic-aether: prior art report
+# Aether: prior art report
 
 Scope: what the app can take (ideas, algorithms, code, constants) for a GPL-3.0-or-later KMP/CMP app that turns live Meshtastic traffic into generative ambient music and a full-screen visual. Researched 2026-11-25. Licenses below were read from the repo's LICENSE file, README or the source file header, through the GitHub API, unless marked otherwise.
 

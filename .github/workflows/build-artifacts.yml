@@ -83,14 +83,14 @@ jobs:
             "$tools/zipalign" -f -p 4 "$apk" "$RUNNER_TEMP/aligned.apk"
             "$tools/apksigner" sign --ks "$RUNNER_TEMP/release.jks" --ks-pass env:KEYSTORE_PASSWORD \
               --ks-key-alias "$KEY_ALIAS" --key-pass env:KEY_PASSWORD \
-              --out "out/meshtastic-aether-$VERSION-android.apk" "$RUNNER_TEMP/aligned.apk"
+              --out "out/aether-$VERSION-android.apk" "$RUNNER_TEMP/aligned.apk"
             jarsigner -keystore "$RUNNER_TEMP/release.jks" -storepass:env KEYSTORE_PASSWORD -keypass:env KEY_PASSWORD \
-              -signedjar "out/meshtastic-aether-$VERSION-android.aab" "$aab" "$KEY_ALIAS"
+              -signedjar "out/aether-$VERSION-android.aab" "$aab" "$KEY_ALIAS"
             rm -f "$RUNNER_TEMP/release.jks"
           else
             echo "::warning::no ANDROID_KEYSTORE_BASE64 secret: the APK and AAB are unsigned"
-            "$tools/zipalign" -f -p 4 "$apk" "out/meshtastic-aether-$VERSION-android-unsigned.apk"
-            cp "$aab" "out/meshtastic-aether-$VERSION-android-unsigned.aab"
+            "$tools/zipalign" -f -p 4 "$apk" "out/aether-$VERSION-android-unsigned.apk"
+            cp "$aab" "out/aether-$VERSION-android-unsigned.aab"
           fi
           badging=$("$tools/aapt2" dump badging out/*.apk)
           if ! grep -q "versionName='$MANIFEST_VERSION'" <<<"$badging"; then
@@ -140,7 +140,7 @@ jobs:
         run: |
           ./kotlin package -m desktopApp -f executable-jar
           mkdir -p out
-          cp build/tasks/_desktopApp_executableJarJvm/desktopApp-jvm-executable.jar "out/meshtastic-aether-$VERSION-desktop-${{ matrix.id }}.jar"
+          cp build/tasks/_desktopApp_executableJarJvm/desktopApp-jvm-executable.jar "out/aether-$VERSION-desktop-${{ matrix.id }}.jar"
 
       - name: Keep the jar
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -176,7 +176,7 @@ jobs:
         run: |
           ./kotlin build -m webApp -v release
           mkdir -p out
-          (cd build/tasks/_webApp_buildWasmJsAppWasmJsRelease && zip -qr "$GITHUB_WORKSPACE/out/meshtastic-aether-$VERSION-web.zip" .)
+          (cd build/tasks/_webApp_buildWasmJsAppWasmJsRelease && zip -qr "$GITHUB_WORKSPACE/out/aether-$VERSION-web.zip" .)
 
       - name: Keep the site
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

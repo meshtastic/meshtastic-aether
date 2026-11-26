@@ -1,6 +1,6 @@
 # Releasing
 
-Meshtastic Aether releases from [`.github/workflows/release.yml`](.github/workflows/release.yml) to a GitHub Release with the Android APK and AAB, a desktop jar per OS and a zipped web build. The release and the snapshots share their build jobs in [`.github/workflows/build-artifacts.yml`](.github/workflows/build-artifacts.yml). Like CI, they only run while the repository is public.
+Aether releases from [`.github/workflows/release.yml`](.github/workflows/release.yml) to a GitHub Release with the Android APK and AAB, a desktop jar per OS and a zipped web build. The release and the snapshots share their build jobs in [`.github/workflows/build-artifacts.yml`](.github/workflows/build-artifacts.yml). Like CI, they only run while the repository is public.
 
 ## Snapshots
 

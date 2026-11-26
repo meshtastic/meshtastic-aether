@@ -8,7 +8,7 @@ Maintainers aim to acknowledge a report within five business days and to ship a 
 
 ## Supported versions
 
-Meshtastic Aether is pre-1.0. Only the latest published release receives security fixes, and there is no long-term support branch. A support window will be published here with 1.0.
+Aether is pre-1.0. Only the latest published release receives security fixes, and there is no long-term support branch. A support window will be published here with 1.0.
 
 ## Scope
 

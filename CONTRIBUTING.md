@@ -1,4 +1,4 @@
-# Contributing to Meshtastic Aether
+# Contributing to Aether
 
 This guide covers setting up a build, running the checks and submitting a change.
 
@@ -118,7 +118,7 @@ Edit `branding/*.svg`, run `scripts/icons.sh` and commit the regenerated outputs
 
 ## Reusing code from other projects
 
-Meshtastic Aether is GPL-3.0-or-later, so ported code must be MIT, BSD, Apache-2.0, public domain or another GPL-compatible license. Keep the original copyright and license notice, and add the source and the files it became to [`NOTICE`](NOTICE). Never port Shadertoy code, Faust `vital_rev` or `kb_rom_rev1`. Code from Meshtastic projects under GPL-3.0 can be reused with the origin noted in the commit message.
+Aether is GPL-3.0-or-later, so ported code must be MIT, BSD, Apache-2.0, public domain or another GPL-compatible license. Keep the original copyright and license notice, and add the source and the files it became to [`NOTICE`](NOTICE). Never port Shadertoy code, Faust `vital_rev` or `kb_rom_rev1`. Code from Meshtastic projects under GPL-3.0 can be reused with the origin noted in the commit message.
 
 ## Reporting bugs and security issues
 

@@ -32,6 +32,8 @@
     <circle cx="274" cy="-32" r="8" fill="#B5F5CE" fill-opacity="0.5"/>
   </g>
   <circle cx="512" cy="512" r="108" fill="url(#orb)"/>
+  <!-- The Meshtastic M mark, the official artwork (design/logo/svg) unaltered: scaled and placed only, in the official dark-on-green colorway. -->
+  <path d="M529.66,484.69L497.44,531.94L490.64,527.30L526.25,475.08C527.02,473.96 528.29,473.29 529.65,473.29C531.01,473.28 532.28,473.95 533.05,475.07L568.74,527.21L561.95,531.86L529.66,484.69ZM462.05,531.89L499.69,476.70L492.89,472.06L455.26,527.25L462.05,531.89Z" fill="#2C2D3C"/>
   <g transform="translate(512 512) rotate(34)">
     <path d="M -250 0 A 250 70 0 0 0 250 0" fill="none" stroke="#B5F5CE" stroke-opacity="0.3" stroke-width="7" stroke-linecap="round"/>
   </g>

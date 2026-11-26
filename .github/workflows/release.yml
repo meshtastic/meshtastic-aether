@@ -132,12 +132,12 @@ jobs:
           if ! git rev-parse -q --verify "refs/tags/v$VERSION" >/dev/null; then
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git tag -a "v$VERSION" -m "Meshtastic Aether $VERSION"
+            git tag -a "v$VERSION" -m "Aether $VERSION"
             git push origin "v$VERSION"
           fi
 
       - name: Publish the release
         run: |
-          gh release create "v$VERSION" --verify-tag --title "Meshtastic Aether $VERSION" \
+          gh release create "v$VERSION" --verify-tag --title "Aether $VERSION" \
             --notes-file artifacts/release-notes/release-notes.md \
             artifacts/android/* artifacts/desktop-*/* artifacts/web/*

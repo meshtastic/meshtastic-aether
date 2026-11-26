@@ -1,4 +1,4 @@
-# Meshtastic Aether design
+# Aether design
 
 An ambient music and visuals generator shaped by live Meshtastic mesh traffic, as a Compose Multiplatform app on the meshtastic-sdk.
 

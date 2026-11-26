@@ -21,6 +21,8 @@
     <path d="M -340 0 A 340 120 0 0 1 340 0" fill="none" stroke="#67EA94" stroke-opacity="0.5" stroke-width="56" stroke-linecap="round"/>
   </g>
   <circle cx="512" cy="512" r="150" fill="url(#orb)"/>
+  <!-- The Meshtastic M mark, the official artwork (design/logo/svg) unaltered: scaled and placed only, in the official dark-on-green colorway; larger than in icon.svg so it still reads at favicon sizes. -->
+  <path d="M549.53,475.21L481.06,575.61L466.62,565.77L542.29,454.80C543.92,452.41 546.62,450.98 549.50,450.98C552.39,450.98 555.09,452.40 556.72,454.78L632.57,565.58L618.14,575.45L549.53,475.21ZM405.87,575.51L485.84,458.23L471.40,448.39L391.43,565.66L405.87,575.51Z" fill="#2C2D3C"/>
   <g transform="translate(512 512) rotate(-24)">
     <path d="M -340 0 A 340 120 0 0 0 340 0" fill="none" stroke="#0F1017" stroke-opacity="0.45" stroke-width="84" stroke-linecap="round"/>
     <path d="M -340 0 A 340 120 0 0 0 340 0" fill="none" stroke="#8FF0B2" stroke-width="56" stroke-linecap="round"/>

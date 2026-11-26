@@ -21,10 +21,10 @@ This project uses the [Kotlin Toolchain](https://kotlin-toolchain.org/) (a dedic
 ## Branding rules
 
 - Colors come from the brand palette in the design standards (`design/standards`, section 7), and `shared/test/theme/PaletteSourceTest.kt` enforces it.
-- The icon is an own glyph; the Meshtastic M mark is never altered or recolored.
+- The icon is an own glyph with the Meshtastic M mark on its orb. The mark is the official artwork (`meshtastic/design` `logo/svg`, kept as `M_MARK_PATH` in `AetherGlyph.kt` and as paths in `branding/*.svg` and the Android vectors): scale and place it only, in the dark-on-green colorway; never redraw, distort or recolor it.
 - `branding/*.svg` are the sources, and `scripts/icons.sh` regenerates every raster asset; the Android icon is hand-ported XML.
 - The theme is dark-only, a documented waiver of the light theme and dynamic color.
-- The name is written `Meshtastic Aether`.
+- The app is called `Aether` in every string, title, manifest and doc. `Meshtastic` appears once, in the README trademark line. Identifiers keep the long form: `org.meshtastic.aether`, the `meshtastic-aether` repository and artifact names, and the `MeshtasticAether` log folder and Android log tag.
 
 ## Behavior that holds
 
