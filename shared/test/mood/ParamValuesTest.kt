@@ -1,4 +1,4 @@
-package org.meshtastic.ambient.mood
+package org.meshtastic.aether.mood
 
 import kotlin.test.Test
 import kotlin.test.assertEquals

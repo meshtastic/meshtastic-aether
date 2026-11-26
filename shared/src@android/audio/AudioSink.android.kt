@@ -1,4 +1,4 @@
-package org.meshtastic.ambient.audio
+package org.meshtastic.aether.audio
 
 import android.media.AudioAttributes
 import android.media.AudioFormat
@@ -59,7 +59,7 @@ class AndroidAudioSink : AudioSink {
                     }
                 }
             }
-        }, "ambient-audio").apply { isDaemon = true; start() }
+        }, "aether-audio").apply { isDaemon = true; start() }
     }
 
     @Synchronized

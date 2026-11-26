@@ -1,0 +1,58 @@
+name: Feature request
+description: Suggest an addition or change.
+title: "[feature] "
+labels: ["enhancement", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        For a larger design change, open an issue to discuss it before writing code.
+        [`AGENTS.md`](../../AGENTS.md) lists the constraints a change has to respect.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What gap or pain are you trying to solve? Who else has this need?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: What behavior, flag or control would solve it? Keep it concrete.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: What else have you tried or thought about?
+
+  - type: dropdown
+    id: scope
+    attributes:
+      label: Likely scope
+      options:
+        - "music (composer, synth, instruments)"
+        - "visuals (scene, overlay, looks)"
+        - "mesh (sources, links, mappers)"
+        - "mesh-driven parameters"
+        - "platform app (desktop, Android, iOS, web)"
+        - "tooling / build / CI"
+        - "docs"
+        - "not sure"
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: Affirmations
+      options:
+        - label: I have searched existing issues.
+          required: true
+        - label: I am willing to discuss design trade-offs before implementation.
+          required: true

@@ -1,4 +1,4 @@
-package org.meshtastic.ambient.visual
+package org.meshtastic.aether.visual
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.runtime.Composable
@@ -19,10 +19,10 @@ import androidx.compose.ui.graphics.ShaderBrush
 import androidx.compose.ui.graphics.TileMode
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.geometry.Rect
-import org.meshtastic.ambient.mesh.PacketKind
-import org.meshtastic.ambient.music.Rng
-import org.meshtastic.ambient.theme.LocalAmbientPalette
-import org.meshtastic.ambient.ui.AmbientEngine
+import org.meshtastic.aether.mesh.PacketKind
+import org.meshtastic.aether.music.Rng
+import org.meshtastic.aether.theme.LocalAmbientPalette
+import org.meshtastic.aether.ui.AmbientEngine
 import androidx.compose.ui.unit.dp
 import kotlin.math.sin
 import kotlin.math.sqrt

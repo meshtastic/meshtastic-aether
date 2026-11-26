@@ -1,4 +1,4 @@
-package org.meshtastic.ambient.theme
+package org.meshtastic.aether.theme
 
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
@@ -7,7 +7,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
-import org.meshtastic.ambient.visual.SceneModel
+import org.meshtastic.aether.visual.SceneModel
 
 /** Meshtastic brand and neutral colors from the client design standards, sections 7.1-7.3. */
 object Brand {

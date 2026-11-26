@@ -1,4 +1,4 @@
-package org.meshtastic.ambient.ble
+package org.meshtastic.aether.ble
 
 import kotlin.test.Test
 import kotlin.test.assertEquals

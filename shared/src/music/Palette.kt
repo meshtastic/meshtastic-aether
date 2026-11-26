@@ -1,4 +1,4 @@
-package org.meshtastic.ambient.music
+package org.meshtastic.aether.music
 
 /** Instrument families: a node's role picks one, its hardware model picks the voice inside it. */
 enum class Family(val voices: List<Voice>) {

@@ -1,4 +1,4 @@
-package org.meshtastic.ambient
+package org.meshtastic.aether
 
 import android.os.Bundle
 import android.view.WindowManager
@@ -7,8 +7,8 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import kotlinx.coroutines.CompletableDeferred
-import org.meshtastic.ambient.ble.AndroidBlePermissions
-import org.meshtastic.ambient.log.Log
+import org.meshtastic.aether.ble.AndroidBlePermissions
+import org.meshtastic.aether.log.Log
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.core.view.WindowCompat

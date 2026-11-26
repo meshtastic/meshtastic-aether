@@ -1,4 +1,4 @@
-package org.meshtastic.ambient.ui
+package org.meshtastic.aether.ui
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -24,8 +24,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
-import org.meshtastic.ambient.ble.bleSupported
-import org.meshtastic.ambient.getPlatform
+import org.meshtastic.aether.ble.bleSupported
+import org.meshtastic.aether.getPlatform
 
 private const val DEFAULT_WS_URL = "ws://meshtastic.local:80/ws"
 private const val DEFAULT_HOST = "meshtastic.local"
@@ -106,7 +106,7 @@ internal fun ConnectScreen(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterVertically),
     ) {
-        Text("Meshtastic Ambient", style = MaterialTheme.typography.headlineMedium)
+        Text("Meshtastic Aether", style = MaterialTheme.typography.headlineMedium)
         Text(
             "It only listens. Nothing is sent to the mesh.",
             style = MaterialTheme.typography.bodyMedium,

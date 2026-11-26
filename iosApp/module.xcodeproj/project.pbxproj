@@ -8,7 +8,7 @@
 
 /* Begin PBXFileReference section */
 		B5CA0C6D31B66EF4CF7614F8 /* Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.info; name = Info.plist; path = src/Info.plist; sourceTree = "<group>"; };
-		A49CFD63DEA202D2D91DB9D3 /* MeshtasticAmbient.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "MeshtasticAmbient.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		A49CFD63DEA202D2D91DB9D3 /* MeshtasticAether.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "MeshtasticAether.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -52,7 +52,7 @@
 		94B4317B4C9F889501505013 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				A49CFD63DEA202D2D91DB9D3 /* MeshtasticAmbient.app */,
+				A49CFD63DEA202D2D91DB9D3 /* MeshtasticAether.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -78,7 +78,7 @@
 			);
 			name = app;
 			productName = app;
-			productReference = A49CFD63DEA202D2D91DB9D3 /* MeshtasticAmbient.app */;
+			productReference = A49CFD63DEA202D2D91DB9D3 /* MeshtasticAether.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -153,9 +153,9 @@
 				KOTLIN_CLI_WRAPPER_PATH = "$(SRCROOT)/../kotlin";
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks @loader_path/Frameworks";
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "org.meshtastic.ambient";
+				PRODUCT_BUNDLE_IDENTIFIER = "org.meshtastic.aether";
 				PRODUCT_MODULE_NAME = app;
-				PRODUCT_NAME = "MeshtasticAmbient";
+				PRODUCT_NAME = "MeshtasticAether";
 				SDKROOT = iphoneos;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
@@ -182,9 +182,9 @@
 				KOTLIN_CLI_WRAPPER_PATH = "$(SRCROOT)/../kotlin";
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks @loader_path/Frameworks";
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "org.meshtastic.ambient";
+				PRODUCT_BUNDLE_IDENTIFIER = "org.meshtastic.aether";
 				PRODUCT_MODULE_NAME = app;
-				PRODUCT_NAME = "MeshtasticAmbient";
+				PRODUCT_NAME = "MeshtasticAether";
 				SDKROOT = iphoneos;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;

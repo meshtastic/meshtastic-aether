@@ -1,6 +1,6 @@
-package org.meshtastic.ambient.visual
+package org.meshtastic.aether.visual
 
-import org.meshtastic.ambient.mesh.PacketKind
+import org.meshtastic.aether.mesh.PacketKind
 import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.test.Test

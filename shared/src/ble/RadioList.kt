@@ -1,4 +1,4 @@
-package org.meshtastic.ambient.ble
+package org.meshtastic.aether.ble
 
 /** The radios a scan has seen lately, strongest first; one entry per address. */
 class RadioList(private val staleMillis: Long = 15_000) {

@@ -1,12 +1,12 @@
-package org.meshtastic.ambient.synth
+package org.meshtastic.aether.synth
 
-import org.meshtastic.ambient.audio.BlockRenderer
-import org.meshtastic.ambient.music.ComposerOutput
-import org.meshtastic.ambient.music.ControlEvent
-import org.meshtastic.ambient.music.NoteEvent
-import org.meshtastic.ambient.music.NoteSink
-import org.meshtastic.ambient.music.Texture
-import org.meshtastic.ambient.music.Voice
+import org.meshtastic.aether.audio.BlockRenderer
+import org.meshtastic.aether.music.ComposerOutput
+import org.meshtastic.aether.music.ControlEvent
+import org.meshtastic.aether.music.NoteEvent
+import org.meshtastic.aether.music.NoteSink
+import org.meshtastic.aether.music.Texture
+import org.meshtastic.aether.music.Voice
 import kotlin.concurrent.atomics.AtomicInt
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlin.math.exp

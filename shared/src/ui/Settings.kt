@@ -1,10 +1,10 @@
-package org.meshtastic.ambient.ui
+package org.meshtastic.aether.ui
 
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import org.meshtastic.ambient.theme.PaletteChoice
+import org.meshtastic.aether.theme.PaletteChoice
 
 /** A small persistent string store; the platform supplies the real one. Implementations must not throw. */
 internal interface KeyValueStore {

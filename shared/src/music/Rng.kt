@@ -1,4 +1,4 @@
-package org.meshtastic.ambient.music
+package org.meshtastic.aether.music
 
 /** SplitMix64: small, seedable and identical on every target. */
 class Rng(seed: Long) {

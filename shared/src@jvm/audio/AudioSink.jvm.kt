@@ -1,4 +1,4 @@
-package org.meshtastic.ambient.audio
+package org.meshtastic.aether.audio
 
 import javax.sound.sampled.AudioFormat
 import javax.sound.sampled.AudioSystem
@@ -48,7 +48,7 @@ class JvmAudioSink : AudioSink {
                     }
                 }
             }
-        }, "ambient-audio").apply { isDaemon = true; priority = Thread.MAX_PRIORITY; start() }
+        }, "aether-audio").apply { isDaemon = true; priority = Thread.MAX_PRIORITY; start() }
     }
 
     @Synchronized

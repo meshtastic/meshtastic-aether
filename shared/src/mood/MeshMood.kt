@@ -1,9 +1,9 @@
-package org.meshtastic.ambient.mood
+package org.meshtastic.aether.mood
 
 import kotlin.math.exp
 import kotlin.math.ln
-import org.meshtastic.ambient.mesh.LinkState
-import org.meshtastic.ambient.mesh.MeshEvent
+import org.meshtastic.aether.mesh.LinkState
+import org.meshtastic.aether.mesh.MeshEvent
 
 /**
  * The pass-1 signals at one instant. Each signal is 0..1 with a confidence 0..1; a signal with no data holds its neutral

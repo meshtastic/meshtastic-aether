@@ -1,7 +1,7 @@
-package org.meshtastic.ambient.mesh
+package org.meshtastic.aether.mesh
 
 import okio.ByteString.Companion.toByteString
-import org.meshtastic.ambient.music.Rng
+import org.meshtastic.aether.music.Rng
 import org.meshtastic.proto.Data
 import org.meshtastic.proto.EnvironmentMetrics
 import org.meshtastic.proto.FromRadio

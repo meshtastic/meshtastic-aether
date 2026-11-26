@@ -11,4 +11,4 @@ dependencies:
 settings:
   compose: enabled
   jvm:
-    mainClass: org.meshtastic.ambient.MainKt
+    mainClass: org.meshtastic.aether.MainKt

@@ -1,10 +1,10 @@
-package org.meshtastic.ambient.synth
+package org.meshtastic.aether.synth
 
-import org.meshtastic.ambient.music.ComposerOutput
-import org.meshtastic.ambient.music.ControlEvent
-import org.meshtastic.ambient.music.NoteEvent
-import org.meshtastic.ambient.music.Texture
-import org.meshtastic.ambient.music.Voice
+import org.meshtastic.aether.music.ComposerOutput
+import org.meshtastic.aether.music.ControlEvent
+import org.meshtastic.aether.music.NoteEvent
+import org.meshtastic.aether.music.Texture
+import org.meshtastic.aether.music.Voice
 import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.cos

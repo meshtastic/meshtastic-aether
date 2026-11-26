@@ -1,4 +1,4 @@
-package org.meshtastic.ambient.music
+package org.meshtastic.aether.music
 
 /**
  * Picks the scale at a chord boundary: the clock's mode is the base, `modeLean` moves it at most one step along the

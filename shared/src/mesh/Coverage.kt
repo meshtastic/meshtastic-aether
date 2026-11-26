@@ -1,4 +1,4 @@
-package org.meshtastic.ambient.mesh
+package org.meshtastic.aether.mesh
 
 /**
  * A tally of what the mesh actually reports: the distinct nodes per telemetry field, the role and hardware mix of the

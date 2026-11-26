@@ -1,8 +1,8 @@
-package org.meshtastic.ambient.visual
+package org.meshtastic.aether.visual
 
 import androidx.compose.ui.graphics.Color
-import org.meshtastic.ambient.theme.PaletteChoice
-import org.meshtastic.ambient.theme.ambientColorScheme
+import org.meshtastic.aether.theme.PaletteChoice
+import org.meshtastic.aether.theme.ambientColorScheme
 import kotlin.math.abs
 import kotlin.test.Test
 import kotlin.test.assertEquals

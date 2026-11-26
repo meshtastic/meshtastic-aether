@@ -1,4 +1,4 @@
-package org.meshtastic.ambient.ui
+package org.meshtastic.aether.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -22,7 +22,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
-import org.meshtastic.ambient.theme.PaletteChoice
+import org.meshtastic.aether.theme.PaletteChoice
 import kotlin.math.roundToInt
 
 private const val OVERLAY_ALPHA = 0.88f

@@ -1,6 +1,6 @@
-package org.meshtastic.ambient
+package org.meshtastic.aether
 
-import org.meshtastic.ambient.ui.KeyValueStore
+import org.meshtastic.aether.ui.KeyValueStore
 import org.meshtastic.sdk.RadioTransport
 
 /** What the running target can and cannot do; the UI branches on these flags, never on [name]. */

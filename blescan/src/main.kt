@@ -1,11 +1,11 @@
-package org.meshtastic.ambient.blescan
+package org.meshtastic.aether.blescan
 
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeoutOrNull
-import org.meshtastic.ambient.ble.RadioList
-import org.meshtastic.ambient.ble.bleScan
-import org.meshtastic.ambient.ui.nowMillis
+import org.meshtastic.aether.ble.RadioList
+import org.meshtastic.aether.ble.bleScan
+import org.meshtastic.aether.ui.nowMillis
 
 /** Scans for Meshtastic radios for N seconds (default 15) and prints each one as it is first seen, then the final list. */
 fun main(args: Array<String>) = runBlocking {

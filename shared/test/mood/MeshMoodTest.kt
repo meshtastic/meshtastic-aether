@@ -1,11 +1,11 @@
-package org.meshtastic.ambient.mood
+package org.meshtastic.aether.mood
 
 import kotlin.math.abs
 import kotlin.math.exp
 import kotlin.math.ln
-import org.meshtastic.ambient.mesh.LinkState
-import org.meshtastic.ambient.mesh.MeshEvent
-import org.meshtastic.ambient.mesh.PacketKind
+import org.meshtastic.aether.mesh.LinkState
+import org.meshtastic.aether.mesh.MeshEvent
+import org.meshtastic.aether.mesh.PacketKind
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull

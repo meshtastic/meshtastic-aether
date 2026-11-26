@@ -1,4 +1,4 @@
-package org.meshtastic.ambient.synth
+package org.meshtastic.aether.synth
 
 /**
  * Port of the Clouds pitch shifter (Emilie Gillet, MIT): two read taps sweeping a delay line half a window apart,

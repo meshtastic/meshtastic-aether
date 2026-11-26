@@ -12,6 +12,6 @@ dependencies:
 settings:
   compose: enabled
   android:
-    applicationId: org.meshtastic.ambient
-    namespace: org.meshtastic.ambient
+    applicationId: org.meshtastic.aether
+    namespace: org.meshtastic.aether
     minSdk: 26 # meshtastic-sdk's floor

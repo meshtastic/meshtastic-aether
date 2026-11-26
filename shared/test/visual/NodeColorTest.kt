@@ -1,7 +1,7 @@
-package org.meshtastic.ambient.visual
+package org.meshtastic.aether.visual
 
-import org.meshtastic.ambient.music.Rng
-import org.meshtastic.ambient.theme.PaletteChoice
+import org.meshtastic.aether.music.Rng
+import org.meshtastic.aether.theme.PaletteChoice
 import kotlin.math.abs
 import kotlin.test.Test
 import kotlin.test.assertEquals

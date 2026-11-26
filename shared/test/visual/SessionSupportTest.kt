@@ -1,16 +1,16 @@
-package org.meshtastic.ambient.visual
+package org.meshtastic.aether.visual
 
 import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.test.runTest
-import org.meshtastic.ambient.mesh.LinkState
-import org.meshtastic.ambient.mesh.MeshEvent
-import org.meshtastic.ambient.mesh.PacketKind
-import org.meshtastic.ambient.mesh.ReplayMeshSource
-import org.meshtastic.ambient.mesh.DemoCapture
-import org.meshtastic.ambient.ui.LoopingReplaySource
-import org.meshtastic.ambient.ui.localMoment
-import org.meshtastic.ambient.ui.shifted
+import org.meshtastic.aether.mesh.LinkState
+import org.meshtastic.aether.mesh.MeshEvent
+import org.meshtastic.aether.mesh.PacketKind
+import org.meshtastic.aether.mesh.ReplayMeshSource
+import org.meshtastic.aether.mesh.DemoCapture
+import org.meshtastic.aether.ui.LoopingReplaySource
+import org.meshtastic.aether.ui.localMoment
+import org.meshtastic.aether.ui.shifted
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue

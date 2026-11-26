@@ -1,4 +1,4 @@
-package org.meshtastic.ambient.ui
+package org.meshtastic.aether.ui
 
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -15,14 +15,14 @@ import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.currentTime
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
-import org.meshtastic.ambient.audio.AudioSink
-import org.meshtastic.ambient.audio.BlockRenderer
-import org.meshtastic.ambient.mesh.GeoPoint
-import org.meshtastic.ambient.mood.ParamValues
-import org.meshtastic.ambient.mesh.LinkState
-import org.meshtastic.ambient.mesh.MeshEvent
-import org.meshtastic.ambient.mesh.MeshSource
-import org.meshtastic.ambient.mesh.PacketKind
+import org.meshtastic.aether.audio.AudioSink
+import org.meshtastic.aether.audio.BlockRenderer
+import org.meshtastic.aether.mesh.GeoPoint
+import org.meshtastic.aether.mood.ParamValues
+import org.meshtastic.aether.mesh.LinkState
+import org.meshtastic.aether.mesh.MeshEvent
+import org.meshtastic.aether.mesh.MeshSource
+import org.meshtastic.aether.mesh.PacketKind
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse

@@ -1,4 +1,4 @@
-package org.meshtastic.ambient.music
+package org.meshtastic.aether.music
 
 /** Fires once when the median pressure has fallen [DROP_HPA] or more over 3 to 4 hours; then rests for 3 hours. */
 internal class PressureWatch {

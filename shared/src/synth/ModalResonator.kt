@@ -1,4 +1,4 @@
-package org.meshtastic.ambient.synth
+package org.meshtastic.aether.synth
 
 import kotlin.math.PI
 import kotlin.math.abs

@@ -1,6 +1,6 @@
 @file:OptIn(ExperimentalAtomicApi::class)
 
-package org.meshtastic.ambient.ui
+package org.meshtastic.aether.ui
 
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -15,21 +15,21 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
-import org.meshtastic.ambient.audio.AudioSink
-import org.meshtastic.ambient.audio.BlockRenderer
-import org.meshtastic.ambient.log.Log
-import org.meshtastic.ambient.log.Tally
-import org.meshtastic.ambient.mesh.LinkState
-import org.meshtastic.ambient.mesh.MeshEvent
-import org.meshtastic.ambient.mesh.MeshSource
-import org.meshtastic.ambient.music.Composer
-import org.meshtastic.ambient.music.ControlEvent
-import org.meshtastic.ambient.music.Day
-import org.meshtastic.ambient.music.NoteEvent
-import org.meshtastic.ambient.music.Texture
-import org.meshtastic.ambient.mood.ParamValues
-import org.meshtastic.ambient.synth.Synth
-import org.meshtastic.ambient.visual.SceneModel
+import org.meshtastic.aether.audio.AudioSink
+import org.meshtastic.aether.audio.BlockRenderer
+import org.meshtastic.aether.log.Log
+import org.meshtastic.aether.log.Tally
+import org.meshtastic.aether.mesh.LinkState
+import org.meshtastic.aether.mesh.MeshEvent
+import org.meshtastic.aether.mesh.MeshSource
+import org.meshtastic.aether.music.Composer
+import org.meshtastic.aether.music.ControlEvent
+import org.meshtastic.aether.music.Day
+import org.meshtastic.aether.music.NoteEvent
+import org.meshtastic.aether.music.Texture
+import org.meshtastic.aether.mood.ParamValues
+import org.meshtastic.aether.synth.Synth
+import org.meshtastic.aether.visual.SceneModel
 import kotlin.concurrent.atomics.AtomicInt
 import kotlin.concurrent.atomics.AtomicLong
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
@@ -108,7 +108,7 @@ class AmbientEngine(
     private var nextSummaryMillis = Long.MIN_VALUE
     private var lastLogged = ""
 
-    /** Drawn by [org.meshtastic.ambient.visual.AmbientScene]; only the [run] coroutine and the frame loop touch it. */
+    /** Drawn by [org.meshtastic.aether.visual.AmbientScene]; only the [run] coroutine and the frame loop touch it. */
     val scene = SceneModel(sampleRate).also { it.linked = false }
 
     var status by mutableStateOf(EngineStatus())

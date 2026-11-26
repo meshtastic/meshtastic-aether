@@ -1,12 +1,12 @@
-package org.meshtastic.ambient.visual
+package org.meshtastic.aether.visual
 
-import org.meshtastic.ambient.mesh.GeoPoint
-import org.meshtastic.ambient.mesh.MeshEvent
-import org.meshtastic.ambient.mesh.PacketKind
-import org.meshtastic.ambient.mood.MeshMood
-import org.meshtastic.ambient.mood.ParamDrivers
-import org.meshtastic.ambient.mood.ParamValues
-import org.meshtastic.ambient.mood.RotationIntegrator
+import org.meshtastic.aether.mesh.GeoPoint
+import org.meshtastic.aether.mesh.MeshEvent
+import org.meshtastic.aether.mesh.PacketKind
+import org.meshtastic.aether.mood.MeshMood
+import org.meshtastic.aether.mood.ParamDrivers
+import org.meshtastic.aether.mood.ParamValues
+import org.meshtastic.aether.mood.RotationIntegrator
 import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.test.Test

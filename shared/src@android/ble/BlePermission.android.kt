@@ -1,4 +1,4 @@
-package org.meshtastic.ambient.ble
+package org.meshtastic.aether.ble
 
 /** Set by the host activity: asks for BLUETOOTH_SCAN and BLUETOOTH_CONNECT and returns whether both were granted. */
 object AndroidBlePermissions {

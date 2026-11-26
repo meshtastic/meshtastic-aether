@@ -1,7 +1,7 @@
-package org.meshtastic.ambient.ui
+package org.meshtastic.aether.ui
 
-import org.meshtastic.ambient.mesh.Coverage
-import org.meshtastic.ambient.mesh.MeshEvent
+import org.meshtastic.aether.mesh.Coverage
+import org.meshtastic.aether.mesh.MeshEvent
 
 /**
  * Feeds mesh events to a [Coverage] and writes its line to [write]: once [FIRST_MILLIS] after the link first comes

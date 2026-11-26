@@ -1,4 +1,4 @@
-package org.meshtastic.ambient.mesh
+package org.meshtastic.aether.mesh
 
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.currentTime

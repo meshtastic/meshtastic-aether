@@ -1,6 +1,6 @@
-package org.meshtastic.ambient.ui
+package org.meshtastic.aether.ui
 
-import org.meshtastic.ambient.theme.PaletteChoice
+import org.meshtastic.aether.theme.PaletteChoice
 
 /** What the command line asked for: a link to open, an argument that could not be read, fullscreen and a look. */
 class LaunchArgs(val link: LinkChoice?, val error: String?, val fullscreen: Boolean, val look: PaletteChoice? = null)

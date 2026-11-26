@@ -1,7 +1,7 @@
-package org.meshtastic.ambient.music
+package org.meshtastic.aether.music
 
-import org.meshtastic.ambient.mesh.GeoPoint
-import org.meshtastic.ambient.mesh.PacketKind
+import org.meshtastic.aether.mesh.GeoPoint
+import org.meshtastic.aether.mesh.PacketKind
 import kotlin.math.floor
 import kotlin.math.ln
 import kotlin.math.pow

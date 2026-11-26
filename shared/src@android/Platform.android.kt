@@ -1,9 +1,9 @@
-package org.meshtastic.ambient
+package org.meshtastic.aether
 
 import android.content.Context
 import android.os.Build
-import org.meshtastic.ambient.ui.KeyValueStore
-import org.meshtastic.ambient.ui.MemoryStore
+import org.meshtastic.aether.ui.KeyValueStore
+import org.meshtastic.aether.ui.MemoryStore
 import org.meshtastic.sdk.RadioTransport
 import org.meshtastic.sdk.transport.tcp.TcpTransport
 
@@ -30,7 +30,7 @@ object AndroidAppContext {
 }
 
 private class SharedPreferencesStore(context: Context) : KeyValueStore {
-    private val prefs = context.applicationContext.getSharedPreferences("meshtastic-ambient", Context.MODE_PRIVATE)
+    private val prefs = context.applicationContext.getSharedPreferences("meshtastic-aether", Context.MODE_PRIVATE)
 
     override fun get(key: String): String? = prefs.getString(key, null)
 

@@ -1,4 +1,4 @@
-package org.meshtastic.ambient.music
+package org.meshtastic.aether.music
 
 /** A node's signature: [roles] are chord roles 0..4 and [gaps] the seconds before each note (the first is 0). */
 class Motif(val roles: IntArray, val gaps: DoubleArray) {

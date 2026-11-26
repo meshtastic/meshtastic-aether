@@ -1,4 +1,4 @@
-package org.meshtastic.ambient.music
+package org.meshtastic.aether.music
 
 /** A composer whose packets all play the Mallet, the timbre these tests were written against; the palette has its own tests. */
 internal fun malletComposer(seed: Long, sampleRate: Int, pinFormFull: Boolean = false): Composer =

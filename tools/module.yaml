@@ -13,4 +13,4 @@ test-dependencies:
 
 settings:
   jvm:
-    mainClass: org.meshtastic.ambient.tools.RenderWavKt
+    mainClass: org.meshtastic.aether.tools.RenderWavKt

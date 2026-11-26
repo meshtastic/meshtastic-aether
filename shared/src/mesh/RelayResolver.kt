@@ -1,4 +1,4 @@
-package org.meshtastic.ambient.mesh
+package org.meshtastic.aether.mesh
 
 /**
  * The node a packet's relay byte most likely names: the one known node, other than [source] and [self], whose low byte

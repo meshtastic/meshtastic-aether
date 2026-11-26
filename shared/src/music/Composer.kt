@@ -1,12 +1,12 @@
-package org.meshtastic.ambient.music
+package org.meshtastic.aether.music
 
-import org.meshtastic.ambient.mesh.GeoPoint
-import org.meshtastic.ambient.mesh.MeshEvent
-import org.meshtastic.ambient.mesh.PacketKind
-import org.meshtastic.ambient.mesh.resolveRelay
-import org.meshtastic.ambient.mood.MeshMood
-import org.meshtastic.ambient.mood.MoodSnapshot
-import org.meshtastic.ambient.mood.ParamValues
+import org.meshtastic.aether.mesh.GeoPoint
+import org.meshtastic.aether.mesh.MeshEvent
+import org.meshtastic.aether.mesh.PacketKind
+import org.meshtastic.aether.mesh.resolveRelay
+import org.meshtastic.aether.mood.MeshMood
+import org.meshtastic.aether.mood.MoodSnapshot
+import org.meshtastic.aether.mood.ParamValues
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.hypot

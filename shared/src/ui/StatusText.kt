@@ -1,6 +1,6 @@
-package org.meshtastic.ambient.ui
+package org.meshtastic.aether.ui
 
-import org.meshtastic.ambient.mesh.LinkState
+import org.meshtastic.aether.mesh.LinkState
 
 /** The one name for each link state, shared by the status line and the overlay. */
 internal fun linkStatusText(s: LinkState): String = when (s) {

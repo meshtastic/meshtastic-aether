@@ -1,6 +1,6 @@
-package org.meshtastic.ambient.visual
+package org.meshtastic.aether.visual
 
-import org.meshtastic.ambient.mood.RotationState
+import org.meshtastic.aether.mood.RotationState
 import kotlin.math.cos
 import kotlin.math.sin
 

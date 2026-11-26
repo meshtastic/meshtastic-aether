@@ -1,4 +1,4 @@
-package org.meshtastic.ambient.visual
+package org.meshtastic.aether.visual
 
 import kotlin.math.ceil
 import kotlin.math.round

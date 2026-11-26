@@ -1,4 +1,4 @@
-package org.meshtastic.ambient
+package org.meshtastic.aether
 
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -7,7 +7,7 @@ import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.WindowPlacement
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
-import org.meshtastic.ambient.ui.parseLaunchArgs
+import org.meshtastic.aether.ui.parseLaunchArgs
 import java.awt.Cursor
 import java.awt.Point
 import java.awt.Toolkit
@@ -30,7 +30,7 @@ fun main(args: Array<String>) {
                 KeepAwake.stop()
                 exitApplication()
             },
-            title = "Meshtastic Ambient",
+            title = "Meshtastic Aether",
             state = state,
         ) {
             App(

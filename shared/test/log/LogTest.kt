@@ -1,6 +1,6 @@
-package org.meshtastic.ambient.log
+package org.meshtastic.aether.log
 
-import org.meshtastic.ambient.mesh.PacketKind
+import org.meshtastic.aether.mesh.PacketKind
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals

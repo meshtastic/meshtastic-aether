@@ -1,4 +1,4 @@
-package org.meshtastic.ambient
+package org.meshtastic.aether
 
 import kotlin.test.Test
 import kotlin.test.assertTrue

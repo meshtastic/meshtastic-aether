@@ -1,4 +1,4 @@
-package org.meshtastic.ambient.ble
+package org.meshtastic.aether.ble
 
 import kotlinx.coroutines.flow.Flow
 import org.meshtastic.sdk.RadioTransport

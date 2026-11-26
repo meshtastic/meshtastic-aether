@@ -1,4 +1,4 @@
-package org.meshtastic.ambient.mesh
+package org.meshtastic.aether.mesh
 
 import org.meshtastic.proto.HardwareModel
 import org.meshtastic.proto.NodeInfo

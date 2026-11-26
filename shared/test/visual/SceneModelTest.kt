@@ -1,9 +1,9 @@
-package org.meshtastic.ambient.visual
+package org.meshtastic.aether.visual
 
-import org.meshtastic.ambient.mesh.GeoPoint
-import org.meshtastic.ambient.mesh.LinkState
-import org.meshtastic.ambient.mesh.MeshEvent
-import org.meshtastic.ambient.mesh.PacketKind
+import org.meshtastic.aether.mesh.GeoPoint
+import org.meshtastic.aether.mesh.LinkState
+import org.meshtastic.aether.mesh.MeshEvent
+import org.meshtastic.aether.mesh.PacketKind
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.hypot
@@ -154,7 +154,7 @@ class SceneModelTest {
     }
 
     private fun note(node: Long?, at: Long = 0L, velocity: Float = 0.8f) =
-        org.meshtastic.ambient.music.NoteEvent(at, org.meshtastic.ambient.music.Voice.Bell, 440.0, velocity, 0f, 0f, 1000, 0.5f, node)
+        org.meshtastic.aether.music.NoteEvent(at, org.meshtastic.aether.music.Voice.Bell, 440.0, velocity, 0f, 0f, 1000, 0.5f, node)
 
     // Regression: memory and motif notes sounded with no visual (review: only packets drew).
     @Test
@@ -188,8 +188,8 @@ class SceneModelTest {
         assertEquals(g, s.glow(s.orb(1)!!), 1e-6)
     }
 
-    private fun texture(rootHz: Double, pad: Float) = org.meshtastic.ambient.music.Texture(
-        rootHz, 0.5f, 0.5f, 0.5f, 0.2f, 0.2f, 0.1f, mapOf(org.meshtastic.ambient.music.Voice.Pad to pad),
+    private fun texture(rootHz: Double, pad: Float) = org.meshtastic.aether.music.Texture(
+        rootHz, 0.5f, 0.5f, 0.5f, 0.2f, 0.2f, 0.1f, mapOf(org.meshtastic.aether.music.Voice.Pad to pad),
     )
 
     // Regression: chords and pads had no visual; the background hue must follow the key slowly.

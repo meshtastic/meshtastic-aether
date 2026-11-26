@@ -1,9 +1,9 @@
-package org.meshtastic.ambient.music
+package org.meshtastic.aether.music
 
-import org.meshtastic.ambient.mesh.GeoPoint
-import org.meshtastic.ambient.mesh.LinkState
-import org.meshtastic.ambient.mesh.MeshEvent
-import org.meshtastic.ambient.mesh.PacketKind
+import org.meshtastic.aether.mesh.GeoPoint
+import org.meshtastic.aether.mesh.LinkState
+import org.meshtastic.aether.mesh.MeshEvent
+import org.meshtastic.aether.mesh.PacketKind
 import kotlin.math.pow
 import kotlin.test.Test
 import kotlin.test.assertEquals

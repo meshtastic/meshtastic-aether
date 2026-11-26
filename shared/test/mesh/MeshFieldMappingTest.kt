@@ -1,4 +1,4 @@
-package org.meshtastic.ambient.mesh
+package org.meshtastic.aether.mesh
 
 import okio.ByteString.Companion.encodeUtf8
 import org.meshtastic.proto.Config

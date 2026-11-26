@@ -1,6 +1,6 @@
-package org.meshtastic.ambient.log
+package org.meshtastic.aether.log
 
-import org.meshtastic.ambient.mesh.PacketKind
+import org.meshtastic.aether.mesh.PacketKind
 
 /** Counts packets heard by kind between summaries. */
 class Tally {

@@ -1,4 +1,4 @@
-package org.meshtastic.ambient.audio
+package org.meshtastic.aether.audio
 
 import kotlin.math.roundToInt
 

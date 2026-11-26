@@ -1,4 +1,4 @@
-package org.meshtastic.ambient.music
+package org.meshtastic.aether.music
 
 enum class Quantity(val defaultMin: Float, val defaultMax: Float, val minSpan: Float) {
     Temperature(-10f, 35f, 2f),

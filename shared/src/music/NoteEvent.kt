@@ -1,4 +1,4 @@
-package org.meshtastic.ambient.music
+package org.meshtastic.aether.music
 
 /** The timbres the synth builds; the first seven are the original set, the rest are the instrument palette of `Palette`. */
 enum class Voice { Bell, Mallet, Pluck, Breath, Pad, Drone, Shimmer, Marimba, Vibes, Kalimba, Glass, Harp, Gong, Bowed, Choir, Sub }

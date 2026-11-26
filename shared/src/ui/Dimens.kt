@@ -1,4 +1,4 @@
-package org.meshtastic.ambient.ui
+package org.meshtastic.aether.ui
 
 import androidx.compose.ui.unit.dp
 

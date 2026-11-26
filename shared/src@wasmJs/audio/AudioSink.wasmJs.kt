@@ -1,6 +1,6 @@
 @file:OptIn(ExperimentalWasmJsInterop::class)
 
-package org.meshtastic.ambient.audio
+package org.meshtastic.aether.audio
 
 import kotlin.js.ExperimentalWasmJsInterop
 import kotlin.js.JsAny

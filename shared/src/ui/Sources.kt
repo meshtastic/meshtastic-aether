@@ -1,11 +1,11 @@
-package org.meshtastic.ambient.ui
+package org.meshtastic.aether.ui
 
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
-import org.meshtastic.ambient.mesh.MeshEvent
-import org.meshtastic.ambient.mesh.MeshSource
-import org.meshtastic.ambient.mesh.ReplayMeshSource
+import org.meshtastic.aether.mesh.MeshEvent
+import org.meshtastic.aether.mesh.MeshSource
+import org.meshtastic.aether.mesh.ReplayMeshSource
 
 internal fun MeshEvent.shifted(by: Long): MeshEvent = when (this) {
     is MeshEvent.PacketHeard -> copy(atMillis = atMillis + by)

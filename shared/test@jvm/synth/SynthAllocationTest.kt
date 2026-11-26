@@ -1,7 +1,7 @@
-package org.meshtastic.ambient.synth
+package org.meshtastic.aether.synth
 
-import org.meshtastic.ambient.music.ComposerOutput
-import org.meshtastic.ambient.music.Voice
+import org.meshtastic.aether.music.ComposerOutput
+import org.meshtastic.aether.music.Voice
 import java.lang.management.ManagementFactory
 import kotlin.test.Test
 import kotlin.test.assertTrue
@@ -12,7 +12,7 @@ class SynthAllocationTest {
     fun `ten seconds of rendering with notes and texture changes allocates almost nothing`() {
         val rate = TEST_RATE
         val synth = Synth(rate)
-        val list = ArrayList<org.meshtastic.ambient.music.NoteEvent>()
+        val list = ArrayList<org.meshtastic.aether.music.NoteEvent>()
         val voices = Voice.entries
         for (i in 0 until 60) list += note(voices[i % voices.size], 1000L + i * rate / 6, 110.0 * (1 + i % 6), 0.6f, 1.5, send = 0.5f)
         synth.schedule(ComposerOutput(list, emptyList()))

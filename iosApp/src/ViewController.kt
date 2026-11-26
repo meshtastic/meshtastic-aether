@@ -1,8 +1,8 @@
-package org.meshtastic.ambient
+package org.meshtastic.aether
 
 import androidx.compose.runtime.remember
 import androidx.compose.ui.window.ComposeUIViewController
-import org.meshtastic.ambient.log.Log
+import org.meshtastic.aether.log.Log
 import platform.UIKit.UIApplication
 
 fun ViewController() = ComposeUIViewController {

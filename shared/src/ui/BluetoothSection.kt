@@ -1,4 +1,4 @@
-package org.meshtastic.ambient.ui
+package org.meshtastic.aether.ui
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -20,11 +20,11 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import org.meshtastic.ambient.ble.BleRadio
-import org.meshtastic.ambient.ble.RadioList
-import org.meshtastic.ambient.ble.bleScan
-import org.meshtastic.ambient.ble.ensureBlePermissions
-import org.meshtastic.ambient.log.Log
+import org.meshtastic.aether.ble.BleRadio
+import org.meshtastic.aether.ble.RadioList
+import org.meshtastic.aether.ble.bleScan
+import org.meshtastic.aether.ble.ensureBlePermissions
+import org.meshtastic.aether.log.Log
 
 /** Scan for Meshtastic radios over Bluetooth and pick one; the scan stops when the section leaves the screen. */
 @Composable

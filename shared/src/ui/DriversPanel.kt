@@ -1,4 +1,4 @@
-package org.meshtastic.ambient.ui
+package org.meshtastic.aether.ui
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -9,7 +9,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import org.meshtastic.ambient.mood.ParamInfo
+import org.meshtastic.aether.mood.ParamInfo
 
 /** The live value with its unit; a parameter with no unit shows the value alone. */
 internal fun paramValueText(p: ParamInfo): String = if (p.unit.isEmpty()) p.value else "${p.value} ${p.unit}"

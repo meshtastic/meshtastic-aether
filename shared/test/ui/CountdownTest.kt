@@ -1,4 +1,4 @@
-package org.meshtastic.ambient.ui
+package org.meshtastic.aether.ui
 
 import kotlin.test.Test
 import kotlin.test.assertEquals

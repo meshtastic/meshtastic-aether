@@ -1,4 +1,4 @@
-package org.meshtastic.ambient.music
+package org.meshtastic.aether.music
 
 import kotlin.test.Test
 import kotlin.test.assertEquals

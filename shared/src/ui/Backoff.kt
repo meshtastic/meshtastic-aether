@@ -1,4 +1,4 @@
-package org.meshtastic.ambient.ui
+package org.meshtastic.aether.ui
 
 /** Delays that double from [initialMillis] up to [maxMillis]; [reset] starts over after a success. */
 internal class Backoff(private val initialMillis: Long = 2_000, private val maxMillis: Long = 60_000) {

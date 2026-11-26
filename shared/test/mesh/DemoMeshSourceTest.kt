@@ -1,14 +1,14 @@
-package org.meshtastic.ambient.mesh
+package org.meshtastic.aether.mesh
 
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.currentTime
 import kotlinx.coroutines.test.runTest
-import org.meshtastic.ambient.mood.MeshMood
-import org.meshtastic.ambient.mood.MoodSnapshot
-import org.meshtastic.ambient.music.Form
-import org.meshtastic.ambient.music.Voice
+import org.meshtastic.aether.mood.MeshMood
+import org.meshtastic.aether.mood.MoodSnapshot
+import org.meshtastic.aether.music.Form
+import org.meshtastic.aether.music.Voice
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue

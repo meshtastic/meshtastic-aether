@@ -1,6 +1,6 @@
-package org.meshtastic.ambient.ui
+package org.meshtastic.aether.ui
 
-import org.meshtastic.ambient.ble.BleRadio
+import org.meshtastic.aether.ble.BleRadio
 
 /** What the person picked on the connect screen, or what the host asked for at launch. */
 sealed interface LinkChoice {

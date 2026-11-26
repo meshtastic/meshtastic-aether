@@ -1,9 +1,9 @@
-package org.meshtastic.ambient.ui
+package org.meshtastic.aether.ui
 
-import org.meshtastic.ambient.ble.BleRadio
-import org.meshtastic.ambient.ble.createBleTransport
-import org.meshtastic.ambient.createTcpTransport
-import org.meshtastic.ambient.mesh.SdkMeshSource
+import org.meshtastic.aether.ble.BleRadio
+import org.meshtastic.aether.ble.createBleTransport
+import org.meshtastic.aether.createTcpTransport
+import org.meshtastic.aether.mesh.SdkMeshSource
 import org.meshtastic.sdk.InMemoryStorageProvider
 import org.meshtastic.sdk.RadioClient
 import org.meshtastic.sdk.RadioTransport

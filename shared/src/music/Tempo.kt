@@ -1,4 +1,4 @@
-package org.meshtastic.ambient.music
+package org.meshtastic.aether.music
 
 /**
  * The four tempo bands. [speed] is 0.5, 0.75, 1 or 1.5 (1 is today); it divides every time the phrases spend:

@@ -1,6 +1,6 @@
-package org.meshtastic.ambient
+package org.meshtastic.aether
 
-import org.meshtastic.ambient.log.Log
+import org.meshtastic.aether.log.Log
 import java.util.concurrent.TimeUnit
 
 private const val TAG = "keepawake"
@@ -20,7 +20,7 @@ internal object KeepAwake {
         val command = when {
             "mac" in os -> listOf("caffeinate", "-d", "-i", "-w", pid)
             "linux" in os -> listOf(
-                "systemd-inhibit", "--what=idle:sleep", "--who=Meshtastic Ambient", "--why=Ambient display", "--mode=block",
+                "systemd-inhibit", "--what=idle:sleep", "--who=Meshtastic Aether", "--why=Ambient display", "--mode=block",
                 "tail", "--pid=$pid", "-f", "/dev/null",
             )
             else -> {

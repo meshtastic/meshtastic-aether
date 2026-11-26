@@ -1,4 +1,4 @@
-package org.meshtastic.ambient.log
+package org.meshtastic.aether.log
 
 import kotlin.time.Clock
 

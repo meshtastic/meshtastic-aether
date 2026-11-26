@@ -1,7 +1,7 @@
-package org.meshtastic.ambient.synth
+package org.meshtastic.aether.synth
 
-import org.meshtastic.ambient.music.NoteEvent
-import org.meshtastic.ambient.music.Voice
+import org.meshtastic.aether.music.NoteEvent
+import org.meshtastic.aether.music.Voice
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.log2

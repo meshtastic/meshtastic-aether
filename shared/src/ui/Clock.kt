@@ -1,7 +1,7 @@
-package org.meshtastic.ambient.ui
+package org.meshtastic.aether.ui
 
-import org.meshtastic.ambient.localOffsetMinutes
-import org.meshtastic.ambient.music.LocalMoment
+import org.meshtastic.aether.localOffsetMinutes
+import org.meshtastic.aether.music.LocalMoment
 import kotlin.time.Clock
 
 /** Wall-clock epoch milliseconds. */

@@ -1,7 +1,7 @@
-package org.meshtastic.ambient.ui
+package org.meshtastic.aether.ui
 
-import org.meshtastic.ambient.mood.ParamInfo
-import org.meshtastic.ambient.mood.ParamValues
+import org.meshtastic.aether.mood.ParamInfo
+import org.meshtastic.aether.mood.ParamValues
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse

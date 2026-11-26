@@ -1,4 +1,4 @@
-package org.meshtastic.ambient.log
+package org.meshtastic.aether.log
 
 import java.io.File
 import kotlin.io.path.createTempDirectory
@@ -11,7 +11,7 @@ class FileLogSinkTest {
 
     @Test
     fun `lines are appended one per row and the parent directory is created`() {
-        val file = File(dir(), "nested/ambient.log")
+        val file = File(dir(), "nested/aether.log")
         val sink = FileLogSink(file)
         sink.write(Level.Info, "first")
         sink.write(Level.Info, "second")
@@ -22,17 +22,17 @@ class FileLogSinkTest {
     @Test
     fun `a file over the limit at startup moves to dot one and a new file starts`() {
         val d = dir()
-        val file = File(d, "ambient.log")
+        val file = File(d, "aether.log")
         file.writeText("x".repeat(100))
         val sink = FileLogSink(file, maxBytes = 50)
         sink.write(Level.Info, "fresh")
-        assertEquals("x".repeat(100), File(d, "ambient.log.1").readText())
+        assertEquals("x".repeat(100), File(d, "aether.log.1").readText())
         assertEquals(listOf("fresh"), file.readLines())
     }
 
     @Test
     fun `a file under the limit is kept and appended to`() {
-        val file = File(dir(), "ambient.log")
+        val file = File(dir(), "aether.log")
         file.writeText("old\n")
         val sink = FileLogSink(file, maxBytes = 1_000)
         sink.write(Level.Info, "new")
@@ -43,7 +43,7 @@ class FileLogSinkTest {
     // Regression: a read-only log directory must not take the app down.
     @Test
     fun `an unwritable location is swallowed`() {
-        val sink = FileLogSink(File("/proc/nope/ambient.log"))
+        val sink = FileLogSink(File("/proc/nope/aether.log"))
         sink.write(Level.Error, "still fine")
         sink.write(Level.Error, "and again")
     }

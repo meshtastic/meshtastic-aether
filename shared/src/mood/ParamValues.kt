@@ -1,4 +1,4 @@
-package org.meshtastic.ambient.mood
+package org.meshtastic.aether.mood
 
 /**
  * One overlay row. [driver] is the signal that moves it, or null when there is no data and the value is the neutral

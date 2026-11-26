@@ -1,4 +1,4 @@
-package org.meshtastic.ambient.mood
+package org.meshtastic.aether.mood
 
 import kotlin.math.pow
 import kotlin.test.Test

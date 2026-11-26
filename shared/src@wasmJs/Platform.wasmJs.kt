@@ -1,9 +1,9 @@
 @file:OptIn(ExperimentalWasmJsInterop::class)
 
-package org.meshtastic.ambient
+package org.meshtastic.aether
 
-import org.meshtastic.ambient.audio.resumeAudioFromGesture
-import org.meshtastic.ambient.ui.KeyValueStore
+import org.meshtastic.aether.audio.resumeAudioFromGesture
+import org.meshtastic.aether.ui.KeyValueStore
 import org.meshtastic.sdk.RadioTransport
 import kotlin.js.ExperimentalWasmJsInterop
 

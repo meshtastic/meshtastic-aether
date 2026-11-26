@@ -1,4 +1,4 @@
-package org.meshtastic.ambient.mesh
+package org.meshtastic.aether.mesh
 
 import okio.ByteString.Companion.toByteString
 import org.meshtastic.proto.Data

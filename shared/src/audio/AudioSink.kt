@@ -1,4 +1,4 @@
-package org.meshtastic.ambient.audio
+package org.meshtastic.aether.audio
 
 /** Fills [out] with [frames] interleaved stereo float frames. Never allocates; runs on a thread the sink owns. */
 fun interface BlockRenderer {

@@ -1,7 +1,7 @@
-package org.meshtastic.ambient.mood
+package org.meshtastic.aether.mood
 
-import org.meshtastic.ambient.mesh.MeshEvent
-import org.meshtastic.ambient.mesh.PacketKind
+import org.meshtastic.aether.mesh.MeshEvent
+import org.meshtastic.aether.mesh.PacketKind
 
 internal const val MINUTE = 60_000L
 internal const val HOUR = 60 * MINUTE

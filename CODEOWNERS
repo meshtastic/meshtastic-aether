@@ -1,0 +1,6 @@
+# CODEOWNERS - review routing
+# Pre-team phase: individual handles. Replace with @meshtastic/* teams once they exist.
+# See https://docs.github.com/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+# Catch-all
+* @jamesarich

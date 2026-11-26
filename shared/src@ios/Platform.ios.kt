@@ -1,8 +1,8 @@
-package org.meshtastic.ambient
+package org.meshtastic.aether
 
 import org.meshtastic.sdk.RadioTransport
 import org.meshtastic.sdk.transport.tcp.TcpTransport
-import org.meshtastic.ambient.ui.KeyValueStore
+import org.meshtastic.aether.ui.KeyValueStore
 import platform.Foundation.NSDate
 import platform.Foundation.NSUserDefaults
 import platform.Foundation.NSTimeZone

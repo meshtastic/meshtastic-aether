@@ -1,4 +1,4 @@
-package org.meshtastic.ambient.synth
+package org.meshtastic.aether.synth
 
 /** Encodes interleaved stereo [samples] (left, right, left, ...) as a 16-bit PCM WAV; an odd trailing sample is dropped. */
 fun wavBytes(samples: FloatArray, sampleRate: Int): ByteArray {

@@ -1,7 +1,7 @@
-package org.meshtastic.ambient.synth
+package org.meshtastic.aether.synth
 
-import org.meshtastic.ambient.music.NoteEvent
-import org.meshtastic.ambient.music.Voice
+import org.meshtastic.aether.music.NoteEvent
+import org.meshtastic.aether.music.Voice
 import kotlin.math.abs
 import kotlin.math.log10
 import kotlin.test.Test
@@ -128,7 +128,7 @@ class VoiceTimbreTest {
                 val s = Synth(rate)
                 s.schedule(controls(0, texture(wet = 0f, layers = mapOf(Voice.Drone to 0f, Voice.Shimmer to 0f))))
                 s.schedule(
-                    org.meshtastic.ambient.music.ComposerOutput(
+                    org.meshtastic.aether.music.ComposerOutput(
                         listOf(NoteEvent(40L * rate, v, 220.0, 0.8f, 0f, 0f, 2L * rate, 0.5f, node)),
                         emptyList(),
                     ),

@@ -1,6 +1,6 @@
-package org.meshtastic.ambient
+package org.meshtastic.aether
 
-import org.meshtastic.ambient.ui.KeyValueStore
+import org.meshtastic.aether.ui.KeyValueStore
 import org.meshtastic.sdk.RadioTransport
 import org.meshtastic.sdk.transport.tcp.TcpTransport
 
@@ -23,7 +23,7 @@ internal actual fun createTcpTransport(host: String, port: Int): RadioTransport?
 
 /** Java Preferences under one node; a failing backing store (read-only home, sandbox) degrades to forgetting. */
 private class PreferencesStore : KeyValueStore {
-    private val prefs = java.util.prefs.Preferences.userRoot().node("org/meshtastic/ambient")
+    private val prefs = java.util.prefs.Preferences.userRoot().node("org/meshtastic/aether")
 
     override fun get(key: String): String? = try {
         prefs.get(key, null)

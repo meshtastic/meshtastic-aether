@@ -1,6 +1,6 @@
 @file:OptIn(ExperimentalForeignApi::class)
 
-package org.meshtastic.ambient.audio
+package org.meshtastic.aether.audio
 
 // UNVERIFIED: written against the AVFoundation Kotlin/Native bindings; not built or run (no Apple toolchain on Linux).
 

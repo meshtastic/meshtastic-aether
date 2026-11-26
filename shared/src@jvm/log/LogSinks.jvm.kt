@@ -1,4 +1,4 @@
-package org.meshtastic.ambient.log
+package org.meshtastic.aether.log
 
 import java.io.File
 
@@ -7,16 +7,16 @@ actual fun platformLogSinks(): List<LogSink> = listOf(
     FileLogSink(defaultLogFile()),
 )
 
-/** `~/Library/Logs/MeshtasticAmbient` on macOS, `$XDG_STATE_HOME` or `~/.local/state` elsewhere. */
+/** `~/Library/Logs/MeshtasticAether` on macOS, `$XDG_STATE_HOME` or `~/.local/state` elsewhere. */
 private fun defaultLogFile(): File {
     val home = System.getProperty("user.home")
     val mac = System.getProperty("os.name").orEmpty().startsWith("Mac")
     val dir = if (mac) {
-        File(home, "Library/Logs/MeshtasticAmbient")
+        File(home, "Library/Logs/MeshtasticAether")
     } else {
-        File(System.getenv("XDG_STATE_HOME") ?: "$home/.local/state", "meshtastic-ambient")
+        File(System.getenv("XDG_STATE_HOME") ?: "$home/.local/state", "meshtastic-aether")
     }
-    return File(dir, "ambient.log")
+    return File(dir, "aether.log")
 }
 
 /** Appends lines to [file]; a file over [maxBytes] at startup is moved to `<name>.1` (one generation kept). */

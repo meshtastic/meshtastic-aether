@@ -1,4 +1,4 @@
-package org.meshtastic.ambient.synth
+package org.meshtastic.aether.synth
 
 import kotlin.math.PI
 import kotlin.math.abs
@@ -330,11 +330,11 @@ class DspBlocksTest {
         val rate = 32000
         val voice = SynthVoice(rate, 77)
         val out = FloatArray(16)
-        voice.begin(note(org.meshtastic.ambient.music.Voice.Mallet, 0, 300.0, 1f, 20.0))
+        voice.begin(note(org.meshtastic.aether.music.Voice.Mallet, 0, 300.0, 1f, 20.0))
         repeat(200) { voice.render(16, out, 0.5f, 0.2f) }
-        assertTrue(voice.begin(note(org.meshtastic.ambient.music.Voice.Bell, 0, 700.0, 1f, 2.0)))
+        assertTrue(voice.begin(note(org.meshtastic.aether.music.Voice.Bell, 0, 700.0, 1f, 2.0)))
         assertTrue(voice.isFading)
-        assertTrue(!voice.begin(note(org.meshtastic.ambient.music.Voice.Bell, 0, 900.0, 1f, 2.0)), "a fading voice took a second note")
+        assertTrue(!voice.begin(note(org.meshtastic.aether.music.Voice.Bell, 0, 900.0, 1f, 2.0)), "a fading voice took a second note")
         var frames = 0
         var prev = Float.MAX_VALUE
         while (voice.isFading) {
