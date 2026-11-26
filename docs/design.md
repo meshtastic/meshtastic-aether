@@ -10,7 +10,7 @@ Here the mesh is the lobby. The app plays a slow autonomous piece that sounds go
 
 ## Goals
 
-- One shared Kotlin codebase on all targets: JVM desktop, Android, iOS and web (wasmJs).
+- One shared Kotlin codebase on all targets: JVM desktop, Android (including Android TV and Google TV), iOS and web (wasmJs). tvOS is not possible: Compose Multiplatform and meshtastic-sdk publish no tvOS variants.
 - Built on the meshtastic-sdk `RadioClient`: `packets`, `fromRadio`, `nodes` and `telemetry.observe(node)`.
 - Generative audio synthesized in shared Kotlin, with per-platform output only.
 - A full-screen ambient visual driven by the same events and clock as the audio.
@@ -22,7 +22,7 @@ Here the mesh is the lobby. The app plays a slow autonomous piece that sounds go
 - MIDI or OSC output. The seam exists; an implementation does not.
 - Sending anything to the mesh. The app is listen-only.
 - Multi-speaker spatial installs. Output is stereo, and pan stands in for the nearest speakers.
-- Stored history, accounts or settings sync. The app keeps only the saved link, the volume and mute, and the palette choice, on the device.
+- Stored history, accounts or settings sync. The app keeps only the saved link, the volume and mute, the headphone mode and the palette choice, on the device.
 - App store publishing.
 - A web kiosk mode.
 
@@ -103,7 +103,7 @@ Links per target, picked on the connect screen:
 | Web | WebSocket |
 | All | Demo, replay |
 
-Desktop, Android and iOS are the unattended install targets: the last demo, TCP or WebSocket link is remembered and reconnects after a cancelable countdown, and audio starts on launch. Web is a demo and development target: it opens on a "tap to start" screen.
+Desktop, Android (including TV) and iOS are the unattended install targets: the last demo, TCP or WebSocket link is remembered and reconnects after a cancelable countdown, and audio starts on launch. Web is a demo and development target: it opens on a "tap to start" screen.
 
 ### Composer
 
@@ -148,7 +148,7 @@ Building blocks, ported (licenses checked against the repositories):
 - Chorus: Plaits `ensemble` (MIT). Shimmer: Clouds `pitch_shifter` (MIT).
 - Bells and bowls: a modal resonator after Rings and Plaits (MIT) and FM pairs. Plucks: Karplus-Strong (Plaits string, MIT). Pads: polyBLEP oscillators through stmlib's state-variable filter (MIT).
 
-Headphone placement (`BinauralPanner`): a spherical-head model, not measured HRIRs. Each dry voice is placed at the side its note's pan gives. The far ear hears it up to 0.66 ms later (Woodworth's delay with a 0.0875 m head) and with its highs shaded by Brown and Duda's head-shadow shelf; a voice straight ahead is identical to the constant-power pan. Pads keep their pan and chorus (their 4 ms delays would comb with a delay), the reverb stays stereo and the limiter stays last. A switch crossfades over 0.3 s, so it never clicks. It is off by default and costs no measurable CPU on a Chromecast.
+Headphone placement (`BinauralPanner`): a spherical-head model, not measured HRIRs. Each dry voice is placed at the side its note's pan gives. The far ear hears it up to 0.66 ms later (Woodworth's delay with a 0.0875 m head) and with its highs shaded by Brown and Duda's head-shadow shelf; a voice straight ahead is identical to the constant-power pan. Pads keep their pan and chorus (their 4 ms delays would comb with a delay), the reverb stays stereo and the limiter stays last. A switch crossfades over 0.3 s, so it never clicks. It is off by default. On a Chromecast release build the audio thread measured 45.6 percent of a core with it on and 50.6 percent without, within run-to-run noise.
 
 The `tools` module renders the synth offline to WAV for listening tests.
 
@@ -166,11 +166,11 @@ The `tools` module renders the synth offline to WAV for listening tests.
 The scene is full screen, dark and on the shared clock.
 
 - Background: a slow gradient whose hue follows time of day and whose movement follows weather texture, dithered so projectors don't band.
-- Nodes: soft glowing orbs placed by position relative to the connected node, with robust auto-fit (percentile bounds; far outliers such as MQTT nodes pinned to the edge), or at a position seeded from the node number when there is no position. Glow follows activity, and orbs fade when a node goes quiet.
+- Nodes: soft glowing orbs placed by position relative to the connected node, with robust auto-fit (percentile bounds; far outliers such as MQTT nodes pinned to the edge), or at a position seeded from the node number when there is no position. Glow follows activity, and orbs fade when a node goes quiet. A relayout glides each orb to its new place, and the gravity layer moves each orb a little around it (`OrbitalField`).
 - Packets: a ripple from the sender's orb when its note sounds, colored by articulation and sized by SNR; hop echoes as fainter rings; encrypted traffic as a faint haze.
 - Renderer: plain Compose Canvas on every target. Skia runtime shaders (Skiko `RuntimeEffect` on desktop, iOS and web; `RuntimeShader` on Android 33 and later) are an optional enhancement for the background.
 - Burn-in: the field drifts slowly and dims at night. OLED screens are the real risk; most projectors are not.
-- A hidden HUD (tap, click or `H`) shows a status card with link state, node count, key and section, and a floating toolbar with mute, volume, look, the Drivers panel, fullscreen and a two-press disconnect. It follows Material 3 Expressive with the standard motion scheme, so nothing overshoots. Fullscreen is available on desktop, and keep-awake runs on every target.
+- A hidden HUD (tap, click or `H`) shows a status card with link state, node count, key and section, and a floating toolbar with mute, volume, a Look menu, headphones, the Drivers panel, fullscreen and a two-press disconnect. It follows Material 3 Expressive with the standard motion scheme, so nothing overshoots. Fullscreen is available on desktop and on Android phones and tablets (system bars), and is hidden on a TV; keep-awake runs on every target.
 
 ## Project shape
 
@@ -212,7 +212,7 @@ Built:
 - SDK, simulated, replay and demo sources; a connect screen with TCP, Bluetooth, WebSocket and a saved link with auto-connect.
 - Clouds-topology reverb, polyBLEP, FM, modal, Karplus-Strong and pitch-shifter voices in pure Kotlin.
 - A file log on desktop, an overlay with key controls, and the `tools` render and analyze commands.
-- Mesh-driven parameters, pass 1: the per-event layer and palettes, `MeshMood` with `ParamValues`, rotation (speed, tilt and wobble, direction), the coverage log, the overlay Drivers panel and the demo sweep. A 6 hour run on a Mac against a real mesh held 59.9 fps and 340 MB with no warnings; no person has judged the sound or the visuals from it.
+- Mesh-driven parameters, pass 1: the per-event layer and palettes, `MeshMood` with `ParamValues`, rotation (speed, tilt and wobble, direction), gravity and orbits, the coverage log, the overlay Drivers panel and the demo sweep. A 6 hour run on a Mac against a real mesh held 59.9 fps and 340 MB with no warnings; no person has judged the sound or the visuals from it.
 
 Not built:
 
@@ -220,4 +220,4 @@ Not built:
 - A desktop capture mode; replay plays a bundled synthetic capture.
 - USB serial in the UI (the SDK serial transport is linked on jvm and android) and WebSerial.
 - MIDI and OSC output.
-- A run of iOS, Android and web on a device or in a browser.
+- A run of iOS and web on a device or in a browser, and of Android on a phone or tablet (Android TV has run on a Chromecast with Google TV).

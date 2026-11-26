@@ -4,11 +4,12 @@ A very large parameter space where the mesh turns every dial, so the landscape n
 
 ## Intent
 
-*Sonorous Reception* has 15 instruments, 4 tempos, 7 scales, the hour, the weekday, the weather and a fresh sound for every visitor, all driving a sonic landscape that is always moving. The mesh is a quieter stage: it delivers only 2-4 packets a minute, but every packet carries a dozen facts about a real node. The richness comes from three layers, each mesh-driven:
+*Sonorous Reception* has 15 instruments, 4 tempos, 7 scales, the hour, the weekday, the weather and a fresh sound for every visitor, all driving a sonic landscape that is always moving. The mesh is a quieter stage: it delivers only 2-4 packets a minute, but every packet carries a dozen facts about a real node. The richness comes from four layers, each mesh-driven:
 
 1. Per event: every packet's own attributes (who, what hardware and role, how far, how strong, where, how charged) shape its note and its ripple. This layer varies on every packet, so it stays alive on a sparse mesh.
 2. Landscape: slow, self-normalized signals from the whole mesh move the bed, the texture and the scene.
 3. Rotation: the speed, angle and direction of the cloud, driven from both.
+4. Gravity: a small physics layer that moves each orb around its place, from link quality, links and packets.
 
 ## Goals
 
@@ -96,23 +97,34 @@ Each signal is self-normalized to its own rolling 24 h range, with a stated smoo
 
 Landscape mappings: the chord interval runs 480 to 120 s from activity; loop periods stretch from silence (long when quiet); reverb size comes from humidity, reach and silence (renormalized, not additive past 1); reverb wet from silence and humidity; brightness from temperature, link quality and lux; detune from pressure and interference; ensemble depth from wind; echo delay and the visual echo-ring spacing from congestion (one driver for both); echo decay from reach; ornament slot TTL from congestion; pad level from senders; idle floor from silence; flash decay and ripple life from reach; stereo width from the spread of positioned senders; haze from the encrypted share; and background hue from temperature and saturation from humidity within the brand palette.
 
-Built: the signals turn the rotation, phrase speed, mode lean and the pull toward pentatonic. The other mappings in the paragraph above are not built; they wait on what the coverage log shows moves.
+Built: the signals turn the rotation, phrase speed, mode lean, the pull toward pentatonic and gravity. The other mappings in the paragraph above are not built; they wait on what the coverage log shows moves.
 
 ## Layer 3: rotation
 
 Angular velocity is integrated state, never a closed-form phase.
 
 - Speed: the base comes from relative activity, one turn per 1200 s (quiet) down to 150 s (busy), plus a per-packet push. Each packet adds a small decaying angular impulse, visible within seconds of a packet, so it works at 3 packets a minute.
-- Angle (axis tilt): tilt comes from the absolute pressure trend (median of per-node deltas over 3 h), 4 to 14 degrees, with wobble amplitude of 1 to 6 degrees from wind, or from relative senders when there is no wind (neutral 3). Tilt plus wobble is capped at 20. With no weather data, relative reach drives the tilt.
+- Angle (axis tilt): tilt comes from the absolute pressure trend (median of per-node deltas over 3 h), 4 to 14 degrees, with wobble amplitude of 1 to 6 degrees from wind, else from the median channel use (0 to 50 percent), else from relative senders (neutral 3). Tilt plus wobble is capped at 20. With no weather data, relative reach drives the tilt.
 - Direction: the first signal with data wins: pressure trend (rising is clockwise), temperature trend (warming is clockwise), battery trend (only nodes whose level moved), then activity trend over 30 minutes. A flip decelerates to a stop and turns within 30 s, with hysteresis and a 30 minute minimum between flips.
 - Breathing, drift, anchor breath and orb breath each keep a phase accumulator, so a driven period never jumps their phase.
+
+## What real meshes send
+
+Telemetry is uneven, so the mappings lean on what nearly every node reports. Two real event captures (Burning Man 2025, about 1,470 nodes sending telemetry over 10 days, and DEF CON 33, about 1,190 nodes over 8 days) agree with a home node's log and node database:
+
+- Device metrics are on about 99.5 percent of telemetry-sending nodes: battery level (101, external power, on 40 to 53 percent of nodes), voltage, channel utilization, transmit airtime and uptime.
+- Environment metrics are on 3 to 4 percent of nodes: temperature 3 to 4 percent, humidity about 2, and lux and pressure under 2 each.
+- Wind, rain, soil, air quality, health and host metrics appear in none of them. Local stats come from your own node, rarely over the air.
+- Position carries altitude on 94 to 97 percent of packets, and every NodeInfo carries a hardware model; most nodes are CLIENT.
+
+So the wobble takes wind when a node reports it, else the median channel use of the nodes reporting it (on nearly every mesh), else relative senders. Pressure and temperature remain the first choices for tilt and direction, but on most meshes those fall through to reach and the battery or activity trend.
 
 ## Layer 4: gravity and orbits
 
 A small physics layer moves each orb within 0.16 unit-disc units of the place the layout gave it, so the map stays readable. It adds no draw calls, and it costs a few thousand pair operations a frame.
 
 - Orbits: each orb circles its place on a ring. The period follows Kepler's third law with the distance from our node (angular speed `0.35 rad/s` at half the radius, falling as `r^-1.5`, capped at `1 rad/s`), and the ring turns the way the cloud is turning. The ring is `0.07` wide for a node that is unheard and shrinks by up to 70 percent as the node's smoothed RSSI goes from -120 to -40 dBm and gravity rises.
-- Links: every fresh edge (a neighbor report or a traceroute hop) pulls its two nodes toward each other, in proportion to gravity and the edge's freshness, which fades over 60 s. Our node is fixed at the origin, so a node linked to it leans toward the centre.
+- Links: every fresh edge (a neighbor report or a traceroute hop) pulls its two nodes toward each other, in proportion to gravity and the edge's freshness, which fades over 60 s. Our node is fixed at the origin, so a node linked to it leans toward the center.
 - Packets: each packet kicks its node by up to `0.12` units a second in a direction that is a fixed function of the node and its kick count. The spring to the ring brings it back within seconds.
 - Gravity, the one parameter: `0.5` plus the link-quality signal's distance from neutral, weighted by its confidence, so a mesh whose mean SNR is rising against its own history clumps and rings tighten, and a falling one loosens. It holds `0.5` with no link data and shows "no link data" in the Drivers panel. It eases over 10 s like the rotation parameters.
 
@@ -151,7 +163,7 @@ The scripted demo sweeps the signals and the per-event attributes so every mappi
 
 Built:
 
-- The per-event layer and palettes, `MeshMood` with `ParamValues`, the rotation (speed, tilt and wobble, direction), the coverage log, the overlay Drivers panel and the demo sweep.
+- The per-event layer and palettes, `MeshMood` with `ParamValues`, the rotation (speed, tilt and wobble, direction), gravity and orbits, the coverage log, the overlay Drivers panel and the demo sweep.
 
 Not built:
 

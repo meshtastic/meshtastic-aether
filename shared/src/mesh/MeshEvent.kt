@@ -81,6 +81,10 @@ sealed interface MeshEvent {
         val voltage: Float?,
         val uptimeSeconds: Long?,
         override val atMillis: Long,
+        /** Percent of the time this node hears the channel busy; carried by nearly every node's device metrics. */
+        val channelUtilPct: Float? = null,
+        /** Percent of the last hour this node spent transmitting. */
+        val airUtilTxPct: Float? = null,
     ) : MeshEvent
 
     /** Our own node's LocalStats; counters are cumulative since boot, so consumers take deltas and watch [uptimeSeconds] for resets. */

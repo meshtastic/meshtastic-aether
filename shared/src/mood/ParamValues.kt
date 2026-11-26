@@ -73,8 +73,8 @@ data class ParamValues(
             row("rotation direction", directionValue, "", drivers.rotationDirection, "$target - no trend data", directionNote),
             row("tilt", tilt, "deg", drivers.tilt, "$tilt deg - no pressure or hop data"),
             row(
-                "wobble", wobble, "deg", drivers.wobble, "$wobble deg - no wind reports",
-                if (drivers.wobble == "senders") "no wind reports" else null,
+                "wobble", wobble, "deg", drivers.wobble, "$wobble deg - no wind, channel or sender data",
+                if (drivers.wobble == "senders" || drivers.wobble == "channel use") "no wind reports" else null,
             ),
             row("phrase speed", speed, "x", drivers.phraseSpeed, "$speed x - no activity data"),
             row("mode lean", lean, if (modeLean > 0.05) "bright" else if (modeLean < -0.05) "dark" else "neutral", drivers.modeLean, "$lean - no link or temperature data"),

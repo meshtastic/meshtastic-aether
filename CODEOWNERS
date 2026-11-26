@@ -1,6 +1,6 @@
 # CODEOWNERS - review routing
-# Pre-team phase: individual handles. Replace with @meshtastic/* teams once they exist.
+# The android team owns the Kotlin and Compose code; it needs write access to the repository for its entry to take effect.
 # See https://docs.github.com/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
 
 # Catch-all
-* @jamesarich
+* @jamesarich @meshtastic/android

@@ -26,6 +26,7 @@ body:
       options:
         - Desktop (JVM)
         - Android
+        - Android TV or Google TV
         - iOS
         - Web
     validations:

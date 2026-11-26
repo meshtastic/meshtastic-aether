@@ -58,7 +58,7 @@ class ParamValuesTest {
     @Test
     fun `a parameter with no data says it is holding its value and why`() {
         val rows = ParamValues.NEUTRAL.describe().associateBy { it.name }
-        assertEquals("holding 3.0 deg - no wind reports", rows.getValue("wobble").driverText)
+        assertEquals("holding 3.0 deg - no wind, channel or sender data", rows.getValue("wobble").driverText)
         assertEquals("holding 600 s - no activity data", rows.getValue("turn time").driverText)
         assertEquals("holding 1.00 x - no activity data", rows.getValue("phrase speed").driverText)
     }

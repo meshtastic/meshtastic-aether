@@ -97,7 +97,7 @@ internal const val DISCONNECT_HINT = "Press Disconnect again within 3 seconds"
 
 /**
  * The hidden HUD, filling its parent and drawing nothing while closed: a floating toolbar at bottom-center (mute,
- * volume, look, Drivers, fullscreen, Disconnect), a small status surface at top-start, the Drivers panel at the end
+ * volume, Look menu, headphones, Drivers, fullscreen, Disconnect), a small status surface at top-start, the Drivers panel at the end
  * on wide windows and above the toolbar on narrow ones, and the Disconnect hint. Opens and closes on
  * [Controls.overlayOpen]; not part of the scene.
  */

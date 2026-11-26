@@ -48,6 +48,13 @@ class RotationTargetsTest {
     }
 
     @Test
+    fun `channel use drives the wobble over senders and wind still wins over both`() {
+        assertEquals(6.0, RotationTargets.wobbleDegrees(0.0, 0.0, 0.0, 1.0, 1.0, 1.0), 1e-9)
+        assertEquals(3.5, RotationTargets.wobbleDegrees(0.0, 0.0, 0.0, 1.0, 1.0, 0.5), 1e-9)
+        assertEquals(1.0, RotationTargets.wobbleDegrees(0.0, 1.0, 1.0, 1.0, 1.0, 1.0), 1e-9)
+    }
+
+    @Test
     fun `the neutral wobble is within the driven range`() {
         assertTrue(RotationTargets.NEUTRAL_WOBBLE_DEGREES in RotationTargets.WOBBLE_MIN_DEGREES..RotationTargets.WOBBLE_MAX_DEGREES)
     }

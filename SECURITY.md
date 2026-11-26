@@ -12,7 +12,7 @@ Meshtastic Aether is pre-1.0. Only the latest published release receives securit
 
 ## Scope
 
-The app only listens. It connects to a node over TCP, Bluetooth or WebSocket, stores a saved link, the volume and mute, and the palette choice on the device, writes a local log, and sends nothing to the mesh. The security surface is the data it accepts from a node and what it keeps locally.
+The app only listens. It connects to a node over TCP, Bluetooth or WebSocket, stores a saved link, the volume and mute, the headphone mode and the palette choice on the device, writes a local log, and sends nothing to the mesh. The security surface is the data it accepts from a node and what it keeps locally.
 
 In scope:
 

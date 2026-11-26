@@ -15,6 +15,7 @@ class Coverage {
     private val wind = HashSet<Long>()
     private val batt = HashSet<Long>()
     private val volt = HashSet<Long>()
+    private val chutil = HashSet<Long>()
     private var stats = false
 
     fun add(e: MeshEvent) {
@@ -39,6 +40,7 @@ class Coverage {
             is MeshEvent.Health -> {
                 if (e.batteryPct != null) batt += e.node
                 if (e.voltage != null) volt += e.node
+                if (e.channelUtilPct != null) chutil += e.node
             }
             is MeshEvent.Stats -> stats = true
             else -> Unit
@@ -48,14 +50,14 @@ class Coverage {
     /** One stable line: counts, then the five most common roles and hardware models (ties by name). */
     fun describe(): String =
         "coverage nodes=${known.size} temp=${temp.size} hum=${hum.size} press=${press.size} lux=${lux.size} " +
-            "wind=${wind.size} batt=${batt.size} volt=${volt.size} stats=${if (stats) "yes" else "no"} " +
+            "wind=${wind.size} batt=${batt.size} volt=${volt.size} chutil=${chutil.size} stats=${if (stats) "yes" else "no"} " +
             "roles=${top(roleOf.values)} hw=${top(hardwareOf.values)}"
 
     fun reset() {
         known.clear()
         roleOf.clear()
         hardwareOf.clear()
-        listOf(temp, hum, press, lux, wind, batt, volt).forEach { it.clear() }
+        listOf(temp, hum, press, lux, wind, batt, volt, chutil).forEach { it.clear() }
         stats = false
     }
 

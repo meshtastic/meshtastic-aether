@@ -30,7 +30,7 @@ class BinauralPannerTest {
     }
 
     @Test
-    fun `the interaural delay follows Woodworth at zero, thirty and ninety degrees`() {
+    fun `the interaural delay follows Woodworth at zero thirty and ninety degrees`() {
         assertEquals(0.0, BinauralPanner.itdSeconds(0.0), 1e-12)
         assertEquals(261.1e-6, BinauralPanner.itdSeconds(30 * deg), 0.5e-6)
         assertEquals(655.8e-6, BinauralPanner.itdSeconds(90 * deg), 0.5e-6)

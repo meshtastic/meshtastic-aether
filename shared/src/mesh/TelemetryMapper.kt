@@ -22,14 +22,15 @@ internal fun Telemetry.toEnvironment(node: Long, nowMillis: Long): MeshEvent.Env
 
 private fun Int.unsigned(): Long = toLong() and 0xFFFFFFFFL
 
-/** DeviceMetrics of any node; null when the packet carries none of battery, voltage and uptime. */
+/** DeviceMetrics of any node; null when the packet carries none of battery, voltage, uptime and channel use. */
 internal fun Telemetry.toHealth(node: Long, nowMillis: Long): MeshEvent.Health? {
     val d = device_metrics ?: return null
     val battery = d.battery_level
     val volts = d.voltage
     val uptime = d.uptime_seconds?.unsigned()
-    if (battery == null && volts == null && uptime == null) return null
-    return MeshEvent.Health(node, battery, volts, uptime, nowMillis)
+    val channel = d.channel_utilization
+    if (battery == null && volts == null && uptime == null && channel == null) return null
+    return MeshEvent.Health(node, battery, volts, uptime, nowMillis, channel, d.air_util_tx)
 }
 
 /** LocalStats of our own node; zero node counts and a zero noise floor are the proto's "not reported". */

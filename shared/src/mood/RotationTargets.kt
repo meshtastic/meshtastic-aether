@@ -55,12 +55,22 @@ object RotationTargets {
     }
 
     /**
-     * Wobble amplitude, 1 to 6 degrees when driven: from wind (0..1 of full scale) when it is reported, else from relative
-     * senders (0..1), else the neutral 3 degrees. Each blends toward the next as its confidence falls.
+     * Wobble amplitude, 1 to 6 degrees when driven: from wind (0..1 of full scale) when it is reported, which real meshes
+     * almost never do; else from the mesh's median channel use (0..1 of 50 percent), which nearly every node reports, so a
+     * busy channel is turbulence; else from relative senders (0..1); else the neutral 3 degrees. Each blends toward the
+     * next as its confidence falls.
      */
-    fun wobbleDegrees(wind: Double, windConfidence: Double, senders: Double = 0.5, sendersConfidence: Double = 0.0): Double {
+    fun wobbleDegrees(
+        wind: Double,
+        windConfidence: Double,
+        senders: Double = 0.5,
+        sendersConfidence: Double = 0.0,
+        channelUse: Double = 0.5,
+        channelUseConfidence: Double = 0.0,
+    ): Double {
         val fromSenders = lerp(NEUTRAL_WOBBLE_DEGREES, wobbleFor(senders), clamp01(sendersConfidence))
-        return lerp(fromSenders, wobbleFor(wind), clamp01(windConfidence))
+        val fromChannel = lerp(fromSenders, wobbleFor(channelUse), clamp01(channelUseConfidence))
+        return lerp(fromChannel, wobbleFor(wind), clamp01(windConfidence))
     }
 
     private fun wobbleFor(unit: Double) = WOBBLE_MIN_DEGREES + (WOBBLE_MAX_DEGREES - WOBBLE_MIN_DEGREES) * clamp01(unit)

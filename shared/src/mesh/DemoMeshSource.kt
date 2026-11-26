@@ -192,6 +192,7 @@ internal object DemoScript {
             }
             out += MeshEvent.Health(
                 nodeNum(i), pct, if (pct == POWERED) null else lipoVolts(pct), 3_600L * (i + 1), base + arrivalMs(i) + 1_500,
+                channelUtilPct = 8f + (i * 7 % 30), airUtilTxPct = 0.5f + (i % 5) * 0.4f,
             )
         }
 

@@ -50,7 +50,7 @@ This project uses the [Kotlin Toolchain](https://kotlin-toolchain.org/) (a dedic
 
 The contracts `MeshEvent.kt`, `NoteEvent.kt` and `AudioSink.kt` change only on purpose, with every consumer updated.
 
-Launch flags: `--demo`, `--replay`, `--tcp host[:port]`, `--ask`, `--fullscreen`, `--look standard|projector|oled` (`shared/src/ui/LaunchArgs.kt`); `--ask` shows the connect screen and ignores the saved link and any `--demo`, `--replay` or `--tcp`. Volume and mute persist in `Settings`; the master fades in over 3 s each session.
+Launch flags: `--demo`, `--replay`, `--tcp host[:port]`, `--ask`, `--fullscreen`, `--look standard|projector|oled` (`shared/src/ui/LaunchArgs.kt`); `--ask` shows the connect screen and ignores the saved link and any `--demo`, `--replay` or `--tcp`. Volume, mute and the headphone mode persist in `Settings`; the master fades in over 3 s each session. Android takes the same flags as intent extras (`launchArgsFrom` in `androidApp/src/MainActivity.kt`).
 
 ## UI rules
 
@@ -58,7 +58,8 @@ Launch flags: `--demo`, `--replay`, `--tcp host[:port]`, `--ask`, `--fullscreen`
 - Expressive opt-ins are file-level (`@file:OptIn(ExperimentalMaterial3ExpressiveApi::class)`), never in a build flag.
 - The theme is `MaterialExpressiveTheme` with `MotionScheme.standard()`: no overshoot, and the toolbar keeps its standard colors so a saturated slab never burns in.
 - UI colors come from `MaterialTheme` roles, never hardcoded values; only the scene reads `LocalAmbientPalette`.
-- Compose UI tests live in `shared/test@jvm` (`runComposeUiTest`), and no check may need them on wasm. A running session animates forever, so a test cannot wait for it to go idle: test the pieces (`HostCommands`, the chooser, the countdown) on their own.
+- Test names in `shared/test` take no commas or parentheses: Kotlin/Native rejects them, and only the iOS test compile shows it. Check with `grep -rn 'fun \`[^\`]*[,()][^\`]*\`' shared/test/`.
+- Compose UI tests live in `shared/test@jvm` (`androidx.compose.ui.test.v2.runComposeUiTest`), and no check may need them on wasm. A running session animates forever, so a test cannot wait for it to go idle: test the pieces (`HostCommands`, the chooser, the countdown) on their own.
 - Host menus and Back call `AppCommands` and the shared key path (`perform`), never their own copies of an action, so the two-press disconnect and the haptics apply everywhere.
 - The desktop app runs on JetBrains Runtime (`settings.jvm.jdk.distributions: [jetbrains]` in `desktopApp/module.yaml`); libraries, tests and Android use the Toolchain default.
 - The HUD is hidden while idle: it draws nothing until opened and closes itself after 15 s (60 s with Drivers open).

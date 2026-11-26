@@ -129,8 +129,12 @@ class MeshFieldMappingTest {
     }
 
     @Test
-    fun `a device packet with only channel utilization is no Health`() {
-        assertNull(device { it.channel_utilization = 12f }.toHealth(9L, 0L))
+    // Channel use is on nearly every node's device metrics, so a packet carrying only it still counts toward the mesh's channel use.
+    fun `a device packet with only channel utilization is Health carrying it and environment alone is none`() {
+        val h = device { it.channel_utilization = 12f; it.air_util_tx = 1.5f }.toHealth(9L, 0L)
+        assertEquals(12f, h?.channelUtilPct)
+        assertEquals(1.5f, h?.airUtilTxPct)
+        assertNull(h?.batteryPct)
         assertNull(envTelemetry(10f, 50f, 1000f).toHealth(9L, 0L))
     }
 

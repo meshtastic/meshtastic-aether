@@ -121,7 +121,7 @@ class MeshMoodTest {
     }
 
     @Test
-    fun `gravity tightens with good links, loosens with poor ones, and holds neutral without link data`() {
+    fun `gravity tightens with good links and loosens with poor ones and holds neutral without link data`() {
         assertEquals(0.5, MeshMood().advance(0).params.gravity, 1e-12)
         val good = Sim()
         good.run(12 * 60, 2.0, snr = -10f)
@@ -375,6 +375,20 @@ class MeshMoodTest {
         assertEquals("senders", s.params.drivers.wobble)
         assertEquals(6.0, s.rotation.wobbleDegrees, 1e-9)
         assertEquals(6.0, s.params.wobbleDegrees, 1e-9)
+    }
+
+    // Real meshes send channel use on nearly every node and wind almost never, so this is the wobble's usual driver.
+    @Test
+    fun `without wind the wobble follows the median channel use of the nodes reporting it`() {
+        val m = MeshMood()
+        for (n in 1L..30L) m.onEvent(packet(n, n))
+        for (n in 1L..3L) m.onEvent(MeshEvent.Health(n, 80, null, null, 0L, channelUtilPct = 25f))
+        val s = m.advance(MINUTE)
+        assertEquals("channel use", s.params.drivers.wobble)
+        assertEquals(3.5, s.params.wobbleDegrees, 1e-9)
+        m.onEvent(environment(1, MINUTE, wind = 0f))
+        m.onEvent(environment(2, MINUTE, wind = 0f))
+        assertEquals("wind", m.advance(2 * MINUTE).params.drivers.wobble)
     }
 
     @Test

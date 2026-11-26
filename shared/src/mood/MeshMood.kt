@@ -89,6 +89,7 @@ class MeshMood {
     private val batterySeries = HashMap<Long, Series>()
     private val temperature = HashMap<Long, Reading>()
     private val windSpeed = HashMap<Long, Reading>()
+    private val channelUse = HashMap<Long, Reading>()
     private var weatherAt = Long.MIN_VALUE
     private var pressureTrendV = 0.0
     private var pressureConf = 0.0
@@ -101,6 +102,8 @@ class MeshMood {
     private var warmthConf = 0.0
     private var windV = 0.0
     private var windConf = 0.0
+    private var channelV = 0.0
+    private var channelConf = 0.0
     private var sendersCount = 0
     private var sendersAt = Long.MIN_VALUE
     private var band = 2
@@ -133,6 +136,7 @@ class MeshMood {
                 batterySeries.remove(e.node)
                 temperature.remove(e.node)
                 windSpeed.remove(e.node)
+                channelUse.remove(e.node)
             }
             is MeshEvent.Environment -> {
                 sync(e.atMillis)
@@ -141,6 +145,7 @@ class MeshMood {
             is MeshEvent.Health -> {
                 sync(e.atMillis)
                 e.batteryPct?.let { if (it in 0..100) sample(batterySeries, e.node, it.toDouble(), e.atMillis) }
+                e.channelUtilPct?.let { if (it.isFinite() && it in 0f..100f) record(channelUse, e.node, it.toDouble(), e.atMillis) }
             }
             is MeshEvent.Vitals -> {
                 sync(e.atMillis)
@@ -273,7 +278,7 @@ class MeshMood {
         )
         val tilt = RotationTargets.cappedTilt(RotationTargets.tiltDegrees(pressureTrendV, pressureConf, reach, reachConf))
         val wobble = RotationTargets.cappedWobble(
-            tilt, RotationTargets.wobbleDegrees(windV, windConf, senders, sendersConf),
+            tilt, RotationTargets.wobbleDegrees(windV, windConf, senders, sendersConf, channelV, channelConf),
         )
         val finalRotation = rotation.copy(tiltDegrees = tilt, wobbleDegrees = wobble)
 
@@ -291,7 +296,7 @@ class MeshMood {
         val quiet = !warming && (dataConf <= 0.0 || pace < QUIET_ACTIVITY)
 
         val tiltSource = if (pressureConf > 0) "pressure trend" else if (reachConf > 0) "reach" else null
-        val wobbleSource = if (windConf > 0) "wind" else if (sendersConf > 0) "senders" else null
+        val wobbleSource = if (windConf > 0) "wind" else if (channelConf > 0) "channel use" else if (sendersConf > 0) "senders" else null
         val leanSource = if (linkConf > 0 && warmthConf > 0) "link quality and warmth" else if (linkConf > 0) "link quality" else if (warmthConf > 0) "warmth" else null
         val shown = HashMap<String, String>()
         if (dataConf > 0) shown["turn time"] = formatDecimal(activity, 2)
@@ -305,7 +310,7 @@ class MeshMood {
         }
         if (directionSignal != null) shown["rotation direction"] = (if (directionSignal > 0) "+" else "") + formatDecimal(directionSignal, 2)
         if (tiltSource != null) shown["tilt"] = formatDecimal(if (pressureConf > 0) pressureTrendV else reach, 2)
-        if (wobbleSource != null) shown["wobble"] = formatDecimal(if (windConf > 0) windV else senders, 2)
+        if (wobbleSource != null) shown["wobble"] = formatDecimal(if (windConf > 0) windV else if (channelConf > 0) channelV else senders, 2)
         if (leanSource != null) {
             shown["mode lean"] = when {
                 linkConf > 0 && warmthConf > 0 -> "${formatDecimal(link, 2)} and ${formatDecimal(warmthV, 2)}"
@@ -438,6 +443,9 @@ class MeshMood {
         val winds = freshValues(windSpeed, now, FRESH_MS)
         windConf = ramp(winds.size.toDouble(), 2.0)
         windV = if (winds.isNotEmpty()) clamp01(median(winds, winds.size) / RotationTargets.WIND_FULL_SCALE_MPS) else 0.0
+        val uses = freshValues(channelUse, now, FRESH_MS)
+        channelConf = ramp(uses.size.toDouble(), 3.0)
+        channelV = if (uses.isNotEmpty()) clamp01(median(uses, uses.size) / UTIL_FULL_PCT) else 0.0
     }
 
     private fun freshValues(map: HashMap<Long, Reading>, now: Long, maxAge: Long): DoubleArray {

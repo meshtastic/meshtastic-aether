@@ -13,7 +13,7 @@ class CoverageTest {
     @Test
     fun `an empty tally describes zeros and dashes`() {
         assertEquals(
-            "coverage nodes=0 temp=0 hum=0 press=0 lux=0 wind=0 batt=0 volt=0 stats=no roles=- hw=-",
+            "coverage nodes=0 temp=0 hum=0 press=0 lux=0 wind=0 batt=0 volt=0 chutil=0 stats=no roles=- hw=-",
             Coverage().describe(),
         )
     }
@@ -25,11 +25,11 @@ class CoverageTest {
             seen(1, "CLIENT", "HELTEC_V3"), seen(2, "ROUTER", "RAK4631"), seen(3, "CLIENT", "HELTEC_V3"),
             env(1, temp = 20f), env(1, temp = 21f), env(2, temp = 5f), env(3, temp = null),
             env(2, wind = 3f), env(3, gust = 7f),
-            MeshEvent.Health(1, 80, 4.0f, 10, 0L), MeshEvent.Health(1, 79, 3.9f, 20, 0L), MeshEvent.Health(2, 101, null, 5, 0L),
+            MeshEvent.Health(1, 80, 4.0f, 10, 0L, 10f), MeshEvent.Health(1, 79, 3.9f, 20, 0L, 11f), MeshEvent.Health(2, 101, null, 5, 0L, 20f),
             MeshEvent.Health(3, null, null, 5, 0L),
         ).forEach(c::add)
         assertEquals(
-            "coverage nodes=3 temp=2 hum=0 press=0 lux=0 wind=2 batt=2 volt=1 stats=no roles=CLIENT:2,ROUTER:1 hw=HELTEC_V3:2,RAK4631:1",
+            "coverage nodes=3 temp=2 hum=0 press=0 lux=0 wind=2 batt=2 volt=1 chutil=2 stats=no roles=CLIENT:2,ROUTER:1 hw=HELTEC_V3:2,RAK4631:1",
             c.describe(),
         )
     }

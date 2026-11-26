@@ -108,7 +108,7 @@ The squash-merge subject is what ships, so keep it readable.
 
 ## Icons and branding
 
-Edit `branding/*.svg`, run `scripts/icons.sh` and commit the regenerated outputs. The script needs `rsvg-convert` (or Nix, which it falls back to) and ImageMagick (`magick`). Never alter or recolor the Meshtastic M mark, and use only palette colors from the design standards.
+Edit `branding/*.svg`, run `scripts/icons.sh` and commit the regenerated outputs. The script needs `rsvg-convert` (or Nix, which it falls back to) and ImageMagick (`magick`) with the DejaVu Sans Bold font for the Android TV banner. Never alter or recolor the Meshtastic M mark, and use only palette colors from the design standards.
 
 ## Reusing code from other projects
 
