@@ -41,6 +41,23 @@ class Orb internal constructor(val node: Long, var name: String?, internal var p
     internal var shownZ = 0.0
     internal var placed = false
 
+    /** Physics offset from the laid-out place and its speed, in unit-disc units; see [OrbitalField]. */
+    internal var phOx = 0.0
+    internal var phOy = 0.0
+    internal var phVx = 0.0
+    internal var phVy = 0.0
+    internal var phAx = 0.0
+    internal var phAy = 0.0
+    internal var phPhase = 0.0
+    internal var phKicks = 0
+
+    internal fun resetPhysics() {
+        phOx = 0.0
+        phOy = 0.0
+        phVx = 0.0
+        phVy = 0.0
+    }
+
     /** The last projected screen offset, scale and depth, written by the scene each frame. */
     internal var projX = 0.0
     internal var projY = 0.0
@@ -227,6 +244,7 @@ class SceneModel(private val sampleRate: Int) {
         private set
 
     private val integrator = RotationIntegrator()
+    private var easedGravity = ParamValues.NEUTRAL_GRAVITY
     private var easedPeriod = RotationTargets.NEUTRAL_PERIOD_SECONDS
     private var easedTilt = RotationTargets.NEUTRAL_TILT_DEGREES
     private var easedWobble = RotationTargets.NEUTRAL_WOBBLE_DEGREES
@@ -427,6 +445,7 @@ class SceneModel(private val sampleRate: Int) {
         orbBreathClock.advance(dtSeconds)
         stepRotation(dtSeconds)
         stepOrbLooks(dtSeconds)
+        stepOrbits(dtSeconds)
 
         var i = 0
         while (i < pending.size) {
@@ -481,6 +500,14 @@ class SceneModel(private val sampleRate: Int) {
         )
     }
 
+    private fun stepOrbits(dtSeconds: Double) {
+        val target = params.gravity
+        if (target.isFinite()) easedGravity += (target - easedGravity) * (1 - exp(-dtSeconds / PARAM_EASE_SECONDS))
+        OrbitalField.step(
+            dtSeconds, orbMap.values, edgeMap.values, ::edgeFade, orbMap::get, anchor?.node, rotation.direction, easedGravity,
+        )
+    }
+
     private fun stepOrbLooks(dtSeconds: Double) {
         val ease = 1 - exp(-dtSeconds / DEPTH_EASE_SECONDS)
         val glide = 1 - exp(-dtSeconds / RELAYOUT_GLIDE_SECONDS)
@@ -506,7 +533,10 @@ class SceneModel(private val sampleRate: Int) {
             haze = (haze + HAZE_STEP).coerceAtMost(1.0)
             return
         }
-        orbMap[p.node]?.lastActiveFrame = p.dueFrame
+        orbMap[p.node]?.let {
+            it.lastActiveFrame = p.dueFrame
+            if (p.echo == 0) OrbitalField.kick(it, p.strength)
+        }
         if (p.echo == 0) impulse = (impulse + PACKET_IMPULSE).coerceAtMost(1.0)
         active += Ripple(p.node, p.dueFrame, p.kind, p.strength, p.echo, p.viaMqtt, p.payloadBytes, p.textLength, p.channel)
         if (active.size > MAX_RIPPLES) active.removeAt(0)

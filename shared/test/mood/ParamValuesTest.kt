@@ -23,7 +23,7 @@ class ParamValuesTest {
     fun `describe lists every parameter with its driver or no data`() {
         val rows = ParamValues.NEUTRAL.describe()
         assertEquals(
-            listOf("turn time", "rotation direction", "tilt", "wobble", "phrase speed", "mode lean", "pentatonic bias"),
+            listOf("turn time", "rotation direction", "tilt", "wobble", "phrase speed", "mode lean", "pentatonic bias", "gravity"),
             rows.map { it.name },
         )
         assertTrue(rows.all { it.driver == null })

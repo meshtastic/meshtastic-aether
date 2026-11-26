@@ -107,6 +107,15 @@ Angular velocity is integrated state, never a closed-form phase.
 - Direction: the first signal with data wins: pressure trend (rising is clockwise), temperature trend (warming is clockwise), battery trend (only nodes whose level moved), then activity trend over 30 minutes. A flip decelerates to a stop and turns within 30 s, with hysteresis and a 30 minute minimum between flips.
 - Breathing, drift, anchor breath and orb breath each keep a phase accumulator, so a driven period never jumps their phase.
 
+## Layer 4: gravity and orbits
+
+A small physics layer moves each orb within 0.16 unit-disc units of the place the layout gave it, so the map stays readable. It adds no draw calls, and it costs a few thousand pair operations a frame.
+
+- Orbits: each orb circles its place on a ring. The period follows Kepler's third law with the distance from our node (angular speed `0.35 rad/s` at half the radius, falling as `r^-1.5`, capped at `1 rad/s`), and the ring turns the way the cloud is turning. The ring is `0.07` wide for a node that is unheard and shrinks by up to 70 percent as the node's smoothed RSSI goes from -120 to -40 dBm and gravity rises.
+- Links: every fresh edge (a neighbor report or a traceroute hop) pulls its two nodes toward each other, in proportion to gravity and the edge's freshness, which fades over 60 s. Our node is fixed at the origin, so a node linked to it leans toward the centre.
+- Packets: each packet kicks its node by up to `0.12` units a second in a direction that is a fixed function of the node and its kick count. The spring to the ring brings it back within seconds.
+- Gravity, the one parameter: `0.5` plus the link-quality signal's distance from neutral, weighted by its confidence, so a mesh whose mean SNR is rising against its own history clumps and rings tighten, and a falling one loosens. It holds `0.5` with no link data and shows "no link data" in the Drivers panel. It eases over 10 s like the rotation parameters.
+
 ## Architecture
 
 ```

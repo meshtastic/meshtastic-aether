@@ -27,6 +27,7 @@ data class ParamDrivers(
     val phraseSpeed: String? = null,
     val modeLean: String? = null,
     val scalePentatonicBias: String? = null,
+    val gravity: String? = null,
     val readings: Map<String, String> = emptyMap(),
 )
 
@@ -48,6 +49,8 @@ data class ParamValues(
     val scalePentatonicBias: Double = 0.0,
     val drivers: ParamDrivers = ParamDrivers(),
     val directionStrength: Double = 0.0,
+    /** 0 (loose) to 1 (tight): how hard fresh links pull their nodes together and how small the orbits are. */
+    val gravity: Double = NEUTRAL_GRAVITY,
 ) {
     /**
      * The overlay table: one row per parameter. [turningDirection] is the way the cloud is actually turning now
@@ -76,12 +79,16 @@ data class ParamValues(
             row("phrase speed", speed, "x", drivers.phraseSpeed, "$speed x - no activity data"),
             row("mode lean", lean, if (modeLean > 0.05) "bright" else if (modeLean < -0.05) "dark" else "neutral", drivers.modeLean, "$lean - no link or temperature data"),
             row("pentatonic bias", bias, "", drivers.scalePentatonicBias, "$bias - no sender data"),
+            row("gravity", formatDecimal(gravity, 2), "", drivers.gravity, "${formatDecimal(gravity, 2)} - no link data"),
         )
     }
 
     private fun directionName(d: Int) = if (d >= 0) "clockwise" else "counter-clockwise"
 
     companion object {
+        /** Half-bound: a mesh with no link data neither clumps nor scatters. */
+        const val NEUTRAL_GRAVITY = 0.5
+
         val NEUTRAL = ParamValues()
     }
 }

@@ -485,4 +485,19 @@ class SceneModelTest {
         for (f in 3..1200) s.update(sr / 60 * f)
         assertEquals(first.x, first.shownX, 1e-3, "it arrives")
     }
+
+
+    @Test
+    fun `a packet from a node kicks its orb off the place the layout gave it`() {
+        fun offsetAfter(packet: Boolean): Double {
+            val s = scene()
+            s.onEvent(seen(1, at(500.0, 0.0)), 0)
+            s.update(0)
+            if (packet) s.onEvent(heard(1), 0)
+            for (f in 1..30) s.update(sr / 60 * f)
+            val o = s.orbs.first { it.node == 1L }
+            return hypot(o.phOx, o.phOy)
+        }
+        assertTrue(offsetAfter(true) > offsetAfter(false) + 0.01, "the packet adds a visible kick")
+    }
 }

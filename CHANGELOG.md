@@ -12,6 +12,7 @@ All notable changes to Meshtastic Aether are documented here. The format is base
 
 ### Added
 
+- Gravity and orbits: each orb circles its place with Kepler-style timing, linked nodes lean together, and each packet kicks its node. A new mesh-driven gravity parameter, from mean link quality, tightens or loosens it all, and it has a row in the Drivers panel.
 - Android TV and Google TV: a leanback launcher entry with a banner, Select to open the HUD, Play/Pause to mute, a focused Connect button, a larger safe margin, and `adb` launch extras (`--es tcp host:port`, `--ez demo true`, `--ez replay true`, `--es look oled`, `--ez ask true`).
 - Desktop: set `AETHER_RECORD_AUDIO=out.wav` to record exactly what the app plays, for demo videos. A `out.wav.start` file holds the wall-clock start in epoch milliseconds.
 - A macOS menu bar with Disconnect, Enter Full Screen, Mute and Minimize that call the same actions as the keys.

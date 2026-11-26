@@ -121,6 +121,19 @@ class MeshMoodTest {
     }
 
     @Test
+    fun `gravity tightens with good links, loosens with poor ones, and holds neutral without link data`() {
+        assertEquals(0.5, MeshMood().advance(0).params.gravity, 1e-12)
+        val good = Sim()
+        good.run(12 * 60, 2.0, snr = -10f)
+        assertTrue(good.run(90, 2.0, snr = 10f).params.gravity > 0.5)
+        val poor = Sim()
+        poor.run(12 * 60, 2.0, snr = 8f)
+        val low = poor.run(90, 2.0, snr = -12f).params
+        assertTrue(low.gravity < 0.5)
+        assertEquals("link quality", low.drivers.gravity)
+    }
+
+    @Test
     fun `packets without hops or snr and single samples never give NaN`() {
         val m = MeshMood()
         m.onEvent(packet(1, 0, snr = null, hops = null))

@@ -314,6 +314,8 @@ class MeshMood {
             }
         }
         if (sendersConf > 0) shown["pentatonic bias"] = formatDecimal(senders, 2)
+        val gravity = ParamValues.NEUTRAL_GRAVITY + (link - 0.5) * linkConf
+        if (linkConf > 0) shown["gravity"] = formatDecimal(link, 2)
 
         val params = ParamValues(
             finalRotation.targetPeriodSeconds, finalRotation.direction, tilt, wobble,
@@ -326,9 +328,11 @@ class MeshMood {
                 phraseSpeed = if (dataConf >= 0.5) "activity" else null,
                 modeLean = leanSource,
                 scalePentatonicBias = if (sendersConf > 0) "senders" else null,
+                gravity = if (linkConf > 0) "link quality" else null,
                 readings = shown,
             ),
             choice.strength,
+            gravity.coerceIn(0.0, 1.0),
         )
         return MoodSnapshot(
             now, activity, dataConf, reach, reachConf, link, linkConf, senders, sendersConf, warmthV, warmthConf, windV, windConf,
