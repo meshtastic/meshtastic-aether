@@ -29,7 +29,7 @@ import kotlin.test.assertTrue
 @OptIn(ExperimentalTestApi::class)
 class HudUiTest {
     private val toolbarLabels = listOf(
-        "Mute", "Volume", "Standard look", "Projector look", "OLED night look", "Drivers", "Fullscreen", "Disconnect",
+        "Mute", "Volume", "Standard look", "Projector look", "OLED night look", "Headphones", "Drivers", "Fullscreen", "Disconnect",
     )
 
     private fun androidx.compose.ui.test.ComposeUiTest.hud(
@@ -75,6 +75,19 @@ class HudUiTest {
                 }
             }
         }
+    }
+
+    @Test
+    fun `the headphones button is a toggle on the controls flag`() = runComposeUiTest {
+        val controls = Controls().also { it.overlayOpen = true }
+        hud(controls)
+        waitForIdle()
+        val button = onNodeWithContentDescription("Headphones")
+        assertEquals(ToggleableState.Off, button.fetchSemanticsNode().config.getOrNull(SemanticsProperties.ToggleableState))
+        button.performClick()
+        waitForIdle()
+        assertTrue(controls.headphones)
+        assertEquals(ToggleableState.On, onNodeWithContentDescription("Headphones").fetchSemanticsNode().config.getOrNull(SemanticsProperties.ToggleableState))
     }
 
     // Regression: Mute was a text button toggling its own label; as a toggle its state must be readable.

@@ -123,6 +123,13 @@ class AmbientEngine(
         get() = Float.fromBits(gainBits.load())
         set(v) = gainBits.store(v.coerceIn(0f, 1f).toRawBits())
 
+    /** Headphone mix: dry voices placed to the side of the head, eased in over a fraction of a second; stereo when false. */
+    var headphones: Boolean
+        get() = synth.headphones
+        set(v) {
+            synth.headphones = v
+        }
+
     private val renderer = BlockRenderer { out, frames ->
         synth.render(out, frames)
         val target = Float.fromBits(gainBits.load())

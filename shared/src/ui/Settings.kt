@@ -60,7 +60,13 @@ internal class Settings(private val store: KeyValueStore) {
         get() = store.get(KEY_MUTED) == "1"
         set(value) = store.put(KEY_MUTED, if (value) "1" else "0")
 
+    /** Whether dry voices are placed to the side of the head for headphones instead of panned for speakers. */
+    var headphones: Boolean
+        get() = store.get(KEY_HEADPHONES) == "1"
+        set(value) = store.put(KEY_HEADPHONES, if (value) "1" else "0")
+
     private companion object {
+        const val KEY_HEADPHONES = "headphones"
         const val KEY_LINK = "link"
         const val KEY_PALETTE = "palette"
         const val KEY_VOLUME = "volume"

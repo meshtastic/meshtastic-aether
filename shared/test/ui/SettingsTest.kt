@@ -46,6 +46,16 @@ class SettingsTest {
         assertNull(settings.link)
     }
 
+    @Test
+    fun `the headphone placement reads back and defaults to speakers`() {
+        val store = MemoryStore()
+        assertFalse(Settings(store).headphones)
+        Settings(store).headphones = true
+        assertTrue(Settings(store).headphones)
+        Settings(store).headphones = false
+        assertFalse(Settings(store).headphones)
+    }
+
     // Regression: volume and mute were forgotten on every launch, so the app always started at full.
     @Test
     fun `volume and mute read back and default to full and unmuted`() {

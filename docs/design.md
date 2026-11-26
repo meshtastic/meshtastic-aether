@@ -148,6 +148,8 @@ Building blocks, ported (licenses checked against the repositories):
 - Chorus: Plaits `ensemble` (MIT). Shimmer: Clouds `pitch_shifter` (MIT).
 - Bells and bowls: a modal resonator after Rings and Plaits (MIT) and FM pairs. Plucks: Karplus-Strong (Plaits string, MIT). Pads: polyBLEP oscillators through stmlib's state-variable filter (MIT).
 
+Headphone placement (`BinauralPanner`): a spherical-head model, not measured HRIRs. Each dry voice is placed at the side its note's pan gives. The far ear hears it up to 0.66 ms later (Woodworth's delay with a 0.0875 m head) and with its highs shaded by Brown and Duda's head-shadow shelf; a voice straight ahead is identical to the constant-power pan. Pads keep their pan and chorus (their 4 ms delays would comb with a delay), the reverb stays stereo and the limiter stays last. A switch crossfades over 0.3 s, so it never clicks. It is off by default and costs no measurable CPU on a Chromecast.
+
 The `tools` module renders the synth offline to WAV for listening tests.
 
 ### AudioSink

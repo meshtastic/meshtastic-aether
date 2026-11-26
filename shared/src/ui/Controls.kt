@@ -19,10 +19,11 @@ internal enum class KeyAction(
     VolumeDown(repeats = true),
     ToggleMute,
     Disconnect,
+    ToggleHeadphones,
 }
 
 /**
- * H overlay, F fullscreen, Esc close or leave fullscreen, Up and Down volume, M mute, D disconnect; null for any other key.
+ * H overlay, F fullscreen, Esc close or leave fullscreen, Up and Down volume, M mute, P headphones, D disconnect; null for any other key.
  * A TV remote has no letters: Select (D-pad center) opens the HUD and Play/Pause mutes. A focused HUD button
  * consumes Select first, so the HUD's own buttons still work.
  */
@@ -34,6 +35,7 @@ internal fun keyActionFor(key: Key): KeyAction? = when (key) {
     Key.DirectionDown -> KeyAction.VolumeDown
     Key.M, Key.MediaPlayPause -> KeyAction.ToggleMute
     Key.D -> KeyAction.Disconnect
+    Key.P -> KeyAction.ToggleHeadphones
     else -> null
 }
 
@@ -75,7 +77,10 @@ internal class DisconnectConfirm {
 }
 
 /** The viewer's controls: overlay, volume and mute. Plain state, so a key table can be tested without a window. */
-internal class Controls(volume: Float = 1f) {
+internal class Controls(volume: Float = 1f, headphones: Boolean = false) {
+    /** Whether the sound is placed for headphones; the engine and the saved setting follow it. */
+    var headphones by mutableStateOf(headphones)
+
     var overlayOpen by mutableStateOf(false)
 
     val disconnect = DisconnectConfirm()
@@ -123,6 +128,10 @@ internal class Controls(volume: Float = 1f) {
         KeyAction.VolumeDown -> step(-VOLUME_STEP)
         KeyAction.ToggleMute -> {
             muted = !muted
+            Result(true, Effect.None)
+        }
+        KeyAction.ToggleHeadphones -> {
+            headphones = !headphones
             Result(true, Effect.None)
         }
         KeyAction.Disconnect -> if (disconnect.press(now)) {

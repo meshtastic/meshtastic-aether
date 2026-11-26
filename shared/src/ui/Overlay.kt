@@ -78,7 +78,7 @@ private val DRIVERS_PANEL_WIDTH = 360.dp
 private val TOOLBAR_CLEARANCE = 72.dp
 
 /** The shortcut line shown where a keyboard is the usual input. */
-internal const val SHORTCUTS = "H overlay - F fullscreen - M mute - Up and Down volume - D twice to disconnect - Esc close"
+internal const val SHORTCUTS = "H overlay - F fullscreen - M mute - P headphones - Up and Down volume - D twice to disconnect - Esc close"
 
 /** The line that appears after the first Disconnect press. */
 internal const val DISCONNECT_HINT = "Press Disconnect again within 3 seconds"
@@ -257,6 +257,7 @@ private fun HudToolbar(
         LookChooser(palette, onPalette, hasKeyboard)
     }
     val actions: @Composable RowScope.() -> Unit = {
+        HeadphonesButton(controls, hasKeyboard)
         DriversButton(controls, hasKeyboard)
         if (onToggleFullscreen != null) HudButton("Fullscreen", HudIcons.Fullscreen, hasKeyboard, onToggleFullscreen)
         DisconnectButton(controls, onDisconnect, hasKeyboard)
@@ -370,6 +371,20 @@ private fun DriversButton(controls: Controls, tooltips: Boolean) {
                 stateDescription = if (controls.driversOpen) "shown" else "hidden"
             },
         ) { HudIcon(HudIcons.Drivers) }
+    }
+}
+
+@Composable
+private fun HeadphonesButton(controls: Controls, tooltips: Boolean) {
+    HudTooltip("Headphones", tooltips) {
+        IconToggleButton(
+            checked = controls.headphones,
+            onCheckedChange = { controls.headphones = it },
+            modifier = Modifier.size(MinTouch).semantics {
+                contentDescription = "Headphones"
+                stateDescription = if (controls.headphones) "Placed for headphones" else "Panned for speakers"
+            },
+        ) { HudIcon(HudIcons.Headphones) }
     }
 }
 

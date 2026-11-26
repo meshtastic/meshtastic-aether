@@ -1,6 +1,7 @@
 package org.meshtastic.aether.synth
 
 import org.meshtastic.aether.music.NoteEvent
+import org.meshtastic.aether.music.Ornaments
 import org.meshtastic.aether.music.Voice
 import kotlin.math.PI
 import kotlin.math.cos
@@ -25,6 +26,13 @@ internal class SynthVoice(private val sampleRate: Int, seed: Int) {
     private val saw3 = PolyBlepOsc()
     private val string = KarplusString(sampleRate, rng)
     private val modal = ModalResonator(sampleRate)
+
+    /** Places this voice for headphones; see [BinauralPanner]. */
+    val binaural = BinauralPanner(sampleRate)
+
+    /** -1 (west) to 1 (east): the note's pan scaled to the full side of the head. */
+    var lateral = 0f
+        private set
 
     var active = false
         private set
@@ -101,6 +109,8 @@ internal class SynthVoice(private val sampleRate: Int, seed: Int) {
         val angle = (pan + 1f) * (PI.toFloat() / 4f)
         panLeft = cos(angle)
         panRight = sin(angle)
+        lateral = (pan / Ornaments.MAX_PAN).coerceIn(-1f, 1f)
+        binaural.reset()
         send = clamp(note.reverbSend, 0f, 1f)
         fromNode = note.node != null
         gain = 1f

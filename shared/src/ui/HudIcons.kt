@@ -124,6 +124,28 @@ internal object HudIcons {
         }
     }
 
+    /** Headphones: a band over two ear cups. */
+    val Headphones: ImageVector by lazy {
+        icon("Headphones") {
+            stroked {
+                moveTo(4f, 15f)
+                lineTo(4f, 12f)
+                arcTo(8f, 8f, 0f, false, true, 20f, 12f)
+                lineTo(20f, 15f)
+                moveTo(4f, 15f)
+                lineTo(6.5f, 15f)
+                lineTo(6.5f, 20f)
+                lineTo(4f, 20f)
+                close()
+                moveTo(20f, 15f)
+                lineTo(17.5f, 15f)
+                lineTo(17.5f, 20f)
+                lineTo(20f, 20f)
+                close()
+            }
+        }
+    }
+
     val Fullscreen: ImageVector by lazy {
         icon("Fullscreen") {
             stroked {

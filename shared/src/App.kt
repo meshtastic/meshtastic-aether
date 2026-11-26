@@ -295,7 +295,11 @@ private fun Running(
             withContext(NonCancellable) { session.close() }
         }
     }
-    val controls = remember(engine) { Controls(settings.volume).also { it.muted = settings.muted } }
+    val controls = remember(engine) { Controls(settings.volume, settings.headphones).also { it.muted = settings.muted } }
+    LaunchedEffect(controls.headphones, engine) {
+        engine.headphones = controls.headphones
+        settings.headphones = controls.headphones
+    }
     LaunchedEffect(controls.volume, controls.muted) {
         delay(SAVE_DEBOUNCE_MS)
         settings.volume = controls.volume

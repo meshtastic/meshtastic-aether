@@ -74,6 +74,13 @@ class Synth(val sampleRate: Int) : NoteSink, BlockRenderer {
     private val wetR = FloatArray(MAX_CHUNK)
     private val shifted = FloatArray(2)
     private val limited = FloatArray(2)
+    private val earL = FloatArray(MAX_CHUNK)
+    private val earR = FloatArray(MAX_CHUNK)
+
+    /** Headphones place dry voices to the side of the head instead of panning them; set from any thread, eased in over the next chunks. */
+    @kotlin.concurrent.Volatile
+    var headphones = false
+    private var binauralMix = 0f
 
     /** Largest absolute master value before the limiter, over everything rendered. */
     internal val peakBeforeLimiter: Float get() = limiter.peakIn
@@ -268,6 +275,8 @@ class Synth(val sampleRate: Int) : NoteSink, BlockRenderer {
         shimmer += (tShimmer - shimmer) * smooth
         noise += (tNoise - noise) * smooth
         for (i in layer.indices) layer[i] += (tLayer[i] - layer[i]) * smooth
+        binauralMix += ((if (headphones) 1f else 0f) - binauralMix) * (1f - exp(-n.toFloat() / (sampleRate * OUTPUT_MODE_SECONDS)))
+        if (binauralMix < 1.0e-4f) binauralMix = 0f else if (binauralMix > 1f - 1.0e-4f) binauralMix = 1f
 
         dryL.fill(0f, 0, n)
         dryR.fill(0f, 0, n)
@@ -288,6 +297,14 @@ class Synth(val sampleRate: Int) : NoteSink, BlockRenderer {
                 for (i in 0 until n) {
                     padL[i] += mono[i] * gl
                     padR[i] += mono[i] * gr
+                    sendBus[i] += mono[i] * sg
+                }
+            } else if (binauralMix > 0f) {
+                v.binaural.process(mono, n, v.lateral, earL, earR)
+                val m = binauralMix
+                for (i in 0 until n) {
+                    dryL[i] += mono[i] * gl * (1f - m) + earL[i] * g * m
+                    dryR[i] += mono[i] * gr * (1f - m) + earR[i] * g * m
                     sendBus[i] += mono[i] * sg
                 }
             } else {
@@ -337,6 +354,9 @@ class Synth(val sampleRate: Int) : NoteSink, BlockRenderer {
         private const val PENDING_NOTES = 2048
         private const val PENDING_CONTROLS = 128
         private const val SMOOTH_SECONDS = 2.0f
+
+        /** Time constant of the crossfade between stereo and headphones, so switching never clicks. */
+        private const val OUTPUT_MODE_SECONDS = 0.3f
         private const val INPUT_GAIN = 0.3f
         private const val WET_GAIN = 1.0f
         /** 0.25 plus about 8 dB of makeup, applied ahead of the limiter whose ceiling is unchanged. */

@@ -21,9 +21,20 @@ class ControlsTest {
             Key.D to KeyAction.Disconnect,
             Key.DirectionCenter to KeyAction.ToggleOverlay,
             Key.MediaPlayPause to KeyAction.ToggleMute,
+            Key.P to KeyAction.ToggleHeadphones,
         )
         for ((key, action) in table) assertEquals(action, keyActionFor(key), "key $key")
         for (other in listOf(Key.A, Key.Spacebar, Key.Enter, Key.DirectionLeft, Key.Zero)) assertNull(keyActionFor(other), "key $other")
+    }
+
+    @Test
+    fun `the headphones key toggles the placement and is consumed`() {
+        val c = Controls()
+        assertFalse(c.headphones)
+        assertTrue(c.apply(KeyAction.ToggleHeadphones, fullscreen = false, canFullscreen = false).consumed)
+        assertTrue(c.headphones)
+        c.apply(KeyAction.ToggleHeadphones, fullscreen = false, canFullscreen = false)
+        assertFalse(c.headphones)
     }
 
     // Regression: on a TV the first Back was spent on a HUD button's focus and the HUD stayed open until a second press.
