@@ -1,0 +1,185 @@
+name: Build artifacts
+
+# The release and snapshot builds share these jobs: the Android APK and AAB (signed when the keystore secrets exist),
+# a desktop executable jar on Linux and macOS, and the zipped web build, each uploaded as a workflow artifact.
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: 'The version the manifests carry, checked against the APK'
+        required: true
+        type: string
+      label:
+        description: 'The version written into the file names, e.g. 0.1.0 or 0.1.0-SNAPSHOT-abc1234'
+        required: true
+        type: string
+      ref:
+        description: 'The commit to build; the calling commit when empty'
+        required: false
+        type: string
+        default: ''
+    secrets:
+      ANDROID_KEYSTORE_BASE64:
+        required: false
+      ANDROID_KEYSTORE_PASSWORD:
+        required: false
+      ANDROID_KEY_ALIAS:
+        required: false
+      ANDROID_KEY_PASSWORD:
+        required: false
+
+permissions:
+  contents: read
+
+env:
+  KOTLIN_CLI_NO_WELCOME_BANNER: 1
+
+jobs:
+  android:
+    name: Android APK and AAB
+    runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ inputs.label }}
+      MANIFEST_VERSION: ${{ inputs.version }}
+      HAS_KEYSTORE: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+
+      - name: Point the toolchain caches at one directory
+        run: |
+          echo "KOTLIN_CLI_BOOTSTRAP_CACHE_DIR=$HOME/kotlin-cache/cli" >> "$GITHUB_ENV"
+          echo "KOTLIN_SHARED_CACHE_DIR=$HOME/kotlin-cache/shared" >> "$GITHUB_ENV"
+
+      - name: Cache the Kotlin Toolchain and dependencies
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/kotlin-cache
+          key: kotlin-${{ runner.os }}-${{ hashFiles('kotlin', 'libs.versions.toml', 'common.module-template.yaml', '**/module.yaml') }}
+          restore-keys: |
+            kotlin-${{ runner.os }}-
+
+      - name: Build the release APK and AAB
+        run: |
+          ./kotlin build -m androidApp -p android -v release
+          ./kotlin package -m androidApp -p android -v release -f aab
+
+      # Signed with the release keystore when its secrets exist; otherwise the files ship unsigned and say so.
+      - name: Sign
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          mkdir -p out
+          apk=build/tasks/_androidApp_buildAndroidRelease/gradle-project-release-unsigned.apk
+          aab=build/tasks/_androidApp_bundleAndroid/gradle-project-release.aab
+          tools="$ANDROID_HOME/build-tools/$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -printf '%f\n' | sort -V | tail -1)"
+          if [ "$HAS_KEYSTORE" = true ]; then
+            echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
+            "$tools/zipalign" -f -p 4 "$apk" "$RUNNER_TEMP/aligned.apk"
+            "$tools/apksigner" sign --ks "$RUNNER_TEMP/release.jks" --ks-pass env:KEYSTORE_PASSWORD \
+              --ks-key-alias "$KEY_ALIAS" --key-pass env:KEY_PASSWORD \
+              --out "out/meshtastic-aether-$VERSION-android.apk" "$RUNNER_TEMP/aligned.apk"
+            jarsigner -keystore "$RUNNER_TEMP/release.jks" -storepass:env KEYSTORE_PASSWORD -keypass:env KEY_PASSWORD \
+              -signedjar "out/meshtastic-aether-$VERSION-android.aab" "$aab" "$KEY_ALIAS"
+            rm -f "$RUNNER_TEMP/release.jks"
+          else
+            echo "::warning::no ANDROID_KEYSTORE_BASE64 secret: the APK and AAB are unsigned"
+            "$tools/zipalign" -f -p 4 "$apk" "out/meshtastic-aether-$VERSION-android-unsigned.apk"
+            cp "$aab" "out/meshtastic-aether-$VERSION-android-unsigned.aab"
+          fi
+          badging=$("$tools/aapt2" dump badging out/*.apk)
+          if ! grep -q "versionName='$MANIFEST_VERSION'" <<<"$badging"; then
+            echo "::error::the APK does not carry versionName $MANIFEST_VERSION"
+            exit 1
+          fi
+
+      - name: Keep the Android files
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: android
+          path: out/
+
+  desktop:
+    name: Desktop jar (${{ matrix.id }})
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            id: linux-x64
+          - os: macos-latest
+            id: macos-arm64
+    runs-on: ${{ matrix.os }}
+    env:
+      VERSION: ${{ inputs.label }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+
+      - name: Point the toolchain caches at one directory
+        run: |
+          echo "KOTLIN_CLI_BOOTSTRAP_CACHE_DIR=$HOME/kotlin-cache/cli" >> "$GITHUB_ENV"
+          echo "KOTLIN_SHARED_CACHE_DIR=$HOME/kotlin-cache/shared" >> "$GITHUB_ENV"
+
+      - name: Cache the Kotlin Toolchain and dependencies
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/kotlin-cache
+          key: kotlin-${{ runner.os }}-${{ hashFiles('kotlin', 'libs.versions.toml', 'common.module-template.yaml', '**/module.yaml') }}
+          restore-keys: |
+            kotlin-${{ runner.os }}-
+
+      # The jar bundles the Compose native libraries for the OS it is built on, so each OS gets its own.
+      - name: Package the executable jar
+        run: |
+          ./kotlin package -m desktopApp -f executable-jar
+          mkdir -p out
+          cp build/tasks/_desktopApp_executableJarJvm/desktopApp-jvm-executable.jar "out/meshtastic-aether-$VERSION-desktop-${{ matrix.id }}.jar"
+
+      - name: Keep the jar
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: desktop-${{ matrix.id }}
+          path: out/
+
+  web:
+    name: Web build
+    runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ inputs.label }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+
+      - name: Point the toolchain caches at one directory
+        run: |
+          echo "KOTLIN_CLI_BOOTSTRAP_CACHE_DIR=$HOME/kotlin-cache/cli" >> "$GITHUB_ENV"
+          echo "KOTLIN_SHARED_CACHE_DIR=$HOME/kotlin-cache/shared" >> "$GITHUB_ENV"
+
+      - name: Cache the Kotlin Toolchain and dependencies
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/kotlin-cache
+          key: kotlin-${{ runner.os }}-${{ hashFiles('kotlin', 'libs.versions.toml', 'common.module-template.yaml', '**/module.yaml') }}
+          restore-keys: |
+            kotlin-${{ runner.os }}-
+
+      - name: Build and zip the static site
+        run: |
+          ./kotlin build -m webApp -v release
+          mkdir -p out
+          (cd build/tasks/_webApp_buildWasmJsAppWasmJsRelease && zip -qr "$GITHUB_WORKSPACE/out/meshtastic-aether-$VERSION-web.zip" .)
+
+      - name: Keep the site
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: web
+          path: out/

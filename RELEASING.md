@@ -1,6 +1,10 @@
 # Releasing
 
-Meshtastic Aether releases from [`.github/workflows/release.yml`](.github/workflows/release.yml) to a GitHub Release with the Android APK and AAB, a desktop jar per OS and a zipped web build. Like CI, the workflow only runs while the repository is public.
+Meshtastic Aether releases from [`.github/workflows/release.yml`](.github/workflows/release.yml) to a GitHub Release with the Android APK and AAB, a desktop jar per OS and a zipped web build. The release and the snapshots share their build jobs in [`.github/workflows/build-artifacts.yml`](.github/workflows/build-artifacts.yml). Like CI, they only run while the repository is public.
+
+## Snapshots
+
+[`.github/workflows/snapshot.yml`](.github/workflows/snapshot.yml) runs after CI passes on a push to `main`. It builds that commit and replaces the rolling `snapshot` prerelease and its tag, with files named `X.Y.Z-SNAPSHOT-<sha>` after the manifest version and notes that list the unreleased changelog. A newer push cancels an older snapshot build. `gh workflow run snapshot.yml --repo meshtastic/meshtastic-aether` builds `main` on demand. Snapshots build against the meshtastic-sdk snapshot the catalog pins, like every build.
 
 ## Version
 

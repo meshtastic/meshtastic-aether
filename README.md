@@ -36,7 +36,7 @@ The 90 second demo above has sound. Below, the scene while it listens to a gener
 ./kotlin test -m shared -p jvm                  # shared tests (wasmJs: -p wasmJs)
 ```
 
-[Releases](https://github.com/meshtastic/meshtastic-aether/releases) carry the Android APK and AAB, a desktop jar for Linux and for macOS (run it with Java 25: `java -jar meshtastic-aether-X.Y.Z-desktop-<os>.jar`) and a zipped web build to serve from any static host. The `./kotlin` wrapper downloads the Kotlin Toolchain on first use. [`CONTRIBUTING.md`](CONTRIBUTING.md) lists the build and test commands.
+[Releases](https://github.com/meshtastic/meshtastic-aether/releases) carry the Android APK and AAB, a desktop jar for Linux and for macOS (run it with Java 25: `java -jar meshtastic-aether-X.Y.Z-desktop-<os>.jar`) and a zipped web build to serve from any static host. The `snapshot` prerelease carries the same files built from the latest `main` that passed CI. The `./kotlin` wrapper downloads the Kotlin Toolchain on first use. [`CONTRIBUTING.md`](CONTRIBUTING.md) lists the build and test commands.
 
 ### Android TV and Google TV
 
