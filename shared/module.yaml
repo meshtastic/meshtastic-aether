@@ -20,6 +20,9 @@ dependencies:
   - $libs.meshtastic.sdk.core
   - $libs.meshtastic.sdk.transport.websocket
 
+test-dependencies:
+  - $libs.kotlinx.coroutines.test
+
 dependencies@jvm:
   - $libs.meshtastic.sdk.transport.tcp
   - $libs.meshtastic.sdk.transport.serial

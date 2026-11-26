@@ -1,0 +1,70 @@
+package org.meshtastic.ambient.music
+
+import kotlin.math.PI
+import kotlin.math.cos
+
+/** Long form: 20-60 minute sections on a ~110-minute energy arc, deciding which layers sound and how loudly. */
+class Form(seed: Long) {
+    private val rng = Rng.stream(seed, 2)
+    private val phase = rng.range(0.2, 0.4)
+    private val ends = ArrayList<Double>()
+    private val mults = ArrayList<Double>()
+
+    private fun extend(untilSec: Double) {
+        while (ends.isEmpty() || ends.last() < untilSec + 3600.0) {
+            val start = if (ends.isEmpty()) 0.0 else ends.last()
+            ends += start + rng.range(20.0, 60.0) * 60.0
+            val prevThin = mults.isNotEmpty() && mults.last() < 0.3
+            mults += when {
+                mults.isEmpty() || prevThin -> rng.range(0.55, 1.0)
+                rng.nextDouble() < 0.25 -> 0.12
+                else -> rng.range(0.55, 1.0)
+            }
+        }
+    }
+
+    /** Section lengths in minutes covering at least the first [untilSec] seconds. */
+    fun sectionMinutes(untilSec: Double): List<Double> {
+        extend(untilSec)
+        return ends.mapIndexed { i, e -> (e - (if (i == 0) 0.0 else ends[i - 1])) / 60.0 }
+    }
+
+    /** 0 at the quietest point of the arc, 1 at the fullest. */
+    fun energy(tSec: Double): Double = 0.5 - 0.5 * cos(2 * PI * (tSec / ARC_SECONDS + phase))
+
+    private fun sectionMultiplier(t: Double): Double {
+        extend(t)
+        val k = ends.indexOfFirst { t < it }
+        var m = mults[k]
+        if (k > 0 && t < ends[k - 1] + FADE) m = lerp(mults[k - 1], m, smooth((t - (ends[k - 1] - FADE)) / (2 * FADE)))
+        if (t > ends[k] - FADE) m = lerp(m, mults[k + 1], smooth((t - (ends[k] - FADE)) / (2 * FADE)))
+        return m
+    }
+
+    /** Level 0..1 per layer: Drone, Pad, Bell (loops and memory) and Shimmer enter in that order as energy rises. */
+    fun levels(tSec: Double): Map<Voice, Float> {
+        val x = (energy(tSec) * sectionMultiplier(tSec)).coerceIn(0.0, 1.0)
+        return mapOf(
+            Voice.Drone to (0.9 * smoothstep(0.0, 0.5, x)).toFloat(),
+            Voice.Pad to (0.8 * smoothstep(0.15, 0.6, x)).toFloat(),
+            Voice.Bell to (0.7 * smoothstep(0.3, 0.8, x)).toFloat(),
+            Voice.Shimmer to (0.5 * smoothstep(0.55, 0.95, x)).toFloat(),
+        )
+    }
+
+    private fun smooth(u: Double) = smoothstep(0.0, 1.0, u)
+
+    private fun smoothstep(lo: Double, hi: Double, x: Double): Double {
+        val u = ((x - lo) / (hi - lo)).coerceIn(0.0, 1.0)
+        return u * u * (3 - 2 * u)
+    }
+
+    private fun lerp(a: Double, b: Double, u: Double) = a + (b - a) * u
+
+    companion object {
+        const val ARC_SECONDS = 110.0 * 60.0
+        private const val FADE = 120.0
+
+        fun total(levels: Map<Voice, Float>): Float = levels.values.sum()
+    }
+}

@@ -14,7 +14,7 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "EBADC742E15BFA0F64A10094"
-               BuildableName = "tmpl.app"
+               BuildableName = "MeshtasticAmbient.app"
                BlueprintName = "app"
                ReferencedContainer = "container:module.xcodeproj">
             </BuildableReference>
@@ -43,7 +43,7 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "EBADC742E15BFA0F64A10094"
-            BuildableName = "tmpl.app"
+            BuildableName = "MeshtasticAmbient.app"
             BlueprintName = "app"
             ReferencedContainer = "container:module.xcodeproj">
          </BuildableReference>

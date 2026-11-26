@@ -9,3 +9,4 @@ local.properties
 .claude/worktrees/
 captures/
 *.capture
+renders/

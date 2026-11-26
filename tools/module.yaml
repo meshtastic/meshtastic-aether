@@ -1,0 +1,16 @@
+product: jvm/app
+
+apply:
+  - //common.module-template.yaml
+
+dependencies:
+  - //shared
+  - $libs.kotlinx.coroutines.core
+  - $libs.kotlinx.coroutines.test
+
+test-dependencies:
+  - $libs.kotlinx.coroutines.test
+
+settings:
+  jvm:
+    mainClass: org.meshtastic.ambient.tools.RenderWavKt

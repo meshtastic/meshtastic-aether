@@ -1,7 +1,24 @@
 package org.meshtastic.ambient
 
+import org.meshtastic.sdk.RadioTransport
+
 interface Platform {
     val name: String
+
+    /** Whether [createTcpTransport] returns a transport on this target (the browser cannot open raw sockets). */
+    val supportsTcp: Boolean
+
+    /** How far ahead of the speaker the composer fills: 250-500 ms natively, longer on the web. */
+    val lookaheadMillis: Int
+
+    /** The browser keeps audio suspended until a gesture, so the app opens on a tap-to-start screen there. */
+    val needsTapToStart: Boolean
+
+    /** Called from a click or key handler; lets a suspended audio context run. */
+    fun resumeAudio()
 }
 
 expect fun getPlatform(): Platform
+
+/** A TCP link to a node's port, or null where the target has none. */
+expect fun createTcpTransport(host: String, port: Int): RadioTransport?
