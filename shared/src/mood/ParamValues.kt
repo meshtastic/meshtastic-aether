@@ -32,7 +32,7 @@ data class ParamDrivers(
 )
 
 /**
- * The pass-1 parameters the mesh turns, immutable. A mood with no data equals [NEUTRAL]: today's constants, except
+ * The parameters the mesh turns, immutable. A mood with no data equals [NEUTRAL]: the neutral constants, except
  * the wobble, whose neutral sits inside its driven range. [rotationDirection] is the target, +1 clockwise and -1
  * counter-clockwise; [directionStrength] is how far past neutral the evidence for it is, 0..1.
  */

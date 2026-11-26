@@ -7,7 +7,7 @@ import kotlin.test.assertTrue
 
 class ParamValuesTest {
     @Test
-    fun `neutral parameters are today's constants`() {
+    fun `neutral parameters are the constants they replaced`() {
         val p = ParamValues.NEUTRAL
         assertEquals(600.0, p.rotationPeriodSeconds)
         assertEquals(1, p.rotationDirection)

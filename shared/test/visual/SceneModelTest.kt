@@ -116,7 +116,7 @@ class SceneModelTest {
         assertEquals(1, s.ripples.size)
     }
 
-    // Brief: the idle core is at least 0.35 when seen and never decays below 0.2; a flash still tops 0.8.
+    // Design: the idle core is at least 0.35 when seen and never decays below 0.2; a flash still tops 0.8.
     // Changed from the old test, which expected the glow to reach zero after three hours.
     @Test
     fun `glow flashes at a packet and settles on an idle floor that never vanishes`() {
@@ -234,7 +234,7 @@ class SceneModelTest {
         assertTrue(differs)
     }
 
-    // Brief: disconnected look: the field desaturates and the anchor pulses more slowly.
+    // Design: disconnected look: the field desaturates and the anchor pulses more slowly.
     @Test
     fun `unlinked desaturates the field and slows the anchor and relinking restores it`() {
         val s = scene()

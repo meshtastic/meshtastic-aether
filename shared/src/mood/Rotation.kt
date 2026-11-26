@@ -114,7 +114,7 @@ class RotationIntegrator(initialPeriodSeconds: Double = RotationTargets.NEUTRAL_
         /** Tilt plus wobble never exceed this many degrees off level. */
         const val MAX_OFFSET_DEGREES = 20.0
 
-        /** The wobble period; today's pitch swing is 90 s. */
+        /** The wobble period; the neutral pitch swing is 90 s. */
         const val WOBBLE_PERIOD_SECONDS = 90.0
 
         private const val DEG = PI / 180.0

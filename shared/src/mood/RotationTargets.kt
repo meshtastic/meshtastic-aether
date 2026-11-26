@@ -5,16 +5,16 @@ import kotlin.math.exp
 import kotlin.math.ln
 import kotlin.math.pow
 
-/** Plain functions from mood signals to rotation targets; with no data every one returns today's constant. */
+/** Plain functions from mood signals to rotation targets; with no data every one returns the neutral constant. */
 object RotationTargets {
-    /** Today's yaw: one turn in ten minutes. */
+    /** The neutral yaw: one turn in ten minutes. */
     const val NEUTRAL_PERIOD_SECONDS = 600.0
     const val QUIET_PERIOD_SECONDS = 1200.0
 
     /** Hard floor: one turn never faster than this. */
     const val MIN_PERIOD_SECONDS = 150.0
 
-    /** No steady tilt and a 3 degree wobble, inside the driven 1 to 6 range (today's pitch swing was 8, past its own maximum). */
+    /** No steady tilt and a 3 degree wobble, inside the driven 1 to 6 range. */
     const val NEUTRAL_TILT_DEGREES = 0.0
     const val NEUTRAL_WOBBLE_DEGREES = 3.0
 
@@ -84,7 +84,7 @@ object RotationTargets {
     /**
      * The sign of the first trend that has data and is not flat: pressure (rising clockwise), then temperature (warming
      * clockwise), then battery (charging clockwise, only nodes whose level moved), then the activity trend once its
-     * strength reaches [RotationIntegrator.HYSTERESIS]. With none, clockwise at strength 0 (today's way).
+     * strength reaches [RotationIntegrator.HYSTERESIS]. With none, clockwise at strength 0 (the neutral direction).
      */
     fun chooseDirection(
         pressure: Double, pressureConfidence: Double,

@@ -41,7 +41,7 @@ class MeshDrivenSceneTest {
         drivers = ParamDrivers(rotationDirection = "pressure trend"), directionStrength = strength,
     )
 
-    // Regression: neutral params must reproduce today's closed form: one turn in 600 s, a 3 degree pitch swing every 90 s (review item 4: neutral wobble 3).
+    // Regression: neutral params must reproduce the neutral closed form: one turn in 600 s, a 3 degree pitch swing every 90 s.
     @Test
     fun `neutral params turn once in ten minutes and swing the pitch three degrees every ninety seconds`() {
         val s = scene()
@@ -138,7 +138,7 @@ class MeshDrivenSceneTest {
         return m
     }
 
-    // Regression: the scene passed strength 1.0 whenever a driver existed, so a 0.2 trend flipped the cloud (review item 2).
+    // Regression: the scene passed strength 1.0 whenever a driver existed, so a 0.2 trend flipped the cloud.
     // A pressure fall of 0.4 hPa an hour is a trend of 0.2, below the 0.25 band; 1.0 an hour is 0.5, above it.
     @Test
     fun `a faint pressure fall from the mood never turns the cloud and a clear one does`() {
@@ -267,7 +267,7 @@ class MeshDrivenSceneTest {
         assertEquals(now, s.anchorBreath, 1e-6, "the linked 8 s cycle at scale 3 takes 24 s")
     }
 
-    // The cloud breath is 1 plus or minus 0.03 over 60 s and the drift at most 0.012 (the brief); neither may leave that.
+    // The cloud breath is 1 plus or minus 0.03 over 60 s and the drift at most 0.012 (the design); neither may leave that.
     @Test
     fun `neutral breathing repeats every sixty seconds inside three percent and drift stays small`() {
         val s = scene()
@@ -286,7 +286,7 @@ class MeshDrivenSceneTest {
 
     // Regression: absent attributes must leave the orb and the ripple exactly as drawn before.
     @Test
-    fun `a node with no attributes keeps today's look`() {
+    fun `a node with no attributes keeps the neutral look`() {
         val s = scene()
         s.onEvent(MeshEvent.NodeSeen(1, "a", null, true, 0), 0)
         s.onEvent(heard(1, PacketKind.Text, rssi = null), 0)

@@ -23,7 +23,7 @@ class StatusTextTest {
         assertEquals("Can't reach a:1 - retrying", statusLineText(LinkState.Connecting, "Can't reach a:1 - retrying"))
     }
 
-    // Review item 14: "Can't reach host:port - retrying", never the exception text.
+    // The line reads "Can't reach host:port - retrying", never the exception text.
     @Test
     fun `an unreachable host reads as a retry line with the target`() {
         assertEquals("Can't reach meshtastic.local:4403 - retrying", unreachableText("meshtastic.local:4403"))
@@ -37,7 +37,7 @@ class StatusTextTest {
         assertEquals("Could not start this link", startFailureText(IllegalArgumentException()))
     }
 
-    // Review item 24: the hint says Click where a keyboard and pointer are the usual input.
+    // The hint says Click where a keyboard and pointer are the usual input.
     @Test
     fun `the hint says click with a keyboard and tap without`() {
         assertEquals("Click or press H for controls", controlsHint(true))

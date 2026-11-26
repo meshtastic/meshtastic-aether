@@ -20,6 +20,15 @@
         <string>$(MARKETING_VERSION)</string>
         <key>CFBundleVersion</key>
         <string>$(CURRENT_PROJECT_VERSION)</string>
+        <key>NSBluetoothAlwaysUsageDescription</key>
+        <string>Aether uses Bluetooth to listen to the radio you choose.</string>
+        <key>NSLocalNetworkUsageDescription</key>
+        <string>Aether uses the local network to listen to the node you choose.</string>
+        <key>NSAppTransportSecurity</key>
+        <dict>
+            <key>NSAllowsLocalNetworking</key>
+            <true/>
+        </dict>
         <key>UIBackgroundModes</key>
         <array>
             <string>audio</string>

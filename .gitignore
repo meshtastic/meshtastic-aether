@@ -10,3 +10,10 @@ local.properties
 captures/
 *.capture
 renders/
+*.wav
+*.jks
+*.keystore
+xcuserdata/
+DerivedData/
+.envrc
+.direnv/

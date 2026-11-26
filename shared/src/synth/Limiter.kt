@@ -22,9 +22,6 @@ internal class PeakLimiter(sampleRate: Int) {
     private var boxSum = 0.0
     private val releaseCoef = exp(-1.0 / (sampleRate * RELEASE_SECONDS)).toFloat()
 
-    /** Largest absolute input seen, to show a scenario really drove the limiter. */
-    var peakIn = 0f
-
     /** Count of non-finite inputs replaced by silence; tests assert it stays zero. */
     var nonFiniteHits = 0
 
@@ -50,7 +47,6 @@ internal class PeakLimiter(sampleRate: Int) {
         val inL = sanitize(l)
         val inR = sanitize(r)
         val peak = max(abs(inL), abs(inR))
-        if (peak > peakIn) peakIn = peak
 
         target[pos] = if (peak > THRESHOLD) THRESHOLD / peak else 1f
         var windowMin = 1f

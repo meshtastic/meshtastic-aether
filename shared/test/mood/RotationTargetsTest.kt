@@ -14,7 +14,7 @@ class RotationTargetsTest {
     }
 
     @Test
-    fun `period is today's 600 seconds without confidence and halfway in log terms at half confidence`() {
+    fun `period is the neutral 600 seconds without confidence and halfway in log terms at half confidence`() {
         assertEquals(600.0, RotationTargets.periodSeconds(1.0, 0.0))
         assertEquals(kotlin.math.sqrt(600.0 * 150.0), RotationTargets.periodSeconds(1.0, 0.5), 1e-6)
     }

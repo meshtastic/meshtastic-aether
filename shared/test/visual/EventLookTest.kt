@@ -11,7 +11,7 @@ import kotlin.test.assertTrue
 class EventLookTest {
     private val eps = 1e-9
 
-    // Regression: a router drawn like a tracker loses the role cue; unknown roles must keep today's size.
+    // Regression: a router drawn like a tracker loses the role cue; unknown roles must keep the neutral size.
     @Test
     fun `routers get a larger softer core and trackers a smaller crisp one and unknown stays at one`() {
         assertTrue(EventLook.coreSize("ROUTER") > 1.0 && EventLook.coreAlpha("ROUTER") < 1.0)
@@ -104,7 +104,7 @@ class EventLookTest {
         assertEquals(0.9 + 0.2 * kotlin.math.ln(24.0) / kotlin.math.ln(720.0), EventLook.haloScale(86400), 1e-9)
     }
 
-    // Regression: the width of a ripple today is 2.5 dp for text and 1.5 dp otherwise, plus 2 dp thinning to 0 over the life.
+    // Regression: the width of a ripple is 2.5 dp for text and 1.5 dp otherwise, plus 2 dp thinning to 0 over the life.
     @Test
     fun `an unannotated ripple is as wide as before`() {
         assertEquals(4.5, EventLook.rippleWidthDp(PacketKind.Text, 1.0, 0.0), eps)

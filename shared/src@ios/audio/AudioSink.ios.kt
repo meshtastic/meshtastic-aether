@@ -2,8 +2,6 @@
 
 package org.meshtastic.aether.audio
 
-// UNVERIFIED: written against the AVFoundation Kotlin/Native bindings; not built or run (no Apple toolchain on Linux).
-
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.get
 import kotlinx.cinterop.set

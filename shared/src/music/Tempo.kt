@@ -1,7 +1,7 @@
 package org.meshtastic.aether.music
 
 /**
- * The four tempo bands. [speed] is 0.5, 0.75, 1 or 1.5 (1 is today); it divides every time the phrases spend:
+ * The four tempo bands. [speed] is 0.5, 0.75, 1 or 1.5 (1 is neutral); it divides every time the phrases spend:
  * motif step length, the answer delay and the answer gap, and the loop period. The 0.25 s grid is not touched.
  */
 object Tempo {

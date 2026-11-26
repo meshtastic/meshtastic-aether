@@ -91,7 +91,7 @@ private val DRIVERS_PANEL_WIDTH = 360.dp
 private val TOOLBAR_CLEARANCE = 72.dp
 
 /** The shortcut line shown where a keyboard is the usual input. */
-internal const val SHORTCUTS = "H overlay - F fullscreen - M mute - P headphones - Up and Down volume - D twice to disconnect - Esc close"
+internal const val SHORTCUTS = "H HUD - F fullscreen - M mute - P headphones - Up and Down volume - D twice to disconnect - Esc close"
 
 /** The line that appears after the first Disconnect press. */
 internal const val DISCONNECT_HINT = "Press Disconnect again within 3 seconds"

@@ -39,11 +39,16 @@ private external fun storagePut(key: String, value: String)
 private external fun storageRemove(key: String)
 
 private class LocalStorageStore : KeyValueStore {
-    override fun get(key: String): String? = storageGet(key)
+    override fun get(key: String): String? = storageGet(PREFIX + key)
 
-    override fun put(key: String, value: String) = storagePut(key, value)
+    override fun put(key: String, value: String) = storagePut(PREFIX + key, value)
 
-    override fun remove(key: String) = storageRemove(key)
+    override fun remove(key: String) = storageRemove(PREFIX + key)
+
+    private companion object {
+        /** Keeps Aether's keys apart from any other app on the same origin. */
+        const val PREFIX = "aether."
+    }
 }
 
 internal actual fun createKeyValueStore(): KeyValueStore = LocalStorageStore()

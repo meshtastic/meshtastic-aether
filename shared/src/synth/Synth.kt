@@ -82,9 +82,6 @@ class Synth(val sampleRate: Int) : NoteSink, BlockRenderer {
     var headphones = false
     private var binauralMix = 0f
 
-    /** Largest absolute master value before the limiter, over everything rendered. */
-    internal val peakBeforeLimiter: Float get() = limiter.peakIn
-
     /** Non-finite master samples replaced by silence. */
     internal val nonFiniteHits: Int get() = limiter.nonFiniteHits
 
@@ -95,8 +92,6 @@ class Synth(val sampleRate: Int) : NoteSink, BlockRenderer {
 
     /** Pitch of every sounding voice that is not on its way out, in voice order. */
     internal fun soundingPitches(): DoubleArray = voices.filter { it.active && !it.isFading }.map { it.pitchHz }.toDoubleArray()
-
-    internal fun reverbStats(): FloatArray = reverb.stateStats()
 
     init {
         noiseFilter.setFq((3000.0 / sampleRate).toFloat(), 0.7f)

@@ -6,7 +6,7 @@ import org.meshtastic.aether.mesh.LinkState
 import org.meshtastic.aether.mesh.MeshEvent
 
 /**
- * The pass-1 signals at one instant. Each signal is 0..1 with a confidence 0..1; a signal with no data holds its neutral
+ * The mood signals at one instant. Each signal is 0..1 with a confidence 0..1; a signal with no data holds its neutral
  * (0.5) and confidence 0. The trends are -1..1: [pressureTrend], [temperatureTrend] and [batteryTrend] are per-node
  * 3 h changes (median) as a fraction of a full-scale change, [activityTrend] is the change of relative activity over 30 minutes.
  */

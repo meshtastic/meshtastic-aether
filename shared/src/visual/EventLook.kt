@@ -10,7 +10,7 @@ enum class RingStyle { Solid, Dashed }
 
 /**
  * The per-event visual attributes of the mesh-driven design (Layer 1, visual column) as plain bounded functions.
- * Every one returns its neutral value, today's look, when the attribute is absent.
+ * Every one returns its neutral value when the attribute is absent.
  */
 object EventLook {
     private val INFRASTRUCTURE = setOf("ROUTER", "ROUTER_CLIENT", "ROUTER_LATE", "REPEATER")
@@ -111,7 +111,7 @@ object EventLook {
         return 0.9 + 0.2 * x
     }
 
-    /** Today's ripple width in dp before the fading term: texts are heavier. */
+    /** The ripple width in dp before the fading term: texts are heavier. */
     fun kindWidthDp(kind: PacketKind): Double = if (kind == PacketKind.Text) 2.5 else 1.5
 
     /** Path-like packets draw a dashed ring; everything else is solid. */
@@ -143,7 +143,7 @@ object EventLook {
 
     fun mqttMix(viaMqtt: Boolean): Float = if (viaMqtt) MQTT_COOL_MIX else 0f
 
-    /** Today's ripple stroke width in dp: the kind's base times the payload [trim] plus a thinning term that shrinks over [progress] 0..1. */
+    /** The ripple stroke width in dp: the kind's base times the payload [trim] plus a thinning term that shrinks over [progress] 0..1. */
     fun rippleWidthDp(kind: PacketKind, trim: Double, progress: Double): Double =
         kindWidthDp(kind) * trim + 2.0 * (1.0 - progress)
 

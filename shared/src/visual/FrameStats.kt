@@ -33,14 +33,15 @@ class FrameStats {
     private var frames = 0
 
     fun record(nowNanos: Long) {
-        if (frames == 0) {
+        val seen = frames
+        if (seen == 0) {
             firstNanos = nowNanos
         } else {
-            deltas[(frames - 1) % CAPACITY] = nowNanos - lastNanos
+            deltas[(seen - 1) % CAPACITY] = nowNanos - lastNanos
             if (count < CAPACITY) count++
         }
         lastNanos = nowNanos
-        frames++
+        frames = seen + 1
     }
 
     /** The window since the last call, then a reset; null when fewer than two frames were recorded. */

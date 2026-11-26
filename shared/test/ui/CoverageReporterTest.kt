@@ -11,7 +11,7 @@ class CoverageReporterTest {
     private val r = CoverageReporter(write = { lines += it })
     private val min = 60_000L
 
-    // The brief: one line per hour and one ten minutes after connect, so the first reading is early.
+    // The design: one line per hour and one ten minutes after connect, so the first reading is early.
     @Test
     fun `writes nothing before the link is up then a line at ten minutes then one per hour`() {
         r.tick(0)

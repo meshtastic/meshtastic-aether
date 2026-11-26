@@ -20,7 +20,7 @@ class ThemeTest {
         assertEquals(Color(0xFFECEDF3), s.onSurface)
     }
 
-    // Regression: a 24 h cosine left 0.65 at 21:00 and 0.53 at 05:00, so evenings read as night (review item 1).
+    // Regression: a 24 h cosine left 0.65 at 21:00 and 0.53 at 05:00, so evenings read as night.
     @Test
     fun `the standard look is at full light from seven to twenty two and never leaves its floor`() {
         val std = PaletteChoice.Standard.palette
@@ -78,7 +78,7 @@ class ThemeTest {
         }
     }
 
-    // Regression: a hard 2 dp ring at 0.45 to 0.70 read as a cursor (review item 5).
+    // Regression: a hard 2 dp ring at 0.45 to 0.70 read as a cursor.
     @Test
     fun `the anchor ring stays between a quarter and four tenths and breathes upward`() {
         assertEquals(0.25f, anchorRingAlpha(0f), 1e-6f)
@@ -102,7 +102,7 @@ class ThemeTest {
         }
     }
 
-    // Time-of-day offset is a sine zero at 06:00 and 18:00, plus 12 at noon (the brief: a small offset).
+    // Time-of-day offset is a sine zero at 06:00 and 18:00, plus 12 at noon (the design: a small offset).
     @Test
     fun `the time of day hue offset is small and zero at six and eighteen`() {
         assertEquals(0.0, timeHueOffset(360), 1e-9)
@@ -124,7 +124,7 @@ class ThemeTest {
         assertEquals(0.8f, grey.red, 1e-5f)
     }
 
-    // Regression: the flash burned to a white blob at alpha 1.0; the brief caps orb alpha near 0.7 and holds idle at 0.2 or more.
+    // Regression: the flash burned to a white blob at alpha 1.0; the design caps orb alpha near 0.7 and holds idle at 0.2 or more.
     @Test
     fun `orb alpha is capped near 0 point 7 and never invisible at the idle floor`() {
         assertEquals(0.7f, orbCoreAlpha(1.0), 1e-6f)

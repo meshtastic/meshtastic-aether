@@ -163,7 +163,7 @@ class AmbientEngineTest {
         job.cancel()
     }
 
-    // Review item 14: the person sees the target and a retry, never the exception text, and the open callback's own text is used.
+    // The person sees the target and a retry, never the exception text, and the open callback's own text is used.
     @Test
     fun `a failing open shows the sessions own text and not the exception message`() = runTest {
         val e = AmbientEngine(

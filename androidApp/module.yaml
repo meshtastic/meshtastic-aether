@@ -6,8 +6,6 @@ apply:
 dependencies:
   - //shared
   - $libs.androidx.activity.compose
-  - $compose.preview
-  - $compose.uiTooling
 
 settings:
   compose: enabled

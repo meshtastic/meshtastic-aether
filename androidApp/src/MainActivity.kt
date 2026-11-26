@@ -8,15 +8,13 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import kotlinx.coroutines.CompletableDeferred
 import org.meshtastic.aether.ble.AndroidBlePermissions
 import org.meshtastic.aether.log.Log
 import org.meshtastic.aether.ui.parseLaunchArgs
-import androidx.compose.runtime.Composable
-import androidx.compose.ui.tooling.preview.Preview
-import androidx.core.view.WindowCompat
-import androidx.core.view.WindowInsetsCompat
-import androidx.core.view.WindowInsetsControllerCompat
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -80,9 +78,3 @@ private val BLE_PERMISSIONS: Array<String> =
     } else {
         arrayOf(android.Manifest.permission.ACCESS_FINE_LOCATION)
     }
-
-@Preview
-@Composable
-fun AppAndroidPreview() {
-    App()
-}

@@ -100,7 +100,6 @@ private class AndroidUpdater(private val app: Context, manifestUrl: String) :
     private fun PackageInfo.longCode(): Long =
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) longVersionCode else versionCode.toLong()
 
-    /** Whether the package's signing certificates are the installed app's, or null when either cannot be read. */
     /**
      * Whether the package may replace this install: its signers, with the past keys a rotated key vouches for, cover
      * the installed app's current signers. Null when either side's signers cannot be read.

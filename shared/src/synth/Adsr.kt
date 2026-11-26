@@ -33,11 +33,6 @@ internal class Adsr(private val sampleRate: Int) {
         if (stage != IDLE) stage = RELEASE
     }
 
-    fun kill() {
-        level = 0f
-        stage = IDLE
-    }
-
     fun next(): Float {
         when (stage) {
             ATTACK -> {

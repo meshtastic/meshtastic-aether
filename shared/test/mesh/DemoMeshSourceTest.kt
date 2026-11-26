@@ -17,9 +17,9 @@ import kotlin.test.assertTrue
 class DemoMeshSourceTest {
     private val script = DemoScript.events(0L)
 
-    // The brief fixes the story order: nodes arrive, a DM, a traceroute, a chord-changing text, a weather shift, a rest.
+    // The design fixes the story order: nodes arrive, a DM, a traceroute, a chord-changing text, a weather shift, a rest.
     @Test
-    fun `the script tells its story in the briefed order`() {
+    fun `the script tells its story in the designed order`() {
         val lastArrival = script.indexOfLast { it is MeshEvent.NodeSeen }
         val dm = script.indexOfFirst { it is MeshEvent.PacketHeard && it.toUs && it.kind == PacketKind.Text }
         val route = script.indexOfFirst { it is MeshEvent.Route }
@@ -99,7 +99,7 @@ class DemoMeshSourceTest {
         assertTrue(later.filterIsInstance<MeshEvent.Environment>().all { it.pressureHpa!! < lowest })
     }
 
-    // Brief: a router, a tracker and a sensor each speak with their roles and hardware.
+    // Design: a router, a tracker and a sensor each speak with their roles and hardware.
     @Test
     fun `a router a tracker and a sensor speak after arriving with their role and hardware`() {
         val seen = script.filterIsInstance<MeshEvent.NodeSeen>().associateBy { it.node }
@@ -145,7 +145,7 @@ class DemoMeshSourceTest {
         assertEquals(null, router.voltage)
     }
 
-    // Brief: activity rises and falls through the loop.
+    // Design: activity rises and falls through the loop.
     @Test
     fun `the packet rate rises toward the middle of the loop and falls again`() {
         fun packets(fromMs: Long, toMs: Long) = script.count {
@@ -211,7 +211,7 @@ class DemoMeshSourceTest {
         assertTrue(freeDipped, "the free form dips somewhere in 400 minutes")
     }
 
-    // Brief: the pressure fall reverses the rotation. The mood reads the first pass as rising until the front, then falling.
+    // Design: the pressure fall reverses the rotation. The mood reads the first pass as rising until the front, then falling.
     @Test
     fun `the mood turns the rotation counter-clockwise after the front and not before`() {
         val mood = MeshMood()

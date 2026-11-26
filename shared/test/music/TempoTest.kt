@@ -6,7 +6,7 @@ import kotlin.test.assertEquals
 class TempoTest {
     // Expected values are hand computed: base 17 s on a quiet day (density 0.2) is 17 * (1 + 0.3 * 0.8) = 21.08 s.
     @Test
-    fun `a loop period stretches by band and speed one is today's period`() {
+    fun `a loop period stretches by band and speed one is the neutral period`() {
         assertEquals(21.08, Tempo.loopPeriodSeconds(17.0, 0.2, 1.0), 1e-9)
         assertEquals(42.16, Tempo.loopPeriodSeconds(17.0, 0.2, 0.5), 1e-9)
         assertEquals(21.08 / 0.75, Tempo.loopPeriodSeconds(17.0, 0.2, 0.75), 1e-9)

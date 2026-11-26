@@ -4,7 +4,7 @@ import kotlin.math.ln
 import kotlin.math.pow
 
 /**
- * Per-packet mappings from a node's own attributes to its note. Each is bounded, and each returns today's constant
+ * Per-packet mappings from a node's own attributes to its note. Each is bounded, and each returns the neutral constant
  * (zero offset, scale 1, four notes) when the attribute is absent.
  */
 object Traits {

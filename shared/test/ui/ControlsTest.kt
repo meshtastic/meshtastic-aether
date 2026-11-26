@@ -8,7 +8,7 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class ControlsTest {
-    // The key table from the brief: H overlay, F fullscreen, Esc, Up and Down volume, M mute, D disconnect.
+    // The key table from the design: H overlay, F fullscreen, Esc, Up and Down volume, M mute, D disconnect.
     @Test
     fun `each documented key maps to its action and other keys map to none`() {
         val table = mapOf(
@@ -72,7 +72,7 @@ class ControlsTest {
         assertFalse(c.overlayOpen)
     }
 
-    // Regression: one stray D ended the installation; the brief now asks for a second press within 3 s.
+    // Regression: one stray D ended the installation; the design asks for a second press within 3 s.
     @Test
     fun `one d does not disconnect and a second within three seconds does`() {
         val c = Controls()
@@ -164,7 +164,7 @@ class ControlsTest {
         assertEquals(0f, fadeIn(-100))
     }
 
-    // Review item 9: 15 s idle closes the overlay, 60 s while Drivers is open; input restarts the idle clock.
+    // 15 s idle closes the overlay, 60 s while Drivers is open; input restarts the idle clock.
     @Test
     fun `the overlay closes after fifteen idle seconds and sixty with drivers open`() {
         assertFalse(overlayExpired(14_999, driversOpen = false))

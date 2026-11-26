@@ -258,7 +258,7 @@ class SceneModel(private val sampleRate: Int) {
     private val driftClock = PhaseClock()
     private val orbBreathClock = PhaseClock()
 
-    /** Multipliers on the period of the cloud breathing, the orb drift and the orb breath; 1.0 is today's. Changing one never jumps its phase. */
+    /** Multipliers on the period of the cloud breathing, the orb drift and the orb breath; 1.0 is neutral. Changing one never jumps its phase. */
     var cloudBreathPeriodScale: Double
         get() = cloudClock.scale
         set(value) { cloudClock.scale = value }

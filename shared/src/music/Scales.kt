@@ -10,12 +10,6 @@ class ScalePicker {
     private var leanStep = 0
     private var pentatonic = false
 
-    /** The step the lean currently holds: -1 darker, 0 none, 1 brighter. */
-    val leaning: Int get() = leanStep
-
-    /** True while the scale is held open to a pentatonic. */
-    val isPentatonic: Boolean get() = pentatonic
-
     fun pick(base: Mode, modeLean: Double, pentatonicBias: Double): Mode {
         val lean = if (modeLean.isFinite()) modeLean.coerceIn(-1.0, 1.0) else 0.0
         val bias = if (pentatonicBias.isFinite()) pentatonicBias.coerceIn(0.0, 1.0) else 0.0

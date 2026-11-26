@@ -55,7 +55,7 @@ class LaunchArgsTest {
         assertEquals(LinkChoice.Replay, parseLaunchArgs(arrayOf("--replay")).link)
     }
 
-    // Review item 15: a fullscreen launch with nothing saved defaults to Projector; a flag or a saved look wins.
+    // A fullscreen launch with nothing saved defaults to Projector; a flag or a saved look wins.
     @Test
     fun `fullscreen defaults to projector only when no flag and nothing is saved`() {
         assertEquals(PaletteChoice.Projector, resolveLook(null, null, fullscreenLaunch = true))
