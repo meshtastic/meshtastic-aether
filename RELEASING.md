@@ -1,6 +1,6 @@
 # Releasing
 
-Aether releases from [`.github/workflows/release.yml`](.github/workflows/release.yml) to a GitHub Release with the Android APK and AAB, a desktop jar per OS and a zipped web build. The release and the snapshots share their build jobs in [`.github/workflows/build-artifacts.yml`](.github/workflows/build-artifacts.yml). Like CI, they only run while the repository is public.
+Aether releases from [`.github/workflows/release.yml`](.github/workflows/release.yml) to a GitHub Release with the Android APK and AAB, a desktop jar per OS and a zipped web build. The release and the snapshots share their build jobs in [`.github/workflows/build-artifacts.yml`](.github/workflows/build-artifacts.yml).
 
 ## Snapshots
 
@@ -42,4 +42,4 @@ The iOS app is not attached: an `.ipa` needs a signing identity and provisioning
 
 ## Updates
 
-Every release and the snapshot carry `update.properties` ([`scripts/update-manifest.sh`](scripts/update-manifest.sh)): the label, the build code, the tag, and per platform the file and its SHA-256. Only a signed APK is listed, since Android refuses an unsigned one over a signed install. A release build reads `releases/latest/download/update.properties`, which skips prereleases; a snapshot build reads the `snapshot` release's. Android verifies the digest, the package name, the signing key and a higher `versionCode` before handing the APK to the system installer, and does nothing for a Play, F-Droid or Amazon install. The desktop jar verifies the digest, keeps the old jar as `<jar>.bak`, swaps the new one in and restarts. The Android build declares `REQUEST_INSTALL_PACKAGES`, which Google Play restricts: an AAB uploaded to Play needs it removed.
+Every release and the snapshot carry `update.properties` ([`scripts/update-manifest.sh`](scripts/update-manifest.sh)): the label, the build code, the tag, and per platform the file and its SHA-256. Only a signed APK is listed, since Android refuses an unsigned one over a signed install. A release build reads `releases/latest/download/update.properties`, which skips prereleases; a snapshot build reads the `snapshot` release's. Android verifies the digest, the package name, the signing key and a higher `versionCode` before handing the APK to the system installer, and does nothing for a Play, F-Droid or Amazon install. The desktop jar verifies the digest, keeps the old jar as `<jar>.bak`, swaps the new one in and restarts. The Android build declares `REQUEST_INSTALL_PACKAGES` and `UPDATE_PACKAGES_WITHOUT_USER_ACTION`. Google Play restricts the first: an AAB uploaded to Play needs it removed.

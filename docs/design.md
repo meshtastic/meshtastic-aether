@@ -32,7 +32,7 @@ Here the mesh is the lobby. The app plays a slow autonomous piece that sounds go
 - Cacophony: a burst never smears. Per-packet notes are capped, expire, and give way to texture when the mesh is busy.
 - A wall of drone: the bed breathes, thins and sometimes nearly stops. Silence is part of the piece.
 - Dashboard look: no charts, node lists or chrome on the scene.
-- Anything leaving the device: no network calls other than the link to the node.
+- Anything leaving the device: the only network traffic is the link to the node and, on Android and desktop builds from CI, the update check against this repository's GitHub releases.
 - Burn-in: nothing static on screen for long.
 
 ## Constraints
@@ -97,13 +97,13 @@ Links per target, picked on the connect screen:
 
 | Target | Links |
 | --- | --- |
-| Desktop | TCP, Bluetooth, WebSocket |
-| Android | Bluetooth, TCP, WebSocket |
+| Desktop | TCP, Bluetooth, USB serial, WebSocket |
+| Android | Bluetooth, TCP, USB serial, WebSocket |
 | iOS | Bluetooth, TCP, WebSocket |
 | Web | WebSocket |
 | All | Demo, replay |
 
-Desktop, Android (including TV) and iOS are the unattended install targets: the last demo, TCP or WebSocket link is remembered and reconnects after a cancelable countdown, and audio starts on launch. Web is a demo and development target: it opens on a "tap to start" screen.
+Desktop, Android (including TV) and iOS are the unattended install targets: the last demo, TCP, USB or WebSocket link is remembered and reconnects after a cancelable countdown, and audio starts on launch. Web is a demo and development target: it opens on a "tap to start" screen.
 
 ### Composer
 
@@ -154,7 +154,7 @@ The `tools` module renders the synth offline to WAV for listening tests.
 
 ### AudioSink
 
-`AudioSink` interface: `start(sampleRate, render: (FloatArray) -> Unit)`, `stop()`, `playbackFrame()`.
+`AudioSink` interface: `sampleRate`, `start(renderer: BlockRenderer)`, `stop()`, `playbackFrame()`.
 
 - Desktop: `javax.sound.sampled.SourceDataLine` on a dedicated thread.
 - Android: `AudioTrack` (float PCM, streaming) on a dedicated thread.
@@ -185,7 +185,7 @@ A standalone repository with these modules:
 
 - Listening gate: one-hour WAV renders at three densities (silent, sparse, busy), judged by ear after composer changes.
 - Composer in common tests, with expected values from music theory and this document: ornament pitches are chord tones of the current chord in the node's band; a node keeps its role across chord changes; chord changes voice-lead (held common tones); no Locrian; slots and TTL hold under a burst of 200 packets; warm-up emits no notes for a snapshot flush; `hop_start == 0` maps to unknown distance; weather scales to the rolling range; a text message triggers a chord change.
-- Synth: the reverb port's impulse response is checked against a reference rendered from the original C++ or Faust's Java backend; no NaN; nothing past the limiter; silence after release; no allocation in the render loop on JVM.
+- Synth: the reverb port's tail length, decay, denormal floor and tank tap are checked; no NaN; nothing past the limiter; silence after release; no allocation in the render loop on JVM.
 - Mesh mapping: hand-built `MeshPacket`s and `FromRadio` frames (from the proto) go through both mappers, including an encrypted frame reaching `PacketHeard` as `Encrypted` and a decoded `FromRadio.packet` being ignored by the raw mapper.
 - Each target makes sound and shows the scene once; iOS runs on a Mac.
 
@@ -209,7 +209,7 @@ Exact presets and timbres, the chord vocabulary and progression rules, the weekd
 Built:
 
 - Mesh, composer, synth and audio sink, with the visual and UI reading the engine, on jvm, android, iOS (source and simulator build) and wasmJs.
-- SDK, simulated, replay and demo sources; a connect screen with TCP, Bluetooth, WebSocket and a saved link with auto-connect.
+- SDK, simulated, replay and demo sources; a connect screen with TCP, Bluetooth, USB serial, WebSocket and a saved link with auto-connect.
 - Clouds-topology reverb, polyBLEP, FM, modal, Karplus-Strong and pitch-shifter voices in pure Kotlin.
 - A file log on desktop, an overlay with key controls, and the `tools` render and analyze commands.
 - Mesh-driven parameters, pass 1: the per-event layer and palettes, `MeshMood` with `ParamValues`, rotation (speed, tilt and wobble, direction), gravity and orbits, the coverage log, the overlay Drivers panel and the demo sweep. A 6 hour run on a Mac against a real mesh held 59.9 fps and 340 MB with no warnings; no person has judged the sound or the visuals from it.
@@ -218,6 +218,6 @@ Not built:
 
 - Mesh-driven parameters, pass 2: the landscape mappings beyond those built (reverb, brightness, detune, ensemble, echo, ornament TTL, pad level, haze, background hue and the rest of the Layer 2 table), which wait on coverage data.
 - A desktop capture mode; replay plays a bundled synthetic capture.
-- USB serial in the UI (the SDK serial transport is linked on jvm and android) and WebSerial.
+- WebSerial.
 - MIDI and OSC output.
 - A run of iOS and web on a device or in a browser, and of Android on a phone or tablet (Android TV has run on a Chromecast with Google TV).

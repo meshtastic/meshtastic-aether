@@ -4,7 +4,7 @@ This project uses the [Kotlin Toolchain](https://kotlin-toolchain.org/) (a dedic
 
 ## Global constraints
 
-- No dependency beyond the meshtastic-sdk, kotlinx-coroutines and JetBrains Compose; anything else is written here on platform APIs, so every audio sink is `expect`/`actual` on platform APIs with no third-party audio library.
+- No dependency beyond the meshtastic-sdk, kotlinx-coroutines and JetBrains Compose, plus `androidx.activity` in the Android entry point; anything else is written here on platform APIs, so every audio sink is `expect`/`actual` on platform APIs with no third-party audio library.
 - Ported code is MIT, BSD, Apache-2.0 or public domain, with its notice in `NOTICE`. Never port Shadertoy code (non-commercial license), Faust `vital_rev` or `kb_rom_rev1` (GPL-3.0-only).
 - `shared/src` (commonMain) is pure Kotlin and compiles for jvm, android, iosArm64, iosSimulatorArm64 and wasmJs.
 - Time is the audio sample counter (`Long` frames); phases and clocks are `Double` or `Long`, never `Float`.
@@ -21,10 +21,10 @@ This project uses the [Kotlin Toolchain](https://kotlin-toolchain.org/) (a dedic
 ## Branding rules
 
 - Colors come from the brand palette in the design standards (`design/standards`, section 7), and `shared/test/theme/PaletteSourceTest.kt` enforces it.
-- The icon is an own glyph with the Meshtastic M mark on its orb. The mark is the official artwork (`meshtastic/design` `logo/svg`, kept as `M_MARK_PATH` in `AetherGlyph.kt` and as paths in `branding/*.svg` and the Android vectors): scale and place it only, in the dark-on-green colorway; never redraw, distort or recolor it.
+- The icon is its own glyph with the Meshtastic M mark on its orb. The mark is the official artwork (`meshtastic/design` `logo/svg`, kept as `M_MARK_PATH` in `AetherGlyph.kt` and as paths in `branding/*.svg` and the Android vectors): scale and place it only, in the dark-on-green colorway; never redraw, distort or recolor it.
 - `branding/*.svg` are the sources, and `scripts/icons.sh` regenerates every raster asset; the Android icon is hand-ported XML.
 - The theme is dark-only, a documented waiver of the light theme and dynamic color.
-- The app is called `Aether` in every string, title, manifest and doc. `Meshtastic` appears once, in the README trademark line. Identifiers keep the long form: `org.meshtastic.aether`, the `meshtastic-aether` repository and artifact names, and the `MeshtasticAether` log folder and Android log tag.
+- The app is called `Aether` in every string, title, manifest and doc, never `Meshtastic Aether`. `Meshtastic` names the network, the project and the mark, with the trademark line in the README. Identifiers keep the long form: `org.meshtastic.aether`, the `meshtastic-aether` repository and artifact names, and the `MeshtasticAether` log folder and Android log tag.
 
 ## Behavior that holds
 
@@ -51,7 +51,7 @@ This project uses the [Kotlin Toolchain](https://kotlin-toolchain.org/) (a dedic
 
 The contracts `MeshEvent.kt`, `NoteEvent.kt` and `AudioSink.kt` change only on purpose, with every consumer updated.
 
-Launch flags: `--demo`, `--replay`, `--tcp host[:port]`, `--ask`, `--fullscreen`, `--look standard|projector|oled` (`shared/src/ui/LaunchArgs.kt`); `--ask` shows the connect screen and ignores the saved link and any `--demo`, `--replay` or `--tcp`. Volume, mute and the headphone mode persist in `Settings`; the master fades in over 3 s each session. Android takes the same flags as intent extras (`launchArgsFrom` in `androidApp/src/MainActivity.kt`).
+Launch flags: `--demo`, `--replay`, `--tcp host[:port]`, `--serial PORT`, `--ask`, `--fullscreen`, `--look standard|projector|oled` (`shared/src/ui/LaunchArgs.kt`); `--ask` shows the connect screen and ignores the saved link and any `--demo`, `--replay`, `--tcp` or `--serial`. Volume, mute, the headphone mode and the look persist in `Settings`; the master fades in over 3 s each session. Android takes the same flags as intent extras (`launchArgsFrom` in `androidApp/src/MainActivity.kt`).
 
 ## UI rules
 
@@ -70,7 +70,7 @@ Launch flags: `--demo`, `--replay`, `--tcp host[:port]`, `--ask`, `--fullscreen`
 
 ```sh
 ./kotlin build                          # every target that compiles on this OS
-./kotlin test -m shared -p jvm          # shared tests; add -p wasmJs when shared tests changed
+./kotlin test -m shared -p jvm          # shared tests; add -p wasmJs when shared code changed
 ./kotlin test -m tools -p jvm
 ./kotlin run -m desktopApp
 ./kotlin run -m tools -- sparse 1 /tmp/sparse.wav
@@ -79,9 +79,9 @@ Launch flags: `--demo`, `--replay`, `--tcp host[:port]`, `--ask`, `--fullscreen`
 
 iOS builds only on a Mac: `./kotlin build -m iosApp`.
 
-## Agent build rule
+## One build at a time
 
-In the agent workspace run every build and test as `flock /tmp/meshtastic-aether-kotlin.lock ./kotlin <args>` from the repo root, one at a time, with `KOTLIN_CLI_NO_WELCOME_BANNER=1`. Never run `git commit`, `git add`, `git checkout`, `git reset` or `git stash`; edit only the paths you own. The lock file is any path every agent shares; `/tmp/meshtastic-aether-kotlin.lock` is the one used here.
+Run one `./kotlin` build or test at a time per checkout, with `KOTLIN_CLI_NO_WELCOME_BANNER=1` for clean output. Agents that share a checkout serialize on a lock every one of them uses (`flock <lock file> ./kotlin <args>`), edit only the paths they were given, and leave staging and commits to whoever coordinates them.
 
 ## Test rules
 

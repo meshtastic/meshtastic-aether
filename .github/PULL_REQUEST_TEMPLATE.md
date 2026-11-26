@@ -21,8 +21,8 @@ Fill out each section and delete any that don't apply.
 ## Affirmations
 
 - [ ] Every commit is signed off (DCO, `git commit -s`).
-- [ ] I have read [`CONTRIBUTING.md`](../CONTRIBUTING.md).
-- [ ] A listener-visible or operator-visible change has an entry under `## [Unreleased]` in `CHANGELOG.md`.
+- [ ] I have read [`CONTRIBUTING.md`](https://github.com/meshtastic/meshtastic-aether/blob/main/CONTRIBUTING.md).
+- [ ] A listener-visible or operator-visible change adds a fragment to `changelog.d/` (`scripts/changelog.sh check` passes).
 - [ ] `./kotlin check` passes locally, and `./kotlin test -m shared -p wasmJs` passes if shared code changed.
 
 ## How was this verified?

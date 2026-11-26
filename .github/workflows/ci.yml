@@ -1,7 +1,6 @@
 name: CI
 
-# Off while the repository is private: every job is gated on it being public, so a private repo spends no
-# Actions minutes and the checks switch on by themselves when the visibility changes.
+# Every job is skipped in a private repository, so a private copy spends no Actions minutes.
 on:
   push:
     branches: [main]

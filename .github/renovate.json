@@ -22,7 +22,7 @@
   ],
   "packageRules": [
     {
-      "description": "No required check gates merges yet: CI runs only once the repository is public. Nothing automerges until CI is a required check on main; remove this rule then.",
+      "description": "No required check gates merges yet. Nothing automerges until CI is a required check on main; remove this rule then.",
       "matchPackageNames": ["*"],
       "automerge": false
     },

@@ -1,13 +1,13 @@
 name: Feature request
 description: Suggest an addition or change.
 title: "[feature] "
-labels: ["enhancement", "needs-triage"]
+labels: ["enhancement"]
 body:
   - type: markdown
     attributes:
       value: |
         For a larger design change, open an issue to discuss it before writing code.
-        [`AGENTS.md`](../../AGENTS.md) lists the constraints a change has to respect.
+        [`AGENTS.md`](https://github.com/meshtastic/meshtastic-aether/blob/main/AGENTS.md) lists the constraints a change has to respect.
 
   - type: textarea
     id: problem

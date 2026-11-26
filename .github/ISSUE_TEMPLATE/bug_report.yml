@@ -1,19 +1,19 @@
 name: Bug report
 description: Something isn't working as documented.
 title: "[bug] "
-labels: ["bug", "needs-triage"]
+labels: ["bug"]
 body:
   - type: markdown
     attributes:
       value: |
         Fill in as much of the form as you can.
-        For security issues, do not file here: see [`SECURITY.md`](../../SECURITY.md).
+        For security issues, do not file here: see [`SECURITY.md`](https://github.com/meshtastic/meshtastic-aether/blob/main/SECURITY.md).
 
   - type: input
     id: app-version
     attributes:
       label: App version
-      description: A release version or a commit SHA
+      description: The version in the downloaded file name (aether-X.Y.Z-...), or the commit SHA for a source build
       placeholder: "0.1.0"
     validations:
       required: true
@@ -40,6 +40,7 @@ body:
       options:
         - TCP
         - Bluetooth
+        - USB
         - WebSocket
         - Demo
     validations:
@@ -91,5 +92,5 @@ body:
       options:
         - label: I have searched existing issues and this isn't a duplicate.
           required: true
-        - label: I have read [`SECURITY.md`](../../SECURITY.md) and confirmed this is not a security-sensitive issue.
+        - label: I have read [`SECURITY.md`](https://github.com/meshtastic/meshtastic-aether/blob/main/SECURITY.md) and confirmed this is not a security-sensitive issue.
           required: true

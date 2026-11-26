@@ -12,13 +12,16 @@ Aether is pre-1.0. Only the latest published release receives security fixes, an
 
 ## Scope
 
-The app only listens. It connects to a node over TCP, Bluetooth or WebSocket, stores a saved link, the volume and mute, the headphone mode and the palette choice on the device, writes a local log, and sends nothing to the mesh. The security surface is the data it accepts from a node and what it keeps locally.
+The app only listens. It connects to a node over TCP, Bluetooth, USB serial or WebSocket, stores a saved link, the volume and mute, the headphone mode and the palette choice on the device, writes a local log, and sends nothing to the mesh. Android and desktop builds from CI also fetch `update.properties` from this repository's GitHub releases, and download the build it names only when asked. The security surface is the data it accepts from a node, what it keeps locally and the update.
+
+An update is trusted as far as HTTPS and this repository's releases are: the manifest carries each file's SHA-256, and the file must match it. On Android the package must also carry the installed app's signing key and a higher version code. The desktop jar is not signed, so its digest guards against a damaged download, not against a replaced release. `AETHER_UPDATE_MANIFEST` points the check at another manifest for testing, and whoever sets it chooses what is installed.
 
 In scope:
 
 - Handling of hostile or malformed data from a node link: packets, node information and telemetry that crash the app, exhaust memory or stall the audio.
 - The saved link and the local log: contents that should not be stored, or that leave the device.
-- Any network traffic other than the link to the node the user chose.
+- Any network traffic other than the link to the node the user chose and the update check.
+- The update: manifest parsing, download verification and the install.
 - Build infrastructure and dependency sources.
 
 Out of scope, so report to the upstream owner:

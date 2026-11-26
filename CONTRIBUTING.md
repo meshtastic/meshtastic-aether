@@ -53,7 +53,7 @@ The Kotlin Toolchain is in alpha, so commands can change between versions. `./ko
 Clone:
 
 ```shell
-git clone git@github.com:meshtastic/meshtastic-aether.git
+git clone https://github.com/meshtastic/meshtastic-aether.git
 cd meshtastic-aether
 ```
 
@@ -76,7 +76,7 @@ cd meshtastic-aether
 
 ## CI and dependency updates
 
-`.github/workflows/ci.yml` runs the same gate as above on Linux (build every module, shared tests on JVM and Wasm, tools tests, and the Kotlin/Native test-name check) and the shared tests on the iOS simulator on macOS. Every job is gated on the repository being public, so it spends no minutes while private and switches on at the visibility change. The `./kotlin` wrapper provisions the toolchain and its JDK, and CI caches both under `~/kotlin-cache`.
+`.github/workflows/ci.yml` runs the same gate as above on Linux (build every module, shared tests on JVM and Wasm, tools tests, the Kotlin/Native test-name check and the changelog fragment check) and the shared tests on the iOS simulator on macOS. The `./kotlin` wrapper provisions the toolchain and its JDK, and CI caches both under `~/kotlin-cache`.
 
 Renovate follows `.github/renovate.json`, which extends the org's `kmp-library` policy. Nothing automerges until CI is a required check on `main`. Kotlin and Compose in `common.module-template.yaml` are read by regex managers and grouped with the catalog, and Kotlin stays on the meshtastic-sdk's compiler. Update the toolchain itself with `./kotlin update`, which rewrites the wrapper's version and checksum together.
 
@@ -122,7 +122,7 @@ Aether is GPL-3.0-or-later, so ported code must be MIT, BSD, Apache-2.0, public 
 
 ## Reporting bugs and security issues
 
-Open an issue from the bug template. It asks for the app version, the platform (desktop, Android, iOS or web), the link type (TCP, Bluetooth, WebSocket or demo) and the node's firmware version. Attach the relevant lines of the log; [`README.md`](README.md#logs) says where it is.
+Open an issue from the bug template. It asks for the app version, the platform (desktop, Android, iOS or web), the link type (TCP, Bluetooth, USB, WebSocket or demo) and the node's firmware version. Attach the relevant lines of the log; [`README.md`](README.md#logs) says where it is.
 
 Don't open a public issue for a security problem. File a private GitHub Security Advisory as [`SECURITY.md`](SECURITY.md) describes.
 

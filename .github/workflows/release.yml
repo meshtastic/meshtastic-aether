@@ -2,7 +2,7 @@ name: Release
 
 # Cut a release on main with `scripts/changelog.sh cut X.Y.Z` and `scripts/version.sh set X.Y.Z`, merge it, then
 # dispatch this workflow with the version or push the vX.Y.Z tag. Every check runs before anything is tagged, so a
-# refused release leaves no tag behind. Off while the repository is private, like CI. Process: RELEASING.md.
+# refused release leaves no tag behind. Skipped in a private repository, like CI. Process: RELEASING.md.
 on:
   push:
     tags:

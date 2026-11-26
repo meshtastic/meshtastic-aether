@@ -3,7 +3,7 @@ name: Snapshot
 # After CI passes on a push to main, build that commit and move the rolling `snapshot` prerelease to it. The release
 # is updated in place, with update.properties uploaded after every file it names, so the app's update check never
 # meets a missing manifest or a manifest naming a file not yet there.
-# Off while the repository is private: CI skips there, so nothing ever passes to trigger this.
+# Skipped in a private repository, like CI.
 on:
   workflow_run:
     workflows: [CI]

@@ -9,7 +9,7 @@ Meshtastic® is a registered trademark of Meshtastic LLC. Aether is a Meshtastic
 
 ## What this is
 
-A Compose Multiplatform app on the [meshtastic-sdk](https://github.com/meshtastic/meshtastic-sdk), built with the [Kotlin Toolchain](https://kotlin-toolchain.org). It connects to a node over TCP, Bluetooth or WebSocket, or plays a scripted demo mesh, and turns what it hears into a generative score and a slowly rotating cloud of nodes. The piece sounds complete with no traffic at all; the mesh perturbs it.
+A Compose Multiplatform app on the [meshtastic-sdk](https://github.com/meshtastic/meshtastic-sdk), built with the [Kotlin Toolchain](https://kotlin-toolchain.org). It connects to a node over TCP, Bluetooth, USB serial or WebSocket, or plays a scripted demo mesh, and turns what it hears into a generative score and a slowly rotating cloud of nodes. The piece sounds complete with no traffic at all; the mesh perturbs it.
 
 The score and the instruments are synthesized in pure Kotlin on every target, with a per-platform audio output. The app has no dashboard, charts or node lists on the scene.
 
@@ -36,7 +36,7 @@ The 90 second demo above has sound. Below, the scene while it listens to a gener
 ./kotlin test -m shared -p jvm                  # shared tests (wasmJs: -p wasmJs)
 ```
 
-[Releases](https://github.com/meshtastic/meshtastic-aether/releases) carry the Android APK and AAB, a desktop jar for Linux and for macOS (run it with Java 25: `java -jar aether-X.Y.Z-desktop-<os>.jar`) and a zipped web build to serve from any static host. The `snapshot` prerelease carries the same files built from the latest `main` that passed CI. The `./kotlin` wrapper downloads the Kotlin Toolchain on first use. [`CONTRIBUTING.md`](CONTRIBUTING.md) lists the build and test commands.
+[Releases](https://github.com/meshtastic/meshtastic-aether/releases) carry the Android APK and AAB, a desktop jar for Linux x64 and for Apple silicon macOS (run it with Java 25: `java -jar aether-X.Y.Z-desktop-linux-x64.jar`; build any other desktop from source) and a zipped web build to serve from any static host. The `snapshot` prerelease carries the same files built from the latest `main` that passed CI. The `./kotlin` wrapper downloads the Kotlin Toolchain on first use. [`CONTRIBUTING.md`](CONTRIBUTING.md) lists the build and test commands.
 
 ### Android TV and Google TV
 
@@ -59,13 +59,13 @@ The connect screen opens on a connected group of toggle buttons that picks one l
 - Network: a host field and a port field (digits only; a blank port means 4403), then Connect over TCP. `--tcp host[:port]` connects at launch on desktop, and the `tcp` intent extra does the same on Android.
 - Bluetooth: Scan for Bluetooth radios lists each node by name, the last five characters of its address and a signal word (Strong, Good, Fair, Weak or Signal unknown). Tapping a radio connects, so this pane has no connect button.
 - USB: Find USB radios lists the serial ports present, likely Meshtastic boards first, each by its board name (on Linux from its `/dev/serial/by-id` name, since many boards report the same USB product) and port. Tapping one connects, and the link is saved: on Linux it is saved by its stable `/dev/serial/by-id` path. Android asks for USB permission for each device the first time. `--serial PORT` opens a port at launch.
-- WebSocket: a `ws://` or `wss://` address, prefilled with the firmware's WebSocket phone API: `wss://meshtastic.local/api/v1/ws` on web, `ws://meshtastic.local/api/v1/ws` in the native apps, which would refuse a stock node's self-signed certificate (ESP32 firmware serves it on port 443 and 80, meshtasticd on its web server port). A page served over HTTPS, such as a hosted web app, may only open `wss://`, so the browser must trust the node's certificate: open `https://<node>/` once to accept its self-signed one.
+- WebSocket: a `ws://` or `wss://` address, prefilled with the firmware's WebSocket phone API: `wss://meshtastic.local/api/v1/ws` on web, `ws://meshtastic.local/api/v1/ws` in the native apps, which would refuse a stock node's self-signed certificate (ESP32 firmware serves it on ports 443 and 80, meshtasticd on its web server port). A page served over HTTPS, such as a hosted web app, may only open `wss://`, so the browser must trust the node's certificate: open `https://<node>/` once to accept its self-signed one.
 - A connect button stays disabled while its fields are invalid, and the field says why. The Go key on the keyboard submits from the TCP port and the WebSocket address.
 - An unreachable host shows `Can't reach host:port - retrying` in the status line, and the raw error goes to the log. A link that fails to start shows its reason on the connect screen.
 
-Desktop, Android and iOS remember the last demo, TCP or WebSocket link. On the next launch a banner reads `Connecting to host:port in N s` (or `Starting the demo in N s`) over a wavy progress bar that fills across 5 s, with Connect now and Cancel. Connect now starts whatever the screen shows, and it is absent while the fields are invalid or Bluetooth is selected. Cancel stops the countdown, and so does any edit to a field or any change of link type. A Bluetooth pick and `--replay` are not saved and leave the saved link as it was.
+Desktop, Android and iOS remember the last demo, TCP, USB or WebSocket link. On the next launch a banner reads `Connecting to host:port in N s` (or `Starting the demo in N s`) over a wavy progress bar that fills across 5 s, with Connect now and Cancel. Connect now starts whatever the screen shows, and it is absent while the fields are invalid or Bluetooth or USB is selected. Cancel stops the countdown, and so does any edit to a field or any change of link type. A Bluetooth pick and `--replay` are not saved and leave the saved link as it was.
 
-`--ask` shows the connect screen with no countdown: it ignores the saved link and any `--demo`, `--replay` or `--tcp` on the same command line. A bad `--tcp` or `--look` value shows its error and starts no link.
+`--ask` shows the connect screen with no countdown: it ignores the saved link and any `--demo`, `--replay`, `--tcp` or `--serial` on the same command line. A bad `--tcp`, `--serial` or `--look` value shows its error and starts no link.
 
 The layout follows the window width. Under 600 dp it is one column with the connect button pinned to the bottom. From 600 to 839 dp the column is capped at 560 dp and the host and port fields sit side by side. At 840 dp and wider, or in a window shorter than 480 dp, it splits into two panes: the glyph, name, tagline and countdown banner on one side, and a card with the link types and fields on the other.
 
@@ -80,7 +80,8 @@ The HUD has a status card at the top left (link, node count, key and mode, secti
 - Look: one button that shows the current look's icon and opens a menu of Standard, Projector and OLED night, each with its icon and a check on the selected one. The HUD stays up while the menu is open.
 - Headphones: a toggle that places the dry voices to the side of the head instead of panning them for speakers. It is remembered and eases in over a fraction of a second. Leave it off for speakers, where the delay and shading sound wrong.
 - Drivers: a toggle that lists each mesh-driven parameter with its live value and driver. The panel sits at the right on windows 840 dp and wider, and above the toolbar (up to half the window height) on narrower ones.
-- Fullscreen: on desktop, and on Android phones and tablets, where it shows or hides the system bars. Hidden on a TV.
+- Fullscreen: on desktop, on web, and on Android phones and tablets, where it shows or hides the system bars. Hidden on a TV.
+- Update: shown only when a newer build is out. It opens a panel with Install on Android, Install and restart on the desktop jar, or a link to the download page.
 - Disconnect: the power glyph, in the error color.
 
 Under 600 dp the toolbar splits into two rows, volume and look above the actions. With a keyboard each button shows a tooltip with its name.
@@ -132,9 +133,9 @@ The palette is about 15 instruments, 8 scales (never Locrian) and 4 tempo bands.
 
 ## Branding
 
-The icon is an own glyph in the brand palette: a luminous green orb with a tilted orbit ring and bright nodes, with the Meshtastic M mark on the orb. The mark is the official artwork from `meshtastic/design` (`logo/svg`), only scaled and placed, in its official dark-on-green colorway; it is never redrawn, distorted or recolored. On the Android themed icon, which is one tint, it is cut out of the orb. The sources are `branding/icon.svg`, `branding/icon-small.svg` and `branding/icon-foreground.svg`, and `scripts/icons.sh` regenerates the iOS, desktop and web raster assets and the Android TV banner from them. The Android icon is hand-ported VectorDrawable XML that follows the foreground source.
+The icon is its own glyph in the brand palette: a luminous green orb with a tilted orbit ring and bright nodes, with the Meshtastic M mark on the orb. The mark is the official artwork from `meshtastic/design` (`logo/svg`), only scaled and placed, in its official dark-on-green colorway; it is never redrawn, distorted or recolored. On the Android themed icon, which is one tint, it is cut out of the orb. The sources are `branding/icon.svg`, `branding/icon-small.svg` and `branding/icon-foreground.svg`, and `scripts/icons.sh` regenerates the iOS, desktop and web raster assets and the Android TV banner from them. The Android icon is hand-ported VectorDrawable XML that follows the foreground source.
 
-The app is dark-only by design: it is a calm projector and night piece. The design standards ask for light and dark themes and for dynamic color on Android 12+, and both are waived here. The app is called `Aether`. `Meshtastic` is named once, in the trademark line at the top; the identifiers (`org.meshtastic.aether`, the `meshtastic-aether` repository and file names, the `MeshtasticAether` log folder and tag) keep the long form.
+The app is dark-only by design: it is a calm projector and night piece. The design standards ask for light and dark themes and for dynamic color on Android 12+, and both are waived here. The app is called `Aether`, never `Meshtastic Aether`: `Meshtastic` names the network, the project and the mark, and the identifiers (`org.meshtastic.aether`, the `meshtastic-aether` repository and file names, the `MeshtasticAether` log folder and tag) keep the long form.
 
 ## Logs
 
@@ -159,6 +160,10 @@ The render tool runs the simulated mesh through the composer and synth offline. 
 - Silent on web: browsers block audio until a gesture, so tap the start screen.
 - No sound on desktop: check M (mute) and the volume in the HUD.
 
+## Updates and privacy
+
+Aether only listens: it sends nothing to the mesh. It keeps the saved link, the last link type, the volume, mute, headphone mode and look on the device, and writes a local log. Android and desktop builds from [Releases](https://github.com/meshtastic/meshtastic-aether/releases) check this repository's releases for a newer build of their own channel shortly after launch and then daily, and download one only when asked. Store installs, iOS, the web build and local builds never check.
+
 ## Verified on
 
 | Target | Built | Tests | Run |
@@ -170,8 +175,10 @@ The render tool runs the simulated mesh through the composer and synth offline. 
 | Android phone or tablet | compiles | - | never run |
 | iOS | shared compiles for the simulator | see `docs/design.md` | never run |
 | Bluetooth | - | - | not exercised on a live node |
+| USB serial | - | port labels tested | not exercised on a live node |
+| Self-update | - | manifest, digest and signer checks tested | desktop jar on Linux against a local manifest: checked, installed and restarted on the new build; the Android install was never run on a device |
 
-The live run was watched through the log and frame statistics; no person has judged the sound or the visuals from it. The real mesh sent no pressure or wind reports (6 nodes with temperature, 20 with battery), so those paths are proven only by tests and the demo.
+The live run was watched through the log and frame statistics; nobody sat through it to judge the sound or the visuals. The real mesh sent no pressure or wind reports (6 nodes with temperature, 20 with battery), so those paths are proven only by tests and the demo.
 
 ## Documentation
 
@@ -179,6 +186,9 @@ The live run was watched through the log and frame statistics; no person has jud
 - [`docs/mesh-driven-parameters.md`](docs/mesh-driven-parameters.md): how the mesh turns the parameters.
 - [`docs/prior-art.md`](docs/prior-art.md): the survey of prior work and licenses behind the design.
 - [`AGENTS.md`](AGENTS.md): architecture and rules for coding agents.
+- [`RELEASING.md`](RELEASING.md): versions, snapshots, the release workflow and the update manifest.
+- [`SECURITY.md`](SECURITY.md): how to report a vulnerability, and what is in scope.
+- [`CHANGELOG.md`](CHANGELOG.md): what changed in each release.
 - [`CONTRIBUTING.md`](CONTRIBUTING.md): build, test and submit a change.
 
 ## Credits
