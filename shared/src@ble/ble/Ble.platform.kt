@@ -7,8 +7,8 @@ import org.meshtastic.sdk.transport.ble.BleScanner
 import org.meshtastic.sdk.transport.ble.BleTransport
 import org.meshtastic.sdk.transport.ble.DiscoveredRadio
 
-actual fun bleSupported(): Boolean = true
+internal actual fun bleSupported(): Boolean = true
 
 actual fun bleScan(): Flow<BleRadio>? = BleScanner.scan().map { BleRadio(it.name, it.rssi, it.address, it) }
 
-actual fun createBleTransport(radio: BleRadio): RadioTransport? = BleTransport(radio.handle as DiscoveredRadio)
+internal actual fun createBleTransport(radio: BleRadio): RadioTransport? = BleTransport(radio.handle as DiscoveredRadio)

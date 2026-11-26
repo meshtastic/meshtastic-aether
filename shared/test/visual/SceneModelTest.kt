@@ -116,8 +116,10 @@ class SceneModelTest {
         assertEquals(1, s.ripples.size)
     }
 
+    // Brief: the idle core is at least 0.35 when seen and never decays below 0.2; a flash still tops 0.8.
+    // Changed from the old test, which expected the glow to reach zero after three hours.
     @Test
-    fun `glow flashes at a packet and fades with silence`() {
+    fun `glow flashes at a packet and settles on an idle floor that never vanishes`() {
         val s = scene()
         s.onEvent(seen(4, at(300.0, 0.0)), 0)
         s.onEvent(heard(4), 1_000)
@@ -128,9 +130,176 @@ class SceneModelTest {
         val tenMinutes = s.glow(orb)
         s.update(1_000 + sr * 3 * 3600)
         val threeHours = s.glow(orb)
+        s.update(1_000 + sr * 100 * 3600)
+        val longAfter = s.glow(orb)
         assertTrue(flash > 0.8, "flash $flash")
         assertTrue(flash > tenMinutes && tenMinutes > threeHours)
-        assertTrue(threeHours < 0.01)
+        assertTrue(threeHours >= 0.2 && longAfter >= 0.2, "floor $threeHours $longAfter")
+        assertEquals(0.2, longAfter, 0.005)
+    }
+
+    // Regression: on a sparse mesh nearly every orb sat near zero within 30 minutes (review: idle 0.35, floor 0.2).
+    @Test
+    fun `a node that was only seen starts at the idle core and a day later is still at the floor`() {
+        val s = scene()
+        s.onEvent(seen(4, at(300.0, 0.0)), 0)
+        s.update(0)
+        val orb = s.orbs.first()
+        assertEquals(SceneModel.IDLE_CORE, s.glow(orb), 1e-9)
+        assertTrue(SceneModel.IDLE_CORE >= 0.35)
+        s.update(sr * 1800)
+        assertTrue(s.glow(orb) > 0.25, "half an hour in: ${s.glow(orb)}")
+        s.update(sr * 24 * 3600)
+        assertEquals(0.2, s.glow(orb), 0.001)
+    }
+
+    private fun note(node: Long?, at: Long = 0L, velocity: Float = 0.8f) =
+        org.meshtastic.ambient.music.NoteEvent(at, org.meshtastic.ambient.music.Voice.Bell, 440.0, velocity, 0f, 0f, 1000, 0.5f, node)
+
+    // Regression: memory and motif notes sounded with no visual (review: only packets drew).
+    @Test
+    fun `a note with a node pulses that orb at its frame and no other`() {
+        val s = scene()
+        s.onEvent(seen(1, at(300.0, 0.0)), 0)
+        s.onEvent(seen(2, at(300.0, 90.0)), 0)
+        s.update(0)
+        val one = s.orb(1)!!
+        val two = s.orb(2)!!
+        val before = s.glow(one)
+        s.onNote(note(1), 10_000)
+        s.update(9_999)
+        assertEquals(before, s.glow(one), 1e-3)
+        s.update(10_000)
+        assertTrue(s.glow(one) > before + 0.2, "pulse ${s.glow(one)} vs $before")
+        assertEquals(before, s.glow(two), 1e-3)
+        s.update(10_000 + sr * 30)
+        assertEquals(s.glow(two), s.glow(one), 1e-3)
+    }
+
+    @Test
+    fun `a note without a node or for an unknown node changes nothing and does not crash`() {
+        val s = scene()
+        s.onEvent(seen(1, at(300.0, 0.0)), 0)
+        s.update(0)
+        val g = s.glow(s.orb(1)!!)
+        s.onNote(note(null), 0)
+        s.onNote(note(999), 0)
+        s.update(100)
+        assertEquals(g, s.glow(s.orb(1)!!), 1e-6)
+    }
+
+    private fun texture(rootHz: Double, pad: Float) = org.meshtastic.ambient.music.Texture(
+        rootHz, 0.5f, 0.5f, 0.5f, 0.2f, 0.2f, 0.1f, mapOf(org.meshtastic.ambient.music.Voice.Pad to pad),
+    )
+
+    // Regression: chords and pads had no visual; the background hue must follow the key slowly.
+    // Root A (220 Hz) is pitch class 9 of 12 from C: sin(2 pi 9/12) = -1 so the target is -24 degrees.
+    @Test
+    fun `a texture shifts the hue slowly toward its key and the pad level eases in`() {
+        val s = scene()
+        s.onTexture(texture(220.0, 0.8f))
+        s.update(0)
+        s.update(sr)
+        assertTrue(s.hueShift < 0.0 && s.hueShift > -2.0, "one second in: ${s.hueShift}")
+        assertTrue(s.padLevel in 0.01..0.3)
+        s.update(sr * 600)
+        assertEquals(-24.0, s.hueShift, 0.5)
+        assertEquals(0.8, s.padLevel, 0.01)
+    }
+
+    @Test
+    fun `with pad level the field breathes and with none it holds still`() {
+        val s = scene()
+        s.onTexture(texture(261.6255653005986, 0.9f))
+        s.update(sr * 600)
+        val samples = (0 until 110).map { s.fieldBreath(it * 0.1) }
+        assertTrue(samples.max() - samples.min() > 0.2, "range ${samples.max() - samples.min()}")
+        val quiet = scene()
+        assertTrue((0 until 110).all { quiet.fieldBreath(it * 0.1) == 1.0 })
+    }
+
+    // Regression: with no traffic the screen was a static gradient; orbs breathe on their own periods.
+    @Test
+    fun `orbs breathe and different nodes do not breathe in step`() {
+        val s = scene()
+        val a = (0 until 200).map { s.breath(0x1234, it * 0.1) }
+        assertTrue(a.max() - a.min() > 0.1)
+        assertTrue(a.all { it in 0.84..1.0 })
+        assertTrue((0 until 200).any { kotlin.math.abs(s.breath(0x1234, it * 0.1) - s.breath(0x5678, it * 0.1)) > 0.05 })
+    }
+
+    // Brief: disconnected look: the field desaturates and the anchor pulses more slowly.
+    @Test
+    fun `unlinked desaturates the field and slows the anchor and relinking restores it`() {
+        val s = scene()
+        s.update(0)
+        assertEquals(1.0, s.saturation, 1e-9)
+        s.linked = false
+        s.update(sr * 60)
+        assertTrue(s.saturation < 0.25, "sat ${s.saturation}")
+        s.linked = true
+        s.update(sr * 120)
+        assertTrue(s.saturation > 0.95)
+
+        fun cycles(linked: Boolean): Int {
+            val m = scene()
+            m.linked = linked
+            var peaks = 0
+            var prev = m.anchorBreath
+            var rising = false
+            for (i in 1..320) {
+                m.update(sr * i / 10)
+                val b = m.anchorBreath
+                if (rising && b < prev) peaks++
+                rising = b > prev
+                prev = b
+            }
+            return peaks
+        }
+        assertEquals(4, cycles(true), "32 s at an 8 s period")
+        assertEquals(2, cycles(false), "32 s at a 16 s period")
+    }
+
+    // Regression: 200 nodes at one spot stacked into one white blob; orbs keep a minimum separation on a 16:9 screen.
+    @Test
+    fun `200 nodes at the same place spread to the minimum separation inside the ellipse`() {
+        val s = scene()
+        s.aspect = 16.0 / 9.0
+        val here = at(50.0, 10.0)
+        for (i in 1L..200L) s.onEvent(seen(0x100000L + i * 7919, here), 0)
+        s.update(0)
+        val list = s.orbs.toList()
+        var worst = Double.MAX_VALUE
+        for (i in list.indices) for (j in i + 1 until list.size) {
+            worst = minOf(worst, hypot((list[i].x - list[j].x) * s.aspect, list[i].y - list[j].y))
+        }
+        assertTrue(worst >= SceneModel.MIN_SEPARATION - 1e-9, "closest pair $worst")
+        assertTrue(list.all { hypot(it.x, it.y) <= 1.0 + 1e-9 })
+        val screenW = list.maxOf { kotlin.math.abs(it.x) } * s.aspect
+        val screenH = list.maxOf { kotlin.math.abs(it.y) }
+        assertTrue(screenW / screenH in 0.7..1.4, "the blob is round on screen: $screenW by $screenH")
+    }
+
+    @Test
+    fun `orbs that are already apart do not move when a later node collides`() {
+        fun build(withCollider: Boolean): SceneModel {
+            val m = scene()
+            m.onEvent(seen(1, at(1000.0, 0.0)), 0)
+            m.onEvent(seen(2, at(1000.0, 180.0)), 0)
+            m.onEvent(seen(3, at(400.0, 90.0)), 0)
+            if (withCollider) m.onEvent(seen(4, at(400.0, 90.0)), 0)
+            m.update(0)
+            return m
+        }
+        val alone = build(false)
+        val crowded = build(true)
+        for (n in 1L..3L) {
+            assertEquals(alone.orb(n)!!.x, crowded.orb(n)!!.x, 1e-9)
+            assertEquals(alone.orb(n)!!.y, crowded.orb(n)!!.y, 1e-9)
+        }
+        val a = crowded.orb(3)!!
+        val b = crowded.orb(4)!!
+        assertTrue(hypot(a.x - b.x, a.y - b.y) >= SceneModel.MIN_SEPARATION - 1e-9)
     }
 
     @Test

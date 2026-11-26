@@ -6,7 +6,6 @@ apply:
 dependencies:
   - //shared
   - $compose.desktop.currentOs
-  - $compose.preview
   - $libs.kotlinx.coroutines.swing
 
 settings:

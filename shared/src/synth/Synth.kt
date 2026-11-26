@@ -338,7 +338,8 @@ class Synth(val sampleRate: Int) : NoteSink, BlockRenderer {
         private const val SMOOTH_SECONDS = 2.0f
         private const val INPUT_GAIN = 0.3f
         private const val WET_GAIN = 1.0f
-        private const val MASTER_GAIN = 0.25f
+        /** 0.25 plus about 8 dB of makeup, applied ahead of the limiter whose ceiling is unchanged. */
+        private const val MASTER_GAIN = 0.63f
         private const val NOISE_LEVEL = 0.08f
     }
 }

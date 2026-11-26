@@ -59,22 +59,43 @@ class SynthTest {
         assertTrue(out.peak() > 0.2f, "scenario is silent: ${out.peak()}")
     }
 
-    // Regression: no headroom means one chord of drone and pad at full velocity already sits near full scale.
+    // Regression: with the +8 dB makeup a bed at the composer's own velocities must still leave headroom under the limiter for ornaments.
     @Test
-    fun `a single full velocity drone and pad bed stays under minus six dBFS`() {
+    fun `a drone and four pad bed at the composer velocities stays under minus two dBFS`() {
         val synth = Synth(rate)
-        synth.schedule(controls(0, texture(brightness = 0.5f, size = 0.5f, wet = 1f, detune = 0.5f)))
+        synth.schedule(controls(0, texture(brightness = 0.5f, size = 0.5f, wet = 0.6f, detune = 0.5f)))
         synth.schedule(
             notes(
-                note(Voice.Drone, 0, 110.0, 1f, 60.0, send = 1f),
-                note(Voice.Pad, 0, 110.0, 1f, 60.0, send = 1f),
-                note(Voice.Pad, 0, 165.0, 1f, 60.0, send = 1f),
+                note(Voice.Drone, 0, 110.0, 0.7f, 60.0, send = 0.5f),
+                note(Voice.Pad, 0, 220.0, 0.5f, 60.0, send = 0.6f),
+                note(Voice.Pad, 0, 275.0, 0.5f, 60.0, send = 0.6f),
+                note(Voice.Pad, 0, 330.0, 0.5f, 60.0, send = 0.6f),
+                note(Voice.Pad, 0, 412.5, 0.5f, 60.0, send = 0.6f),
             ),
         )
         val out = synth.renderAll(60 * rate)
         val peak = out.peak()
         assertTrue(peak > 0.02f, "bed is silent: $peak")
-        assertTrue(peak < 0.5012f, "bed peak $peak is above -6 dBFS (0.5012)")
+        assertTrue(peak < 0.7943f, "bed peak $peak is above -2 dBFS (0.7943)")
+    }
+
+    // Regression: the master sat about 9 dB under the -20 dBFS RMS target; a steady bed must land within 6 dB of it.
+    @Test
+    fun `a steady bed at the composer velocities has an rms within six dB of minus twenty dBFS`() {
+        val synth = Synth(rate)
+        synth.schedule(controls(0, texture(brightness = 0.5f, size = 0.5f, wet = 0.6f, detune = 0.5f)))
+        synth.schedule(
+            notes(
+                note(Voice.Drone, 0, 110.0, 0.7f, 60.0, send = 0.5f),
+                note(Voice.Pad, 0, 220.0, 0.5f, 60.0, send = 0.6f),
+                note(Voice.Pad, 0, 275.0, 0.5f, 60.0, send = 0.6f),
+                note(Voice.Pad, 0, 330.0, 0.5f, 60.0, send = 0.6f),
+                note(Voice.Pad, 0, 412.5, 0.5f, 60.0, send = 0.6f),
+            ),
+        )
+        val out = synth.renderAll(60 * rate)
+        val db = 20 * kotlin.math.log10(out.rms(20 * rate, 50 * rate))
+        assertTrue(db in -26.0..-14.0, "bed rms $db dBFS")
     }
 
     // Regression: a drone with a sub-octave at f/2 pushes the bed into inaudible low energy and eats headroom.

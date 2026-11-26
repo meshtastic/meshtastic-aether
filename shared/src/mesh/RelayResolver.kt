@@ -5,7 +5,7 @@ package org.meshtastic.ambient.mesh
  * matches. Null when the byte is absent or zero, when nothing matches, or when two or more nodes match (a 1-in-256
  * collision per pair), so callers fall back to the source instead of guessing.
  */
-fun resolveRelay(known: Collection<Long>, relayByte: Int?, source: Long, self: Long? = null): Long? {
+internal fun resolveRelay(known: Collection<Long>, relayByte: Int?, source: Long, self: Long? = null): Long? {
     if (relayByte == null || relayByte == 0) return null
     val matches = known.filter { it != source && it != self && (it and 0xFF).toInt() == relayByte }.distinct()
     return matches.singleOrNull()

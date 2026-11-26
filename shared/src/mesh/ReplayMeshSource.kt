@@ -12,7 +12,7 @@ import kotlin.io.encoding.Base64
  * capture gaps divided by [speed]; each event's `atMillis` is the capture timestamp, so a
  * downstream clock reads capture time, not wall time. Malformed lines are skipped.
  */
-class ReplayMeshSource(
+internal class ReplayMeshSource(
     private val lines: Sequence<String>,
     private val speed: Double = 1.0,
 ) : MeshSource {

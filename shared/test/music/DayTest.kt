@@ -41,9 +41,10 @@ class DayTest {
     }
 
     @Test
-    fun `night picks Aeolian`() {
-        assertEquals(Mode.Aeolian, at(2, 23).mode)
+    fun `night picks Aeolian and the darkest hour Phrygian`() {
+        assertEquals(Mode.Phrygian, at(2, 23).mode)
         assertEquals(Mode.Aeolian, at(2, 3).mode)
+        assertEquals(Mode.Aeolian, at(2, 20).mode)
     }
 
     @Test

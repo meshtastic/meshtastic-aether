@@ -10,7 +10,7 @@ import org.meshtastic.sdk.RadioTransport
 import org.meshtastic.sdk.transport.websocket.WebSocketTransport
 
 /** A live radio link: [source] feeds the engine, [connect] opens it and [disconnect] closes it. */
-class LiveLink(transport: RadioTransport) {
+internal class LiveLink(transport: RadioTransport) {
     private val client: RadioClient = RadioClient.Builder()
         .transport(transport)
         .storage(InMemoryStorageProvider())

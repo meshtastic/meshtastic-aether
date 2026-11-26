@@ -3,6 +3,7 @@ package org.meshtastic.ambient.ui
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -27,7 +28,7 @@ import org.meshtastic.ambient.log.Log
 
 /** Scan for Meshtastic radios over Bluetooth and pick one; the scan stops when the section leaves the screen. */
 @Composable
-fun BluetoothSection(onPick: (BleRadio) -> Unit) {
+internal fun BluetoothSection(onPick: (BleRadio) -> Unit) {
     var scanning by remember { mutableStateOf(false) }
     var radios by remember { mutableStateOf(emptyList<BleRadio>()) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -42,7 +43,12 @@ fun BluetoothSection(onPick: (BleRadio) -> Unit) {
                 scanning = false
                 return@LaunchedEffect
             }
-            val flow = bleScan() ?: return@LaunchedEffect
+            val flow = bleScan()
+            if (flow == null) {
+                error = "Bluetooth is not available on this device."
+                scanning = false
+                return@LaunchedEffect
+            }
             val list = RadioList()
             Log.i("ble", "scan started")
             coroutineScope {
@@ -70,11 +76,11 @@ fun BluetoothSection(onPick: (BleRadio) -> Unit) {
     }
 
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Button({ scanning = !scanning }, Modifier.fillMaxWidth()) { Text(if (scanning) "Stop scanning" else "Scan for Bluetooth radios") }
+        Button({ scanning = !scanning }, Modifier.fillMaxWidth().heightIn(min = MinTouch)) { Text(if (scanning) "Stop scanning" else "Scan for Bluetooth radios") }
         error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
         if (scanning && radios.isEmpty()) Text("Looking for radios...", style = MaterialTheme.typography.bodySmall)
         for (radio in radios) {
-            OutlinedButton({ onPick(radio) }, Modifier.fillMaxWidth()) {
+            OutlinedButton({ onPick(radio) }, Modifier.fillMaxWidth().heightIn(min = MinTouch)) {
                 Text("${radio.name ?: "Unnamed radio"}  ${radio.rssi?.let { "$it dBm" } ?: ""}".trim())
             }
         }

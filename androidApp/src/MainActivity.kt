@@ -28,6 +28,7 @@ class MainActivity : ComponentActivity() {
             launcher.launch(BLE_PERMISSIONS)
             result.await()
         }
+        AndroidAppContext.context = applicationContext
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         var immersive = true
         val controller = WindowCompat.getInsetsController(window, window.decorView)

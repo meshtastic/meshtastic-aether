@@ -4,13 +4,14 @@ import org.meshtastic.ambient.localOffsetMinutes
 import org.meshtastic.ambient.music.LocalMoment
 import kotlin.time.Clock
 
+/** Wall-clock epoch milliseconds. */
 fun nowMillis(): Long = Clock.System.now().toEpochMilliseconds()
 
 private const val MINUTE_MS = 60_000L
 private const val DAY_MINUTES = 24 * 60L
 
 /** The wall clock the composer needs: ISO weekday (1 = Monday) and minute of the local day. */
-fun localMoment(epochMillis: Long, offsetMinutes: Int = localOffsetMinutes(epochMillis)): LocalMoment {
+internal fun localMoment(epochMillis: Long, offsetMinutes: Int = localOffsetMinutes(epochMillis)): LocalMoment {
     val localMinutes = epochMillis.floorDiv(MINUTE_MS) + offsetMinutes
     val days = localMinutes.floorDiv(DAY_MINUTES)
     val minuteOfDay = (localMinutes - days * DAY_MINUTES).toInt()

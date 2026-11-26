@@ -6,9 +6,14 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.isActive
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import org.meshtastic.ambient.audio.AudioSink
 import org.meshtastic.ambient.audio.BlockRenderer
@@ -20,30 +25,51 @@ import org.meshtastic.ambient.mesh.MeshSource
 import org.meshtastic.ambient.music.Composer
 import org.meshtastic.ambient.music.ControlEvent
 import org.meshtastic.ambient.music.Day
-import org.meshtastic.ambient.music.Form
+import org.meshtastic.ambient.music.NoteEvent
 import org.meshtastic.ambient.music.Texture
 import org.meshtastic.ambient.synth.Synth
 import org.meshtastic.ambient.visual.SceneModel
 import kotlin.concurrent.atomics.AtomicInt
 import kotlin.concurrent.atomics.AtomicLong
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
+import kotlin.coroutines.CoroutineContext
 import kotlin.math.roundToInt
 
 /** What the hidden overlay shows. */
 data class EngineStatus(
     val link: LinkState = LinkState.Connecting,
+    /** Orbs on screen: the nodes heard so far this session. */
     val nodes: Int = 0,
+    /** Root of the sounding key, for example `D`. */
     val key: String = "",
+    /** Mode name of the sounding key, for example `Dorian`. */
     val mode: String = "",
+    /** The form section and how full it is, for example `2 - gathering`. */
     val section: String = "",
+    /** The last link or source failure, until it is dismissed or a retry succeeds. */
     val error: String? = null,
 )
 
+/** Whether the radio link is up: everything but `Connecting` and `Lost` shows the field in full color. */
+internal fun isLinked(state: LinkState): Boolean = state != LinkState.Connecting && state != LinkState.Lost
+
+/** What one composer tick hands the main thread: the notes to show and the state to display. */
+private class TickResult(
+    val notes: List<NoteEvent>,
+    val texture: Texture?,
+    val minuteOfDay: Int,
+    val key: String,
+    val mode: String,
+    val section: String,
+)
+
 /**
- * MeshSource -> Composer -> Synth -> AudioSink on one clock: the count of frames the synth has rendered. Each tick
- * the composer fills `[rendered, rendered + lookahead)`; the scene fires a packet's ripple when the sink's playback
- * frame reaches the frame that packet's note was scheduled for. Everything but the audio thread runs in the
- * coroutine that calls [run], so the composer and scene need no locks.
+ * MeshSource -> Composer -> Synth -> AudioSink on one clock: the count of frames the synth has rendered. A dedicated
+ * coroutine on [composerContext] owns the composer: events reach it through a channel, and each tick it fills
+ * `[rendered, rendered + lookahead)`, hands the notes to the synth and the same notes back to the main thread
+ * through a second channel. The scene and the status are touched only by the coroutine that calls [run]. A packet's
+ * ripple fires when the sink's playback frame reaches the frame its note was scheduled for. [pinFormFull] holds the
+ * long form at its full level (demo mode).
  */
 class AmbientEngine(
     private val source: MeshSource,
@@ -52,22 +78,27 @@ class AmbientEngine(
     lookaheadMillis: Int,
     private val tickMillis: Long = 100,
     private val now: () -> Long = ::nowMillis,
+    pinFormFull: Boolean = false,
+    private val composerContext: CoroutineContext = Dispatchers.Default,
 ) {
     private val sampleRate = sink.sampleRate
     private val lookaheadFrames = lookaheadMillis.toLong() * sampleRate / 1000
     private val tickFrames = tickMillis * sampleRate / 1000
-    private val composer = Composer(seed, sampleRate)
+    private val composer = Composer(seed, sampleRate, pinFormFull)
     private val synth = Synth(sampleRate)
-    private val form = Form(seed)
     private val rendered = AtomicLong(0L)
     private val gainBits = AtomicInt(1f.toRawBits())
     private var smoothedGain = 1f
+    private val inbound = Channel<MeshEvent>(Channel.UNLIMITED)
+    private val outbound = Channel<TickResult>(Channel.UNLIMITED)
+    private val link = MutableStateFlow(LinkState.Connecting)
     private val tally = Tally()
     private var notesThisMinute = 0
     private var nextSummaryMillis = Long.MIN_VALUE
     private var lastLogged = ""
 
-    val scene = SceneModel(sampleRate)
+    /** Drawn by [org.meshtastic.ambient.visual.AmbientScene]; only the [run] coroutine and the frame loop touch it. */
+    val scene = SceneModel(sampleRate).also { it.linked = false }
 
     var status by mutableStateOf(EngineStatus())
         private set
@@ -100,12 +131,23 @@ class AmbientEngine(
     /** [playbackFrame] in seconds. */
     fun playbackSeconds(): Double = playbackFrame().toDouble() / sampleRate
 
-    /** Runs until cancelled; [afterStart] runs once the sink and source collector are up (a live link connects there). */
-    suspend fun run(afterStart: suspend () -> Unit = {}) = coroutineScope {
+    /** Clears the shown error; the overlay calls this once its auto-hide time has passed. */
+    fun dismissError() {
+        status = status.copy(error = null)
+    }
+
+    /**
+     * Runs until cancelled; [afterStart] opens a live link once the sink and source collector are up. A failure is
+     * shown and retried with backoff, and a lost link is re-opened the same way.
+     */
+    suspend fun run(afterStart: suspend () -> Unit = {}): Nothing = coroutineScope {
         Log.i(TAG, "start sampleRate=$sampleRate lookaheadMs=${lookaheadFrames * 1000 / sampleRate}")
-        tick()
+        val firstTick = CompletableDeferred<Unit>()
+        launch(composerContext) { composerLoop(firstTick) }
+        firstTick.await()
         sink.start(renderer)
         try {
+            launch { for (r in outbound) apply(r) }
             launch {
                 try {
                     source.events.collect { onEvent(it) }
@@ -116,33 +158,57 @@ class AmbientEngine(
                     status = status.copy(error = e.message ?: e::class.simpleName)
                 }
             }
-            launch {
-                try {
-                    afterStart()
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (e: Throwable) {
-                    Log.e(TAG, "link open failed", e)
-                    status = status.copy(error = e.message ?: e::class.simpleName)
-                }
-            }
-            while (isActive) {
-                delay(tickMillis)
-                tick()
-            }
+            launch { keepLinkOpen(afterStart) }
+            awaitCancellation()
         } finally {
             sink.stop()
             Log.i(TAG, "stop")
         }
     }
 
+    private suspend fun keepLinkOpen(open: suspend () -> Unit) {
+        val backoff = Backoff()
+        while (true) {
+            try {
+                open()
+                status = status.copy(error = null)
+                break
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Throwable) {
+                Log.e(TAG, "link open failed", e)
+                status = status.copy(error = e.message ?: e::class.simpleName)
+                delay(backoff.next())
+            }
+        }
+        link.collectLatest { state ->
+            when (state) {
+                LinkState.Connected -> backoff.reset()
+                LinkState.Lost -> while (true) {
+                    delay(backoff.next())
+                    Log.i(TAG, "link lost, reopening")
+                    try {
+                        open()
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Throwable) {
+                        Log.w(TAG, "reopen failed", e)
+                    }
+                }
+                else -> Unit
+            }
+        }
+    }
+
+    /** Main thread: the scene sees the event now, the composer on its next tick. */
     private fun onEvent(e: MeshEvent) {
-        composer.onEvent(e)
         scene.onEvent(e, if (e is MeshEvent.PacketHeard) dueFrameFor() else 0L)
-        if (e is MeshEvent.PacketHeard) tally.add(e.kind)
+        inbound.trySend(e)
         if (e is MeshEvent.Link) {
             if (e.state != status.link) Log.i(TAG, "link ${status.link} -> ${e.state}")
             status = status.copy(link = e.state)
+            scene.linked = isLinked(e.state)
+            link.value = e.state
         }
     }
 
@@ -153,61 +219,65 @@ class AmbientEngine(
         return -((-earliest).floorDiv(grid)) * grid
     }
 
+    /** Main thread: shows what the composer scheduled. */
+    private fun apply(r: TickResult) {
+        for (n in r.notes) scene.onNote(n, n.atFrame)
+        r.texture?.let {
+            texture = it
+            scene.onTexture(it)
+        }
+        scene.minuteOfDay = r.minuteOfDay
+        status = status.copy(nodes = scene.orbs.size, key = r.key, mode = r.mode, section = r.section)
+    }
+
+    private suspend fun composerLoop(firstTick: CompletableDeferred<Unit>) {
+        tick()
+        firstTick.complete(Unit)
+        while (true) {
+            delay(tickMillis)
+            tick()
+        }
+    }
+
+    /** Composer coroutine only. */
     private fun tick() {
+        while (true) {
+            val e = inbound.tryReceive().getOrNull() ?: break
+            composer.onEvent(e)
+            if (e is MeshEvent.PacketHeard) tally.add(e.kind)
+        }
         val ms = now()
         val moment = localMoment(ms)
         val renderedNow = rendered.load()
         val out = composer.advance(renderedNow, lookaheadFrames, moment)
         synth.schedule(out)
         notesThisMinute += out.notes.size
+        var texture: Texture? = null
         for (c in out.controls) if (c is ControlEvent.SetTexture) texture = c.texture
-        scene.minuteOfDay = moment.minuteOfDay
         val day = Day.at(moment)
-        val tSec = renderedNow.toDouble() / sampleRate
-        status = status.copy(
-            nodes = scene.orbs.size,
-            key = NOTE_NAMES[day.rootSemitones.roundToInt().mod(12)],
-            mode = day.mode.name,
-            section = sectionLabel(tSec),
-        )
-        logSummary(ms)
+        val key = NOTE_NAMES[day.rootSemitones.roundToInt().mod(12)]
+        val section = composer.sectionAt(renderedNow.toDouble() / sampleRate)
+        outbound.trySend(TickResult(out.notes, texture, moment.minuteOfDay, key, day.mode.name, section))
+        logSummary(ms, key, day.mode.name, section)
     }
 
     /** One line a minute: what was heard, how much was scheduled, and the key, mode and section in force. */
-    private fun logSummary(ms: Long) {
+    private fun logSummary(ms: Long, key: String, mode: String, section: String) {
         if (nextSummaryMillis == Long.MIN_VALUE) nextSummaryMillis = ms + SUMMARY_MILLIS
         if (ms < nextSummaryMillis) return
         nextSummaryMillis = ms + SUMMARY_MILLIS
         Log.i(
             TAG,
-            "minute heard=${tally.total} (${tally.describe()}) notes=$notesThisMinute nodes=${status.nodes} " +
-                "link=${status.link} ${status.key} ${status.mode} section=${status.section} volume=${volume}",
+            "minute heard=${tally.total} (${tally.describe()}) notes=$notesThisMinute " +
+                "link=${link.value} $key $mode section=$section volume=$volume",
         )
         tally.reset()
         notesThisMinute = 0
-        val shape = "${status.key} ${status.mode}"
+        val shape = "$key $mode"
         if (shape != lastLogged) {
             if (lastLogged.isNotEmpty()) Log.i(TAG, "key/mode $lastLogged -> $shape")
             lastLogged = shape
         }
-    }
-
-    private fun sectionLabel(tSec: Double): String {
-        var end = 0.0
-        var index = 0
-        for (minutes in form.sectionMinutes(tSec)) {
-            end += minutes * 60.0
-            if (tSec < end) break
-            index++
-        }
-        val energy = form.energy(tSec)
-        val word = when {
-            energy < 0.2 -> "near silence"
-            energy < 0.5 -> "gathering"
-            energy < 0.8 -> "full"
-            else -> "peak"
-        }
-        return "${index + 1} - $word"
     }
 
     private companion object {

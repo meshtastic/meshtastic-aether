@@ -1,3 +1,3 @@
 package org.meshtastic.ambient.ble
 
-actual suspend fun ensureBlePermissions(): Boolean = true
+internal actual suspend fun ensureBlePermissions(): Boolean = true

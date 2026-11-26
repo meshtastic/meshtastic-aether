@@ -34,7 +34,7 @@ private fun MeshPacket.heard(kind: PacketKind, nowMillis: Long, ownNode: Long?):
 )
 
 /** Maps packets that carry a decoded payload; an undecoded packet belongs to [RawFrameMapper]. */
-object PacketMapper {
+internal object PacketMapper {
     fun map(p: MeshPacket, nowMillis: Long, ownNode: Long? = null): MeshEvent.PacketHeard? {
         val data = p.decoded ?: return null
         val kind = when (data.portnum) {
@@ -52,7 +52,7 @@ object PacketMapper {
 }
 
 /** Takes only `FromRadio.packet` frames with no decoded payload, so it never overlaps [PacketMapper]. */
-object RawFrameMapper {
+internal object RawFrameMapper {
     fun map(f: FromRadio, nowMillis: Long, ownNode: Long? = null): MeshEvent.PacketHeard? {
         val p = f.packet ?: return null
         if (p.decoded != null) return null

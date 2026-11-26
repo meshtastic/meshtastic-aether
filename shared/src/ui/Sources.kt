@@ -7,7 +7,7 @@ import org.meshtastic.ambient.mesh.MeshEvent
 import org.meshtastic.ambient.mesh.MeshSource
 import org.meshtastic.ambient.mesh.ReplayMeshSource
 
-fun MeshEvent.shifted(by: Long): MeshEvent = when (this) {
+internal fun MeshEvent.shifted(by: Long): MeshEvent = when (this) {
     is MeshEvent.PacketHeard -> copy(atMillis = atMillis + by)
     is MeshEvent.NodeSeen -> copy(atMillis = atMillis + by)
     is MeshEvent.NodeGone -> copy(atMillis = atMillis + by)
@@ -23,11 +23,11 @@ fun MeshEvent.shifted(by: Long): MeshEvent = when (this) {
  * Replays a capture forever, each pass rebased so its first event lands at now: the composer drops packets older
  * than a day, and a capture's own timestamps are always in the past.
  */
-class LoopingReplaySource(
+internal class LoopingReplaySource(
     private val lines: () -> Sequence<String>,
     private val speed: Double = 1.0,
     private val nowMillis: () -> Long,
-    private val pauseMillis: Long = 5_000,
+    private val pauseMillis: Long = LOOP_PAUSE_MILLIS,
 ) : MeshSource {
     override val events: Flow<MeshEvent> = flow {
         while (true) {
@@ -40,3 +40,6 @@ class LoopingReplaySource(
         }
     }
 }
+
+/** The silence between two passes of a looping capture. */
+private const val LOOP_PAUSE_MILLIS = 5_000L

@@ -5,4 +5,4 @@ object AndroidBlePermissions {
     var request: (suspend () -> Boolean)? = null
 }
 
-actual suspend fun ensureBlePermissions(): Boolean = AndroidBlePermissions.request?.invoke() ?: true
+internal actual suspend fun ensureBlePermissions(): Boolean = AndroidBlePermissions.request?.invoke() ?: true

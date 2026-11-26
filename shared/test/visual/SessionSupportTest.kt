@@ -7,7 +7,7 @@ import org.meshtastic.ambient.mesh.LinkState
 import org.meshtastic.ambient.mesh.MeshEvent
 import org.meshtastic.ambient.mesh.PacketKind
 import org.meshtastic.ambient.mesh.ReplayMeshSource
-import org.meshtastic.ambient.ui.DemoCapture
+import org.meshtastic.ambient.mesh.DemoCapture
 import org.meshtastic.ambient.ui.LoopingReplaySource
 import org.meshtastic.ambient.ui.localMoment
 import org.meshtastic.ambient.ui.shifted

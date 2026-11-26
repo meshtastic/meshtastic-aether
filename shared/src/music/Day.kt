@@ -18,6 +18,9 @@ data class DayState(
 )
 
 object Day {
+    /** The darkest hours (about 21:00 to 01:00) take Phrygian, the darkest of the modes. */
+    const val PHRYGIAN_BELOW = 0.1
+
     fun at(m: LocalMoment): DayState {
         val minute = m.minuteOfDay.coerceIn(0, 1439)
         val semis = Theory.keySemitones(m.dayOfWeek).toDouble()
@@ -40,6 +43,7 @@ object Day {
         brightness >= 0.75 -> Mode.Ionian
         brightness >= 0.55 -> Mode.Mixolydian
         brightness >= 0.35 -> Mode.Dorian
-        else -> Mode.Aeolian
+        brightness >= PHRYGIAN_BELOW -> Mode.Aeolian
+        else -> Mode.Phrygian
     }
 }

@@ -1,19 +1,51 @@
 package org.meshtastic.ambient
 
+import org.meshtastic.ambient.ui.KeyValueStore
 import org.meshtastic.sdk.RadioTransport
 import org.meshtastic.sdk.transport.tcp.TcpTransport
 
-class JVMPlatform : Platform {
+internal class JVMPlatform : Platform {
     override val name: String = "Java ${System.getProperty("java.version")}"
     override val supportsTcp: Boolean = true
     override val lookaheadMillis: Int = 400
     override val needsTapToStart: Boolean = false
+    override val hasKeyboard: Boolean = true
+    override val autoConnects: Boolean = true
 
     override fun resumeAudio() = Unit
 }
 
-actual fun getPlatform(): Platform = JVMPlatform()
+internal actual fun getPlatform(): Platform = JVMPlatform()
 
-actual fun localOffsetMinutes(epochMillis: Long): Int = java.util.TimeZone.getDefault().getOffset(epochMillis) / 60_000
+internal actual fun localOffsetMinutes(epochMillis: Long): Int = java.util.TimeZone.getDefault().getOffset(epochMillis) / 60_000
 
-actual fun createTcpTransport(host: String, port: Int): RadioTransport? = TcpTransport(host, port)
+internal actual fun createTcpTransport(host: String, port: Int): RadioTransport? = TcpTransport(host, port)
+
+/** Java Preferences under one node; a failing backing store (read-only home, sandbox) degrades to forgetting. */
+private class PreferencesStore : KeyValueStore {
+    private val prefs = java.util.prefs.Preferences.userRoot().node("org/meshtastic/ambient")
+
+    override fun get(key: String): String? = try {
+        prefs.get(key, null)
+    } catch (_: Exception) {
+        null
+    }
+
+    override fun put(key: String, value: String) {
+        try {
+            prefs.put(key, value)
+            prefs.flush()
+        } catch (_: Exception) {
+        }
+    }
+
+    override fun remove(key: String) {
+        try {
+            prefs.remove(key)
+            prefs.flush()
+        } catch (_: Exception) {
+        }
+    }
+}
+
+internal actual fun createKeyValueStore(): KeyValueStore = PreferencesStore()

@@ -7,13 +7,16 @@ import org.meshtastic.ambient.mesh.PacketKind
 import org.meshtastic.ambient.mesh.resolveRelay
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.hypot
+import kotlin.math.cos
 import kotlin.math.pow
 
 /**
  * The autonomous piece plus the mesh's perturbations. Pure and deterministic given (events, calls, seed).
  * Call [onEvent] as events arrive and [advance] on a timer; each call fills frames up to `nowFrame + lookahead`.
+ * [pinFormFull] holds the long form at its full level, for the demo.
  */
-class Composer(seed: Long, private val sampleRate: Int) {
+class Composer(seed: Long, private val sampleRate: Int, pinFormFull: Boolean = false) {
     /** Our own node's position when known; pans are relative to it, else to the centroid of known nodes. */
     var origin: GeoPoint? = null
 
@@ -24,7 +27,7 @@ class Composer(seed: Long, private val sampleRate: Int) {
 
     private val rng = Rng.stream(seed, 3)
     private val harmony = Harmony(seed)
-    private val form = Form(seed)
+    private val form = Form(seed, pinFormFull)
     private val crowd = Crowd()
     private val weather = WeatherScaler()
     private val slots = SlotAllocator(Ornaments.SLOT_CAP)
@@ -47,6 +50,22 @@ class Composer(seed: Long, private val sampleRate: Int) {
     private var nextTickFrame = 0L
     private var nextTextureFrame = 0L
     private var keySemitones = Double.NaN
+    private var registerShift = 0
+    private var lastAnswerFrame = Long.MIN_VALUE / 2
+    private var lastGustMs = Long.MIN_VALUE / 2
+    private val pendingGusts = ArrayList<Pair<Long, Float>>()
+    private val pendingColors = ArrayList<Int>()
+    private var lowSwellUntilMs = Long.MIN_VALUE
+    private val pressure = PressureWatch()
+    private val temperature = Crossing()
+    private var nextGestureMs = Long.MIN_VALUE
+    private val sessionVoices = ArrayList<Long>()
+    private val farewelled = HashSet<Long>()
+    private var nextFarewellMs = Long.MIN_VALUE
+    private var lastHour = -1
+    private var lastMinute = -1
+    private var chimeHour = -1
+    private var chimeUntilFrame = 0L
     private var keyHz = Theory.C3_HZ
     private val periods = PERIODS.toMutableList().also { list ->
         for (i in list.lastIndex downTo 1) list.swap(i, rng.nextInt(i + 1))
@@ -62,12 +81,19 @@ class Composer(seed: Long, private val sampleRate: Int) {
                 info.position?.let { sumLat -= it.lat; sumLon -= it.lon; positioned-- }
                 info.position = e.position
                 e.position?.let { sumLat += it.lat; sumLon += it.lon; positioned++ }
-                if (e.firstThisSession && !crowd.warmingUp) swells++
+                if (e.firstThisSession && !crowd.warmingUp) {
+                    swells++
+                    sessionVoices.remove(e.node)
+                    sessionVoices += e.node
+                    if (sessionVoices.size > MAX_SESSION_VOICES) sessionVoices.removeAt(0)
+                }
             }
             is MeshEvent.NodeGone -> {
                 nodes.remove(e.node)?.position?.let { sumLat -= it.lat; sumLon -= it.lon; positioned-- }
                 crowd.forget(e.node)
                 readings.remove(e.node)
+                sessionVoices.remove(e.node)
+                farewelled.remove(e.node)
             }
             is MeshEvent.Environment -> {
                 observe(e.node, Quantity.Temperature, e.temperatureC, e.atMillis)
@@ -92,6 +118,12 @@ class Composer(seed: Long, private val sampleRate: Int) {
     private fun observe(node: Long, q: Quantity, v: Float?, at: Long) {
         if (v == null || !v.isFinite()) return
         weather.observe(q, v, at)
+        if (q == Quantity.Wind && !crowd.warmingUp) {
+            val prev = readings[node]?.get(q)
+            if (prev != null && at - prev.atMillis <= WEATHER_MS && v - prev.value >= GUST_DELTA_MPS) {
+                pendingGusts += node to v - prev.value
+            }
+        }
         readings.getOrPut(node) { HashMap() }[q] = Reading(v, at)
     }
 
@@ -117,6 +149,7 @@ class Composer(seed: Long, private val sampleRate: Int) {
         if (crowd.warmingUp) return
         crowd.onPacket(e.atMillis, e.from, e.snr)
         nodes.getOrPut(e.from) { NodeInfo(null, Long.MIN_VALUE) }.lastHeard = e.atMillis
+        farewelled.remove(e.from)
         if (e.kind == PacketKind.Text) forceChord = true
         val keep = crowd.fastRate <= Ornaments.THIN_RATE || rng.nextDouble() < Ornaments.THIN_RATE / crowd.fastRate
         if (!keep && e.kind != PacketKind.Text) return
@@ -144,14 +177,17 @@ class Composer(seed: Long, private val sampleRate: Int) {
         }
         runLoops(nowFrame, windowEnd, day, moment, notes)
         runOrnaments(nowFrame, windowEnd, moment, day, notes)
-        runMeshPhrases(nowFrame, day, notes)
+        runMeshPhrases(nowFrame, notes)
+        runDayEvents(nowFrame, moment, day, notes)
+        runGestures(nowFrame, moment, notes)
+        runFarewells(nowFrame, moment, notes)
         if (swells > 0 && !crowd.warmingUp) {
             swells = 0
             val level = form.levels(nowFrame / sampleRate.toDouble()).getValue(Voice.Pad)
-            val length = clip(nowFrame, sec(6.0))
+            val length = clip(nowFrame, sec(NEW_NODE_SWELL_SECONDS))
             if (level > 0.02f && length > 0) {
                 notes += NoteEvent(
-                    nowFrame, Voice.Pad, keyHz * Theory.justRatio(chord.rootSemitone) * 2, 0.18f, 0f, 0.8f,
+                    nowFrame, Voice.Pad, keyHz * Theory.justRatio(chord.rootSemitone) * 2, NEW_NODE_SWELL_VELOCITY, 0f, 0.8f,
                     length, 0.3f,
                 )
             }
@@ -187,11 +223,12 @@ class Composer(seed: Long, private val sampleRate: Int) {
         if (!chordStarted || keyChanged || textDue || at >= nextChordFrame) {
             keySemitones = day.rootSemitones
             keyHz = day.rootHz
+            registerShift = nextRegister(day.registerOctaves, chordStarted)
             harmony.next(day.mode)
             chordStarted = true
             forceChord = false
             lastChordFrame = at
-            nextChordFrame = at + sec(rng.range(120.0, 480.0))
+            nextChordFrame = at + sec(rng.range(CHORD_MIN_SECONDS, CHORD_MAX_SECONDS))
             nextTextureFrame = at + sec(TEXTURE_SECONDS)
             controls += ControlEvent.SetTexture(at, texture(day, at / sampleRate.toDouble(), moment.epochMillis))
         }
@@ -200,17 +237,25 @@ class Composer(seed: Long, private val sampleRate: Int) {
         val levels = form.levels(at / sampleRate.toDouble())
         if (levels.getValue(Voice.Drone) > 0.02f) {
             notes += NoteEvent(
-                at, Voice.Drone, keyHz * Theory.justRatio(chord.rootSemitone) / 2, DRONE_VELOCITY, 0f, 0.5f,
-                clip(at, sec(SWELL_SECONDS)), 0.2f,
+                at, Voice.Drone, keyHz * Theory.justRatio(chord.rootSemitone) / 2, DRONE_VELOCITY, 0f, DRONE_SEND,
+                clip(at, sec(SWELL_SECONDS)), DRONE_BRIGHTNESS,
             )
         }
         if (levels.getValue(Voice.Pad) > 0.02f) {
-            val pans = floatArrayOf(-0.5f, -0.17f, 0.17f, 0.5f)
             chord.voiceSemitones.forEachIndexed { i, s ->
-                val start = at + sec(0.3 * i)
+                val start = at + sec(PAD_STAGGER_SECONDS * i)
                 notes += NoteEvent(
-                    start, Voice.Pad, padHz(day, s), PAD_VELOCITY, pans[i], 0.6f,
+                    start, Voice.Pad, padHz(s), PAD_VELOCITY, PAD_PANS[i], PAD_SEND,
                     clip(start, sec(SWELL_SECONDS)), day.brightness.toFloat(),
+                )
+            }
+            sessionVoices.forEachIndexed { i, node ->
+                val start = at + sec(SESSION_STAGGER_SECONDS * (i + 1))
+                val length = clip(start, sec(SWELL_SECONDS))
+                if (length <= 0) return@forEachIndexed
+                notes += NoteEvent(
+                    start, Voice.Pad, padHz(chord.roleSemitone(Ornaments.role(node)) + 12), SESSION_VELOCITY,
+                    Ornaments.panFor(nodes[node]?.position, reference()), PAD_SEND, length, SESSION_BRIGHTNESS, node,
                 )
             }
         }
@@ -218,33 +263,60 @@ class Composer(seed: Long, private val sampleRate: Int) {
 
     private var chordStarted = false
 
-    private fun padHz(day: DayState, semitone: Int): Double =
-        keyHz * Theory.justRatio(semitone) * 2.0.pow(day.registerOctaves)
+    /** Pads sit whole octaves from the key so they stay in tune with the drone and bells at every minute of the day. */
+    private fun padHz(semitone: Int): Double = keyHz * Theory.justRatio(semitone) * 2.0.pow(registerShift)
+
+    /** Whole-octave register for [target] (0 by day to -1 at night): it only flips past [REGISTER_ENTER_LOW] or [REGISTER_ENTER_HIGH]. */
+    private fun nextRegister(target: Double, running: Boolean): Int = when {
+        !running -> if (target < REGISTER_FIRST_SPLIT) -1 else 0
+        target < REGISTER_ENTER_LOW -> -1
+        target > REGISTER_ENTER_HIGH -> 0
+        else -> registerShift
+    }
+
+    /** Label of the form section at [tSeconds], for example `2 - gathering`. */
+    fun sectionAt(tSeconds: Double): String {
+        var end = 0.0
+        var index = 0
+        for (minutes in form.sectionMinutes(tSeconds)) {
+            end += minutes * 60.0
+            if (tSeconds < end) break
+            index++
+        }
+        val energy = form.energy(tSeconds)
+        val word = when {
+            energy < SECTION_SILENCE_BELOW -> "near silence"
+            energy < SECTION_GATHERING_BELOW -> "gathering"
+            energy < SECTION_FULL_BELOW -> "full"
+            else -> "peak"
+        }
+        return "${index + 1} - $word"
+    }
 
     private fun runLoops(nowFrame: Long, to: Long, day: DayState, moment: LocalMoment, notes: MutableList<NoteEvent>) {
         val chord = harmony.current
         val tonesPerLoop = chord.voiceSemitones
         val crowdDensity = crowd.density(moment.epochMillis)
-        val active = (0.6 * day.density + 0.4 * crowdDensity).coerceIn(0.0, 1.0)
+        val active = (LOOP_DAY_WEIGHT * day.density + (1 - LOOP_DAY_WEIGHT) * crowdDensity).coerceIn(0.0, 1.0)
         val quiet = crowd.rate < QUIET_RATE && !crowd.warmingUp
         for (loop in loops) {
             while (loop.nextFrame < to) {
                 val at = max(loop.nextFrame, nowFrame)
                 val levels = form.levels(at / sampleRate.toDouble())
-                val fires = rng.nextDouble() < 0.35 + 0.65 * active
+                val fires = rng.nextDouble() < LOOP_FIRE_BASE + (1 - LOOP_FIRE_BASE) * active
                 if (loop.index < 4) {
-                    val length = clip(at, sec(loop.baseSeconds * 0.4))
+                    val length = clip(at, sec(loop.baseSeconds * PAD_LOOP_HOLD))
                     if (fires && levels.getValue(Voice.Pad) > 0.03f && length >= sec(MIN_LOOP_NOTE_SECONDS)) {
                         notes += NoteEvent(
-                            at, Voice.Pad, padHz(day, tonesPerLoop[loop.index]), 0.4f,
-                            (loop.index - 1.5f) * 0.4f, 0.7f, length, day.brightness.toFloat(),
+                            at, Voice.Pad, padHz(tonesPerLoop[loop.index]), PAD_LOOP_VELOCITY,
+                            (loop.index - 1.5f) * LOOP_PAN_SPREAD, LOOP_SEND, length, day.brightness.toFloat(),
                         )
                     }
                 } else {
-                    val length = clip(at, sec(loop.baseSeconds * 0.3))
+                    val length = clip(at, sec(loop.baseSeconds * SHIMMER_LOOP_HOLD))
                     if (fires && levels.getValue(Voice.Shimmer) > 0.05f && length >= sec(MIN_LOOP_NOTE_SECONDS)) {
                         notes += NoteEvent(
-                            at, Voice.Shimmer, padHz(day, tonesPerLoop[3]), 0.3f, 0f, 0.9f, length, 0.9f,
+                            at, Voice.Shimmer, padHz(tonesPerLoop[3]), SHIMMER_LOOP_VELOCITY, 0f, SHIMMER_SEND, length, SHIMMER_BRIGHTNESS,
                         )
                     }
                 }
@@ -258,17 +330,25 @@ class Composer(seed: Long, private val sampleRate: Int) {
                     .sortedByDescending { it.value.lastHeard }.take(3)
                 if (quiet && recent.isNotEmpty()) {
                     val (id, info) = recent[loop.index % recent.size]
-                    notes += NoteEvent(
-                        at, Voice.Bell, Ornaments.pitchHz(id, chord, keyHz), MEMORY_VELOCITY,
-                        Ornaments.panFor(info.position, reference()), 0.7f, sec(3.0), 0.3f,
-                    )
+                    val motif = Motifs.of(id)
+                    val from = loop.index % (motif.size - FRAGMENT_NOTES + 1)
+                    val band = Ornaments.band(id)
+                    val pan = Ornaments.panFor(info.position, reference())
+                    for (j in 0 until FRAGMENT_NOTES) {
+                        val k = from + j
+                        val intended = at + sec(if (j == 0) 0.0 else motif.gaps[k])
+                        emit(
+                            notes, intended, Voice.Bell, Ornaments.pitchHz(motif.roles[k], band, chord, keyHz),
+                            MEMORY_VELOCITY, pan, LOOP_SEND, MEMORY_SECONDS, MEMORY_BRIGHTNESS, id,
+                        )
+                    }
                 }
                 loop.nextFrame = at + sec(period(loop.baseSeconds, day))
             }
         }
     }
 
-    private fun period(base: Double, day: DayState): Double = (base * (1.0 + 0.3 * (1 - day.density))).coerceIn(17.0, 60.0)
+    private fun period(base: Double, day: DayState): Double = (base * (1.0 + LOOP_SLOWING * (1 - day.density))).coerceIn(MIN_LOOP_PERIOD, MAX_LOOP_PERIOD)
 
     private fun reference(): GeoPoint? =
         origin ?: if (positioned > 0) GeoPoint(sumLat / positioned, sumLon / positioned) else null
@@ -292,7 +372,7 @@ class Composer(seed: Long, private val sampleRate: Int) {
         }
     }
 
-    private fun runMeshPhrases(nowFrame: Long, day: DayState, notes: MutableList<NoteEvent>) {
+    private fun runMeshPhrases(nowFrame: Long, notes: MutableList<NoteEvent>) {
         val chord = harmony.current
         val padLevel = form.levels(nowFrame / sampleRate.toDouble()).getValue(Voice.Pad)
         for ((a, b) in pendingDyads) {
@@ -300,8 +380,8 @@ class Composer(seed: Long, private val sampleRate: Int) {
             if (padLevel <= 0.02f || length <= 0) continue
             for (node in listOf(a, b)) {
                 notes += NoteEvent(
-                    nowFrame, Voice.Pad, padHz(day, chord.roleSemitone(Ornaments.role(node))), DYAD_VELOCITY,
-                    Ornaments.panFor(nodes[node]?.position, reference()), 0.7f, length, 0.3f,
+                    nowFrame, Voice.Pad, padHz(chord.roleSemitone(Ornaments.role(node))), DYAD_VELOCITY,
+                    Ornaments.panFor(nodes[node]?.position, reference()), LOOP_SEND, length, MEMORY_BRIGHTNESS, node,
                 )
             }
         }
@@ -314,11 +394,22 @@ class Composer(seed: Long, private val sampleRate: Int) {
                 val at = slots.allocate(intended, duration, intended + ttl) ?: return@forEachIndexed
                 notes += NoteEvent(
                     at, Voice.Bell, Ornaments.pitchHz(node, chord, keyHz), ROUTE_VELOCITY,
-                    Ornaments.panFor(nodes[node]?.position, reference()), 0.5f, duration, 0.5f,
+                    Ornaments.panFor(nodes[node]?.position, reference()), ROUTE_SEND, duration, ROUTE_BRIGHTNESS, node,
                 )
             }
         }
         pendingRoutes.clear()
+    }
+
+    /** Starts a note on a free slot at or after [intended] and within the TTL; false when it was dropped. */
+    private fun emit(
+        notes: MutableList<NoteEvent>, intended: Long, voice: Voice, pitchHz: Double, velocity: Float, pan: Float,
+        send: Float, seconds: Double, brightness: Float, node: Long?,
+    ): Boolean {
+        val duration = sec(seconds)
+        val at = slots.allocate(intended, duration, intended + sec(Ornaments.TTL_SECONDS)) ?: return false
+        notes += NoteEvent(at, voice, pitchHz, velocity, pan, send, duration, brightness, node)
+        return true
     }
 
     private fun ornament(e: MeshEvent.PacketHeard, start: Long, deadline: Long, day: DayState, notes: MutableList<NoteEvent>) {
@@ -339,26 +430,208 @@ class Composer(seed: Long, private val sampleRate: Int) {
         val chord = harmony.current
         if (e.kind == PacketKind.Text) {
             for (i in 0..3) {
-                val intended = start + sec(0.35 * i)
+                val intended = start + sec(TEXT_STEP_SECONDS * i)
                 val at = slots.allocate(intended, duration, intended + sec(Ornaments.TTL_SECONDS)) ?: continue
-                notes += NoteEvent(at, Voice.Bell, Ornaments.pitchHz(i, 1, chord, keyHz), velocity, pan, send, duration, brightness)
+                notes += NoteEvent(at, Voice.Bell, Ornaments.pitchHz(i, 1, chord, keyHz), velocity, pan, send, duration, brightness, e.from)
             }
             return
         }
-        val pitch = if (e.kind == PacketKind.Encrypted) Ornaments.BREATH_HZ else Ornaments.pitchHz(e.from, chord, keyHz)
-        val first = slots.allocate(start, duration, deadline) ?: return
-        notes += NoteEvent(first, art.voice, pitch, velocity, pan, send, duration, brightness)
-        if (e.kind == PacketKind.Encrypted) return
+        val breath = e.kind == PacketKind.Encrypted
+        val pitch = if (breath) Ornaments.BREATH_HZ else Ornaments.pitchHz(e.from, chord, keyHz)
+        var anchor = start
+        var slack = 0L
+        if (!breath && crowd.rate < QUIET_RATE) {
+            val motif = Motifs.of(e.from)
+            val band = Ornaments.band(e.from)
+            var offset = 0.0
+            var played = 0
+            for (i in 0 until motif.size) {
+                offset += motif.gaps[i]
+                val intended = start + sec(offset)
+                val hz = Ornaments.pitchHz(motif.roles[i], band, chord, keyHz)
+                val at = slots.allocate(intended, duration, if (i == 0) deadline else intended + sec(Ornaments.TTL_SECONDS))
+                if (at == null) {
+                    if (i == 0) return
+                    continue
+                }
+                notes += NoteEvent(at, art.voice, hz, velocity * MOTIF_FALLOFF.pow(played), pan, send, duration, brightness, e.from)
+                played++
+                anchor = at
+            }
+            slack = anchor - start
+        } else {
+            val first = slots.allocate(start, duration, deadline) ?: return
+            notes += NoteEvent(first, art.voice, pitch, velocity, pan, send, duration, brightness, e.from)
+            anchor = first
+        }
+        if (breath) return
         val relay = resolveRelay(nodes.keys, e.relayByte, e.from, selfNode)
         for (k in 1..Ornaments.echoesFor(e.hopsTaken, e.viaMqtt)) {
-            val at = slots.allocate(first + sec(Ornaments.ECHO_DELAY_SECONDS * k), duration, deadline) ?: break
+            val at = slots.allocate(anchor + sec(Ornaments.ECHO_DELAY_SECONDS * k), duration, deadline + slack) ?: break
             val viaRelay = relay != null && k % 2 == 1
             notes += NoteEvent(
-                at, art.voice, if (viaRelay) Ornaments.pitchHz(relay, chord, keyHz) else pitch, velocity * 0.55f.pow(k),
+                at, art.voice, if (viaRelay) Ornaments.pitchHz(relay, chord, keyHz) else pitch, velocity * ECHO_DECAY.pow(k),
                 if (viaRelay) Ornaments.panFor(nodes[relay]?.position, reference()) else pan,
-                min(1f, send + 0.1f * k), duration, brightness * 0.8f,
+                min(1f, send + ECHO_SEND_STEP * k), duration, brightness * ECHO_BRIGHTNESS, if (viaRelay) relay else e.from,
             )
         }
+        answer(e, start, chord, notes)
+    }
+
+    /** The nearest known node, else the resolved relay, that answers [e]. */
+    private fun responder(e: MeshEvent.PacketHeard): Long? {
+        val here = nodes[e.from]?.position
+        if (here != null) {
+            val k = cos(here.lat * kotlin.math.PI / 180.0)
+            var best: Long? = null
+            var bestD = Double.MAX_VALUE
+            for ((id, info) in nodes) {
+                val p = info.position ?: continue
+                if (id == e.from || id == selfNode) continue
+                val d = hypot((p.lon - here.lon) * k, p.lat - here.lat)
+                if (d < bestD || (d == bestD && best != null && id < best)) {
+                    bestD = d
+                    best = id
+                }
+            }
+            if (best != null) return best
+        }
+        return resolveRelay(nodes.keys, e.relayByte, e.from, selfNode)
+    }
+
+    /** 2-4 s after a packet its neighbor answers a chord-stack third or fifth above it, at most once per [ANSWER_GAP_SECONDS]. */
+    private fun answer(e: MeshEvent.PacketHeard, start: Long, chord: Chord, notes: MutableList<NoteEvent>) {
+        val intended = start + sec(rng.range(ANSWER_MIN_SECONDS, ANSWER_MAX_SECONDS))
+        if (intended - lastAnswerFrame < sec(ANSWER_GAP_SECONDS)) return
+        val who = responder(e) ?: return
+        val base = Ornaments.pitchHz(e.from, chord, keyHz)
+        val step = if (rng.nextDouble() < 0.5) 1 else 2
+        val role = (Ornaments.role(e.from) + step).mod(5)
+        var hz = Ornaments.pitchHz(role, Ornaments.band(e.from), chord, keyHz)
+        while (hz <= base) hz *= 2
+        val pan = Ornaments.panFor(nodes[who]?.position, reference())
+        if (emit(notes, intended, Voice.Bell, hz, ANSWER_VELOCITY, pan, ANSWER_SEND, ANSWER_SECONDS, ANSWER_BRIGHTNESS, who)) {
+            lastAnswerFrame = intended
+        }
+    }
+
+    private fun bedVisible(nowFrame: Long): Boolean =
+        Form.visible(form.levels(nowFrame / sampleRate.toDouble())) > Form.FLOOR
+
+    /** The hour chime and the dawn and dusk shimmer swells, all on the key's root and fifth and only while the form is audible. */
+    private fun runDayEvents(nowFrame: Long, moment: LocalMoment, day: DayState, notes: MutableList<NoteEvent>) {
+        val minute = moment.minuteOfDay.coerceIn(0, 1439)
+        val hour = minute / 60
+        val prevHour = lastHour
+        val prevMinute = lastMinute
+        lastHour = hour
+        lastMinute = minute
+        if (prevHour >= 0 && hour != prevHour) {
+            chimeHour = hour
+            chimeUntilFrame = nowFrame + sec(CHIME_WAIT_SECONDS)
+        }
+        if (chimeHour >= 0) {
+            if (nowFrame > chimeUntilFrame) {
+                chimeHour = -1
+            } else if (day.rootSemitones == keySemitones) {
+                val count = if (chimeHour % 12 == 0) 12 else chimeHour % 12
+                chimeHour = -1
+                if (bedVisible(nowFrame)) {
+                    for (i in 0 until count) {
+                        val ratio = if (i % 2 == 0) 2.0 else 3.0
+                        emit(
+                            notes, nowFrame + sec(CHIME_STEP_SECONDS * i), Voice.Bell, keyHz * ratio, CHIME_VELOCITY, 0f,
+                            CHIME_SEND, CHIME_SECONDS, CHIME_BRIGHTNESS, null,
+                        )
+                    }
+                }
+            }
+        }
+        if (prevMinute < 0 || !bedVisible(nowFrame)) return
+        val dawn = prevMinute < DAWN_MINUTE && minute >= DAWN_MINUTE
+        val dusk = prevMinute < DUSK_MINUTE && minute >= DUSK_MINUTE
+        if (!dawn && !dusk) return
+        val ratios = if (dawn) doubleArrayOf(2.0, 3.0) else doubleArrayOf(3.0, 2.0)
+        ratios.forEachIndexed { i, ratio ->
+            val at = nowFrame + sec(SHIMMER_SWELL_STEP_SECONDS * i)
+            val length = clip(at, sec(SHIMMER_SWELL_SECONDS))
+            if (length > 0) {
+                notes += NoteEvent(
+                    at, Voice.Shimmer, keyHz * ratio, SHIMMER_SWELL_VELOCITY, if (i == 0) -SHIMMER_SWELL_PAN else SHIMMER_SWELL_PAN,
+                    SHIMMER_SEND, length, SHIMMER_BRIGHTNESS,
+                )
+            }
+        }
+    }
+
+    /** A pressure drop is a low pad swell, a wind gust a breath of noise, a temperature crossing a bell on the new mode color. */
+    private fun runGestures(nowFrame: Long, moment: LocalMoment, notes: MutableList<NoteEvent>) {
+        val ms = moment.epochMillis
+        if (!crowd.warmingUp && ms >= nextGestureMs) {
+            nextGestureMs = ms + GESTURE_SAMPLE_MS
+            weatherNow(Quantity.Pressure, ms)?.let { if (pressure.sample(ms, it)) lowSwellUntilMs = ms + LOW_SWELL_WAIT_MS }
+            weatherNow(Quantity.Temperature, ms)?.let {
+                val dir = temperature.update(weather.scale(Quantity.Temperature, it))
+                if (dir != 0) pendingColors += dir
+            }
+        }
+        val chord = harmony.current
+        if (lowSwellUntilMs >= ms && form.levels(nowFrame / sampleRate.toDouble()).getValue(Voice.Pad) > 0.02f) {
+            val length = clip(nowFrame, sec(LOW_SWELL_SECONDS))
+            if (length > 0) {
+                lowSwellUntilMs = Long.MIN_VALUE
+                notes += NoteEvent(
+                    nowFrame, Voice.Pad, keyHz * Theory.justRatio(chord.rootSemitone) / 2, LOW_SWELL_VELOCITY, 0f,
+                    LOW_SWELL_SEND, length, LOW_SWELL_BRIGHTNESS,
+                )
+            }
+        }
+        for ((node, delta) in pendingGusts) {
+            if (ms - lastGustMs < GUST_GAP_MS) continue
+            val velocity = min(GUST_MAX_VELOCITY, GUST_VELOCITY + GUST_VELOCITY_PER_MPS * delta)
+            val pan = Ornaments.panFor(nodes[node]?.position, reference())
+            if (emit(notes, nowFrame, Voice.Breath, Ornaments.BREATH_HZ, velocity, pan, GUST_SEND, GUST_SECONDS, GUST_BRIGHTNESS, node)) {
+                lastGustMs = ms
+            }
+        }
+        pendingGusts.clear()
+        for (dir in pendingColors) {
+            val semitone = if (dir > 0) LYDIAN_COLOR_SEMITONE else AEOLIAN_COLOR_SEMITONE
+            emit(
+                notes, nowFrame, Voice.Bell, keyHz * Theory.justRatio(semitone) * 2, COLOR_VELOCITY, 0f, COLOR_SEND,
+                COLOR_SECONDS, COLOR_BRIGHTNESS, null,
+            )
+        }
+        pendingColors.clear()
+    }
+
+    /** One farewell at a time for a node silent over an hour: its pitch and a chord tone below it, falling. */
+    private fun runFarewells(nowFrame: Long, moment: LocalMoment, notes: MutableList<NoteEvent>) {
+        val ms = moment.epochMillis
+        if (crowd.warmingUp || ms < nextFarewellMs || !bedVisible(nowFrame)) return
+        nextFarewellMs = ms + FAREWELL_CHECK_MS
+        var gone: Long? = null
+        var oldest = Long.MAX_VALUE
+        for ((id, info) in nodes) {
+            if (info.lastHeard == Long.MIN_VALUE || id in farewelled || ms - info.lastHeard < SILENT_MS) continue
+            if (info.lastHeard < oldest || (info.lastHeard == oldest && id < gone!!)) {
+                oldest = info.lastHeard
+                gone = id
+            }
+        }
+        val id = gone ?: return
+        farewelled += id
+        val chord = harmony.current
+        val band = Ornaments.band(id)
+        val high = Ornaments.pitchHz(id, chord, keyHz)
+        var low = Ornaments.pitchHz((Ornaments.role(id) + 4).mod(5), band, chord, keyHz)
+        while (low >= high) low /= 2
+        val pan = Ornaments.panFor(nodes[id]?.position, reference())
+        emit(notes, nowFrame, Voice.Bell, high, FAREWELL_VELOCITY, pan, FAREWELL_SEND, FAREWELL_SECONDS, FAREWELL_BRIGHTNESS, id)
+        emit(
+            notes, nowFrame + sec(FAREWELL_STEP_SECONDS), Voice.Bell, low, FAREWELL_VELOCITY, pan, FAREWELL_SEND,
+            FAREWELL_SECONDS, FAREWELL_BRIGHTNESS, id,
+        )
     }
 
     private fun texture(day: DayState, tSec: Double, nowMs: Long): Texture {
@@ -394,6 +667,7 @@ class Composer(seed: Long, private val sampleRate: Int) {
 
     private companion object {
         val PERIODS = listOf(17.0, 19.0, 23.0, 29.0, 31.0, 37.0, 41.0, 43.0, 47.0, 53.0, 59.0)
+        val PAD_PANS = floatArrayOf(-0.5f, -0.17f, 0.17f, 0.5f)
         const val TEXTURE_SECONDS = 5.0
         const val QUIET_RATE = 0.1
         const val MAX_PENDING = 512
@@ -402,9 +676,57 @@ class Composer(seed: Long, private val sampleRate: Int) {
         const val SWELL_SECONDS = 20.0
         const val MIN_FORCED_SECONDS = 45.0
         const val MIN_LOOP_NOTE_SECONDS = 1.0
+        const val CHORD_MIN_SECONDS = 120.0
+        const val CHORD_MAX_SECONDS = 480.0
+
+        const val REGISTER_FIRST_SPLIT = -0.5
+        const val REGISTER_ENTER_LOW = -0.65
+        const val REGISTER_ENTER_HIGH = -0.35
+        const val SECTION_SILENCE_BELOW = 0.2
+        const val SECTION_GATHERING_BELOW = 0.5
+        const val SECTION_FULL_BELOW = 0.8
+
         const val DRONE_VELOCITY = 0.7f
+        const val DRONE_SEND = 0.5f
+        const val DRONE_BRIGHTNESS = 0.2f
         const val PAD_VELOCITY = 0.5f
+        const val PAD_SEND = 0.6f
+        const val PAD_STAGGER_SECONDS = 0.3
+        const val NEW_NODE_SWELL_SECONDS = 6.0
+        const val NEW_NODE_SWELL_VELOCITY = 0.18f
+
+        const val LOOP_DAY_WEIGHT = 0.6
+        const val LOOP_FIRE_BASE = 0.35
+        const val LOOP_SLOWING = 0.3
+        const val MIN_LOOP_PERIOD = 17.0
+        const val MAX_LOOP_PERIOD = 60.0
+        const val PAD_LOOP_HOLD = 0.4
+        const val SHIMMER_LOOP_HOLD = 0.3
+        const val PAD_LOOP_VELOCITY = 0.4f
+        const val SHIMMER_LOOP_VELOCITY = 0.3f
+        const val LOOP_PAN_SPREAD = 0.4f
+        const val LOOP_SEND = 0.7f
+        const val SHIMMER_SEND = 0.9f
+        const val SHIMMER_BRIGHTNESS = 0.9f
+
         const val MEMORY_VELOCITY = 0.15f
+        const val MEMORY_SECONDS = 3.0
+        const val MEMORY_BRIGHTNESS = 0.3f
+        const val FRAGMENT_NOTES = 2
+        const val MOTIF_FALLOFF = 0.85f
+        const val TEXT_STEP_SECONDS = 0.35
+        const val ECHO_DECAY = 0.55f
+        const val ECHO_SEND_STEP = 0.1f
+        const val ECHO_BRIGHTNESS = 0.8f
+
+        const val ANSWER_MIN_SECONDS = 2.0
+        const val ANSWER_MAX_SECONDS = 4.0
+        const val ANSWER_GAP_SECONDS = 20.0
+        const val ANSWER_VELOCITY = 0.3f
+        const val ANSWER_SEND = 0.5f
+        const val ANSWER_SECONDS = 1.4
+        const val ANSWER_BRIGHTNESS = 0.45f
+
         const val DYAD_MS = 60_000L
         const val DYAD_SECONDS = 4.0
         const val DYAD_VELOCITY = 0.25f
@@ -412,5 +734,53 @@ class Composer(seed: Long, private val sampleRate: Int) {
         const val ROUTE_STEP_SECONDS = 0.3
         const val ROUTE_NOTE_SECONDS = 0.8
         const val ROUTE_VELOCITY = 0.45f
+        const val ROUTE_SEND = 0.5f
+        const val ROUTE_BRIGHTNESS = 0.5f
+
+        const val CHIME_WAIT_SECONDS = 60.0
+        const val CHIME_STEP_SECONDS = 1.5
+        const val CHIME_SECONDS = 3.0
+        const val CHIME_VELOCITY = 0.2f
+        const val CHIME_SEND = 0.8f
+        const val CHIME_BRIGHTNESS = 0.3f
+        const val DAWN_MINUTE = 7 * 60
+        const val DUSK_MINUTE = 19 * 60
+        const val SHIMMER_SWELL_SECONDS = 16.0
+        const val SHIMMER_SWELL_STEP_SECONDS = 1.5
+        const val SHIMMER_SWELL_VELOCITY = 0.3f
+        const val SHIMMER_SWELL_PAN = 0.3f
+
+        const val GESTURE_SAMPLE_MS = 60_000L
+        const val LOW_SWELL_WAIT_MS = 10L * 60 * 1000
+        const val LOW_SWELL_SECONDS = 14.0
+        const val LOW_SWELL_VELOCITY = 0.4f
+        const val LOW_SWELL_SEND = 0.7f
+        const val LOW_SWELL_BRIGHTNESS = 0.2f
+        const val GUST_DELTA_MPS = 3f
+        const val GUST_GAP_MS = 30_000L
+        const val GUST_VELOCITY = 0.2f
+        const val GUST_VELOCITY_PER_MPS = 0.03f
+        const val GUST_MAX_VELOCITY = 0.5f
+        const val GUST_SECONDS = 3.0
+        const val GUST_SEND = 0.6f
+        const val GUST_BRIGHTNESS = 0.3f
+        const val LYDIAN_COLOR_SEMITONE = 6
+        const val AEOLIAN_COLOR_SEMITONE = 8
+        const val COLOR_VELOCITY = 0.25f
+        const val COLOR_SEND = 0.8f
+        const val COLOR_SECONDS = 3.0
+        const val COLOR_BRIGHTNESS = 0.5f
+
+        const val MAX_SESSION_VOICES = 3
+        const val SESSION_STAGGER_SECONDS = 0.4
+        const val SESSION_VELOCITY = 0.12f
+        const val SESSION_BRIGHTNESS = 0.3f
+        const val SILENT_MS = 3600L * 1000
+        const val FAREWELL_CHECK_MS = 60_000L
+        const val FAREWELL_STEP_SECONDS = 0.7
+        const val FAREWELL_SECONDS = 2.5
+        const val FAREWELL_VELOCITY = 0.25f
+        const val FAREWELL_SEND = 0.8f
+        const val FAREWELL_BRIGHTNESS = 0.3f
     }
 }

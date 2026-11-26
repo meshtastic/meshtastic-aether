@@ -1,4 +1,4 @@
-package org.meshtastic.ambient.ui
+package org.meshtastic.ambient.mesh
 
 import okio.ByteString.Companion.toByteString
 import org.meshtastic.ambient.music.Rng
@@ -17,7 +17,7 @@ import kotlin.io.encoding.Base64
  * A synthetic capture in the replay format (`<epochMillis>\t<base64 FromRadio>`): nine named nodes around a made-up
  * origin, a few minutes of mixed traffic and a drifting temperature. No real node data; same bytes every call.
  */
-object DemoCapture {
+internal object DemoCapture {
     private const val BASE = 1_700_000_000_000L
     private const val NODES = 9
     private const val SECONDS = 240

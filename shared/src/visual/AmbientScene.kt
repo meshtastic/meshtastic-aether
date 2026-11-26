@@ -21,8 +21,9 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.geometry.Rect
 import org.meshtastic.ambient.mesh.PacketKind
 import org.meshtastic.ambient.music.Rng
+import org.meshtastic.ambient.theme.LocalAmbientPalette
 import org.meshtastic.ambient.ui.AmbientEngine
-import kotlin.math.PI
+import androidx.compose.ui.unit.dp
 import kotlin.math.sin
 
 private const val DITHER_SIZE = 96
@@ -43,25 +44,7 @@ private fun ditherTile(): ImageBitmap {
     return bmp
 }
 
-private fun kindHue(kind: PacketKind): Float = when (kind) {
-    PacketKind.Text -> 40f
-    PacketKind.Position -> 150f
-    PacketKind.Telemetry -> 190f
-    PacketKind.NodeInfo -> 270f
-    PacketKind.Routing -> 320f
-    PacketKind.Traceroute -> 340f
-    PacketKind.NeighborInfo -> 210f
-    PacketKind.Other, PacketKind.Encrypted -> 0f
-}
-
-private fun nodeColor(node: Long): Color = nodeRgb(node).let { Color(it.r / 255f, it.g / 255f, it.b / 255f) }
-
-/** A node's ripples wear its color, Text rings pushed toward white; encrypted and other traffic stays neutral. */
-private fun rippleColor(node: Long, kind: PacketKind): Color = when (kind) {
-    PacketKind.Encrypted, PacketKind.Other -> Color.hsv(kindHue(kind), if (kind == PacketKind.Other) 0f else 0.55f, 1f)
-    PacketKind.Text -> nodeRgb(node).towardWhite(0.5).let { Color(it.r / 255f, it.g / 255f, it.b / 255f) }
-    else -> nodeColor(node)
-}
+private fun Rgb.toColor(): Color = Color(r / 255f, g / 255f, b / 255f)
 
 /** The full-screen ambient scene: gradient, haze, orbs and ripples, redrawn every frame on the audio clock. */
 @Composable
@@ -77,17 +60,24 @@ fun AmbientScene(engine: AmbientEngine, modifier: Modifier = Modifier) {
             frame++
         }
     }
+    val palette = LocalAmbientPalette.current
+    val bgRgb = remember(palette) { palette.backgroundTop.toRgb() }
+    val colors = remember(palette) { HashMap<Long, Color>() }
+    fun nodeColor(node: Long): Color = colors.getOrPut(node) { nodeRgb(node, bgRgb).toColor() }
     Canvas(modifier) {
         frame.let { }
         val t = engine.playbackSeconds()
-        val dim = scene.dim.toFloat()
         val minute = scene.minuteOfDay
-        val hue = (225.0 + 45.0 * sin(2 * PI * (minute - 360) / 1440.0)).toFloat()
+        val dim = palette.dim(minute).toFloat()
+        scene.aspect = size.width.toDouble() / size.height.coerceAtLeast(1f)
+        val sat = scene.saturation
+        val hueDeg = timeHueOffset(minute) + scene.hueShift
+        val breathe = scene.fieldBreath(t)
         val tex = engine.texture
         val move = 0.4f + 1.2f * ((tex?.detune ?: 0.2f) + (tex?.noise ?: 0.1f))
         val sway = (sin(t * 0.021 * move) * 0.15).toFloat()
-        val top = Color.hsv(hue, 0.55f, 0.16f * dim)
-        val bottom = Color.hsv((hue + 40f) % 360f, 0.6f, 0.07f * dim)
+        val top = shiftColor(palette.backgroundTop, hueDeg, sat, dim * breathe)
+        val bottom = shiftColor(palette.backgroundBottom, hueDeg + 20.0, sat, dim * breathe)
         drawRect(
             Brush.linearGradient(
                 listOf(top, bottom),
@@ -99,11 +89,14 @@ fun AmbientScene(engine: AmbientEngine, modifier: Modifier = Modifier) {
 
         val cx = size.width / 2
         val cy = size.height / 2
-        val radius = minOf(size.width, size.height) / 2 * 0.9f
+        val rx = size.width / 2 * 0.9f
+        val ry = size.height / 2 * 0.9f
+        val radius = minOf(rx, ry)
+        val dp1 = 1.dp.toPx()
         if (scene.haze > 0.005) {
             drawCircle(
                 Brush.radialGradient(
-                    listOf(Color.White.copy(alpha = (scene.haze * 0.12 * dim).toFloat()), Color.Transparent),
+                    listOf(desaturate(palette.haze, sat).copy(alpha = (scene.haze * 0.12 * dim).toFloat()), Color.Transparent),
                     center = Offset(cx, cy),
                     radius = radius * 1.4f,
                 ),
@@ -113,12 +106,12 @@ fun AmbientScene(engine: AmbientEngine, modifier: Modifier = Modifier) {
         }
 
         fun place(o: Orb): Offset = Offset(
-            cx + ((o.x + scene.driftX(o.node, t)) * radius).toFloat(),
-            cy + ((o.y + scene.driftY(o.node, t)) * radius).toFloat(),
+            cx + ((o.x + scene.driftX(o.node, t)) * rx).toFloat(),
+            cy + ((o.y + scene.driftY(o.node, t)) * ry).toFloat(),
         )
 
         fun at(node: Long?): Offset? = when {
-            node == null -> scene.anchor?.let { Offset(cx + (scene.driftX(it.node, t) * radius).toFloat(), cy + (scene.driftY(it.node, t) * radius).toFloat()) } ?: Offset(cx, cy)
+            node == null -> scene.anchor?.let { Offset(cx + (scene.driftX(it.node, t) * rx).toFloat(), cy + (scene.driftY(it.node, t) * ry).toFloat()) } ?: Offset(cx, cy)
             node == scene.anchor?.node -> at(null)
             else -> scene.orb(node)?.let { place(it) }
         }
@@ -126,30 +119,32 @@ fun AmbientScene(engine: AmbientEngine, modifier: Modifier = Modifier) {
         for (e in scene.edges) {
             val a = at(e.a) ?: continue
             val b = at(e.b) ?: continue
-            drawLine(Color.White.copy(alpha = (0.12 * scene.edgeFade(e) * dim).toFloat()), a, b, strokeWidth = 1f)
+            drawLine(palette.edge.copy(alpha = (0.12 * scene.edgeFade(e) * dim).toFloat()), a, b, strokeWidth = dp1)
         }
-        scene.anchor?.let {
-            drawCircle(
-                nodeColor(it.node).copy(alpha = 0.55f * dim),
-                radius = radius * 0.02f,
-                center = at(null) ?: Offset(cx, cy),
-                style = Stroke(width = 2f),
-            )
-        }
+        val ring = scene.anchorBreath.toFloat()
+        val ringAlpha = if (scene.linked) 0.45f + 0.25f * ring else 0.2f + 0.6f * ring
+        drawCircle(
+            palette.anchor.copy(alpha = ringAlpha * dim),
+            radius = radius * ANCHOR_RING * (0.9f + 0.2f * ring),
+            center = at(null) ?: Offset(cx, cy),
+            style = Stroke(width = 2.dp.toPx()),
+        )
         for (o in scene.orbs) {
-            val g = scene.glow(o).toFloat()
-            val r = radius * 0.035f * (0.7f + g)
+            val g = scene.glow(o)
+            val breath = scene.breath(o.node, t).toFloat()
             val c = place(o)
-            val color = nodeColor(o.node)
+            val color = desaturate(nodeColor(o.node), sat)
+            val haloR = radius * 0.04f * (1f + g.toFloat()) * breath
             drawCircle(
                 Brush.radialGradient(
-                    listOf(color.copy(alpha = (g * dim).coerceIn(0f, 1f)), Color.Transparent),
+                    listOf(color.copy(alpha = orbHaloAlpha(g) * dim), Color.Transparent),
                     center = c,
-                    radius = r * 3f,
+                    radius = haloR * 3f,
                 ),
-                radius = r * 3f,
+                radius = haloR * 3f,
                 center = c,
             )
+            drawCircle(color.copy(alpha = orbCoreAlpha(g) * dim), radius = maxOf(1.5.dp.toPx(), radius * 0.008f * (0.9f + g.toFloat() * 0.6f)) * breath, center = c)
         }
         for (pu in scene.pulses) {
             val from = at(pu.fromNode) ?: continue
@@ -157,9 +152,9 @@ fun AmbientScene(engine: AmbientEngine, modifier: Modifier = Modifier) {
             val p = scene.progress(pu).toFloat()
             val head = Offset(from.x + (to.x - from.x) * p, from.y + (to.y - from.y) * p)
             val tail = Offset(from.x + (to.x - from.x) * (p - 0.25f).coerceAtLeast(0f), from.y + (to.y - from.y) * (p - 0.25f).coerceAtLeast(0f))
-            val color = nodeColor(pu.colorNode)
+            val color = desaturate(nodeColor(pu.colorNode), sat)
             val a = (if (p >= 1f) 0.4f else 0.85f) * dim
-            drawLine(color.copy(alpha = a * 0.5f), tail, head, strokeWidth = 2f)
+            drawLine(color.copy(alpha = a * 0.5f), tail, head, strokeWidth = 2.dp.toPx())
             drawCircle(color.copy(alpha = a), radius = radius * 0.012f, center = head)
         }
         for (rp in scene.ripples) {
@@ -167,12 +162,17 @@ fun AmbientScene(engine: AmbientEngine, modifier: Modifier = Modifier) {
             val p = scene.progress(rp).toFloat()
             val fade = (1f - p) * (1f - p) * (if (rp.echo == 0) 0.8f else 0.35f) * dim
             val maxR = radius * (0.12f + 0.25f * rp.strength)
+            val color = if (rp.kind == PacketKind.Other) palette.text else nodeColor(rp.node)
+            val width = (if (rp.kind == PacketKind.Text) 2.5.dp.toPx() else 1.5.dp.toPx()) + 2.dp.toPx() * (1f - p)
             drawCircle(
-                rippleColor(rp.node, rp.kind).copy(alpha = fade),
+                desaturate(color, sat).copy(alpha = fade),
                 radius = maxR * p,
                 center = place(o),
-                style = Stroke(width = 2f + 3f * (1f - p)),
+                style = Stroke(width = width),
             )
         }
     }
 }
+
+/** The anchor ring's radius as a fraction of the scene radius. */
+private const val ANCHOR_RING = 0.035f

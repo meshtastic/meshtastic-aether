@@ -42,13 +42,13 @@ private class RadioClientFeed(private val client: RadioClient) : SdkFeed {
  * (`NodeSeen`, `Environment`, `Vitals`, `Self`) and no `PacketHeard`, `Neighbors` or `Route` for [warmUpMillis], because the
  * node snapshot and retained handshake packets flush at that point.
  */
-class SdkMeshSource internal constructor(
+internal class SdkMeshSource internal constructor(
     private val feed: SdkFeed,
     private val warmUpMillis: Long,
     private val nowMillis: () -> Long,
 ) : MeshSource {
 
-    constructor(client: RadioClient, warmUpMillis: Long = 5_000, nowMillis: () -> Long) :
+    constructor(client: RadioClient, warmUpMillis: Long = WARM_UP_MILLIS, nowMillis: () -> Long) :
         this(RadioClientFeed(client), warmUpMillis, nowMillis)
 
     private val seenThisSession = HashSet<Long>()
@@ -132,3 +132,6 @@ class SdkMeshSource internal constructor(
         }
     }
 }
+
+/** How long after a connect the source reports state only: the node snapshot and retained packets flush then. */
+internal const val WARM_UP_MILLIS = 5_000L

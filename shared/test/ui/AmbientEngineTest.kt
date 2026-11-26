@@ -1,0 +1,201 @@
+package org.meshtastic.ambient.ui
+
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.advanceTimeBy
+import kotlinx.coroutines.test.currentTime
+import kotlinx.coroutines.test.runCurrent
+import kotlinx.coroutines.test.runTest
+import org.meshtastic.ambient.audio.AudioSink
+import org.meshtastic.ambient.audio.BlockRenderer
+import org.meshtastic.ambient.mesh.GeoPoint
+import org.meshtastic.ambient.mesh.LinkState
+import org.meshtastic.ambient.mesh.MeshEvent
+import org.meshtastic.ambient.mesh.MeshSource
+import org.meshtastic.ambient.mesh.PacketKind
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
+import kotlin.test.assertTrue
+
+@OptIn(ExperimentalCoroutinesApi::class)
+class AmbientEngineTest {
+    private class FakeSink : AudioSink {
+        override val sampleRate = 48_000
+        var renderer: BlockRenderer? = null
+        var frame = 0L
+        var stopped = false
+
+        override fun start(renderer: BlockRenderer) {
+            this.renderer = renderer
+        }
+
+        override fun stop() {
+            stopped = true
+        }
+
+        override fun playbackFrame(): Long = frame
+    }
+
+    private class FlowSource(private val flow: Flow<MeshEvent>) : MeshSource {
+        override val events: Flow<MeshEvent> = flow
+    }
+
+    private val base = 1_700_000_000_000L
+
+    private fun TestScope.engine(sink: FakeSink, source: Flow<MeshEvent>) = AmbientEngine(
+        FlowSource(source), sink, seed = 11L, lookaheadMillis = 400,
+        now = { base + currentTime },
+        composerContext = StandardTestDispatcher(testScheduler),
+    )
+
+    // Regression: the engine used to leave the scene always "linked", so a lost link never desaturated the field.
+    @Test
+    fun `the scene is unlinked while connecting and lost and linked while connected`() = runTest {
+        val link = MutableSharedFlow<MeshEvent>()
+        val e = engine(FakeSink(), link)
+        assertFalse(e.scene.linked, "starts unlinked: connecting")
+        val job = launch { e.run() }
+        runCurrent()
+        link.emit(MeshEvent.Link(LinkState.Connected, base))
+        runCurrent()
+        assertTrue(e.scene.linked)
+        assertEquals(LinkState.Connected, e.status.link)
+        link.emit(MeshEvent.Link(LinkState.Lost, base + 1))
+        runCurrent()
+        assertFalse(e.scene.linked)
+        assertEquals(LinkState.Lost, e.status.link)
+        link.emit(MeshEvent.Link(LinkState.Simulated, base + 2))
+        runCurrent()
+        assertTrue(e.scene.linked, "the demo link is a link")
+        job.cancel()
+    }
+
+    // Regression: notes the composer scheduled never reached the scene, so only packets drew.
+    @Test
+    fun `notes the composer schedules for a node pulse that node's orb`() = runTest {
+        val nodes = listOf(0x0A000101L, 0x0A000202L, 0x0A000303L)
+        val source = flow {
+            emit(MeshEvent.Link(LinkState.Connected, base))
+            emit(MeshEvent.Self(0x0A0000FFL, "Home", GeoPoint(45.0, -93.0), base))
+            nodes.forEachIndexed { i, n ->
+                emit(MeshEvent.NodeSeen(n, "N$i", GeoPoint(45.0 + 0.002 * i, -93.0 + 0.003 * i), true, base))
+            }
+            var k = 0
+            while (true) {
+                delay(1_000)
+                emit(MeshEvent.PacketHeard(nodes[k % 3], PacketKind.Text, 3f, -90, 1, false, base + currentTime))
+                k++
+            }
+        }
+        val sink = FakeSink()
+        val e = engine(sink, source)
+        val job = launch { e.run() }
+        val block = FloatArray(2 * 4_800)
+        val driver = launch {
+            while (true) {
+                delay(100)
+                sink.renderer?.render(block, 4_800)
+                sink.frame += 4_800
+                e.scene.update(sink.frame)
+            }
+        }
+        advanceTimeBy(90_000)
+        driver.cancel()
+        job.cancelAndJoin()
+        val pulsed = e.scene.orbs.filter { it.notePulseFrame != Long.MIN_VALUE }
+        assertTrue(pulsed.isNotEmpty(), "some orb pulsed from a note")
+        assertTrue(pulsed.all { it.node in nodes })
+        assertEquals(3, e.status.nodes)
+        assertTrue(e.status.section.isNotEmpty() && e.status.key.isNotEmpty(), "status carries the composer's section and key")
+        assertTrue(sink.stopped)
+    }
+
+    // Regression: demo mode pinned the composer's form but the status label read a second unpinned Form.
+    @Test
+    fun `a pinned form reports a full section`() = runTest {
+        val e = AmbientEngine(
+            FlowSource(flow { awaitCancellation() }), FakeSink(), 11L, 400,
+            now = { base + currentTime }, pinFormFull = true, composerContext = StandardTestDispatcher(testScheduler),
+        )
+        val job = launch { e.run() }
+        runCurrent()
+        advanceTimeBy(500)
+        job.cancel()
+        assertEquals("1 - full", e.status.section)
+    }
+
+    // Retry theory: 2 s then 4 s between attempts.
+    @Test
+    fun `a failing open shows the error and retries after two then four seconds`() = runTest {
+        var attempts = 0
+        val e = engine(FakeSink(), flow { awaitCancellation() })
+        val job = launch {
+            e.run {
+                attempts++
+                if (attempts < 3) throw IllegalStateException("boom")
+            }
+        }
+        runCurrent()
+        assertEquals(1, attempts)
+        assertEquals("boom", e.status.error)
+        advanceTimeBy(1_999)
+        assertEquals(1, attempts)
+        advanceTimeBy(2)
+        assertEquals(2, attempts)
+        advanceTimeBy(3_900)
+        assertEquals(2, attempts)
+        advanceTimeBy(200)
+        assertEquals(3, attempts)
+        assertNull(e.status.error, "a successful retry clears the error")
+        job.cancel()
+    }
+
+    @Test
+    fun `a lost link is reopened with backoff until it connects again`() = runTest {
+        val link = MutableSharedFlow<MeshEvent>()
+        var opens = 0
+        val e = engine(FakeSink(), link)
+        val job = launch { e.run { opens++ } }
+        runCurrent()
+        link.emit(MeshEvent.Link(LinkState.Connected, base))
+        runCurrent()
+        link.emit(MeshEvent.Link(LinkState.Lost, base + 1))
+        runCurrent()
+        assertEquals(1, opens)
+        advanceTimeBy(2_100)
+        assertEquals(2, opens)
+        advanceTimeBy(4_100)
+        assertEquals(3, opens)
+        link.emit(MeshEvent.Link(LinkState.Connected, base + 2))
+        runCurrent()
+        advanceTimeBy(120_000)
+        assertEquals(3, opens, "no reopen once connected")
+        job.cancel()
+    }
+
+    @Test
+    fun `dismissing the error clears it`() = runTest {
+        val e = engine(FakeSink(), flow { awaitCancellation() })
+        val gate = CompletableDeferred<Unit>()
+        val job = launch { e.run { gate.await(); throw IllegalStateException("late") } }
+        runCurrent()
+        gate.complete(Unit)
+        runCurrent()
+        assertNotNull(e.status.error)
+        e.dismissError()
+        assertNull(e.status.error)
+        job.cancel()
+    }
+}
