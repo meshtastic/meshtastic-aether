@@ -13,7 +13,7 @@ settings:
   compose: enabled
   android:
     applicationId: org.meshtastic.aether
-    versionCode: 1000
+    versionCode: 1 # CI stamps the commit count (scripts/stamp-build.sh)
     versionName: 0.1.0
     namespace: org.meshtastic.aether
     minSdk: 26 # meshtastic-sdk's floor

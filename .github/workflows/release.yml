@@ -36,6 +36,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.version.outputs.version }}
+      code: ${{ steps.version.outputs.code }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -53,6 +54,7 @@ jobs:
             exit 1
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "code=$(git rev-list --count HEAD)" >> "$GITHUB_OUTPUT"
 
       - name: The commit is on main
         if: ${{ !inputs.dry_run }}
@@ -102,7 +104,9 @@ jobs:
     needs: [prepare, ci]
     uses: ./.github/workflows/build-artifacts.yml
     with:
-      version: ${{ needs.prepare.outputs.version }}
+      code: ${{ needs.prepare.outputs.code }}
+      # A dry run may build a branch, whose commit count means nothing on main, so its files never offer updates.
+      channel: ${{ inputs.dry_run && 'dev' || 'release' }}
       label: ${{ needs.prepare.outputs.version }}
     secrets: inherit
 
@@ -115,6 +119,7 @@ jobs:
       contents: write
     env:
       VERSION: ${{ needs.prepare.outputs.version }}
+      CODE: ${{ needs.prepare.outputs.code }}
       GH_TOKEN: ${{ github.token }}
     steps:
       - name: Checkout
@@ -136,8 +141,12 @@ jobs:
             git push origin "v$VERSION"
           fi
 
+      - name: Write the update manifest
+        run: scripts/update-manifest.sh "$VERSION" "$CODE" "v$VERSION" artifacts/android/* artifacts/desktop-*/* > update.properties
+
+      # The manifest goes up with the files, and releases/latest only moves once the release is published.
       - name: Publish the release
         run: |
           gh release create "v$VERSION" --verify-tag --title "Aether $VERSION" \
             --notes-file artifacts/release-notes/release-notes.md \
-            artifacts/android/* artifacts/desktop-*/* artifacts/web/*
+            artifacts/android/* artifacts/desktop-*/* artifacts/web/* update.properties

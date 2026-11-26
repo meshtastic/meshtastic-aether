@@ -1,6 +1,8 @@
 name: Snapshot
 
-# After CI passes on a push to main, build that commit and replace the rolling `snapshot` prerelease with its files.
+# After CI passes on a push to main, build that commit and move the rolling `snapshot` prerelease to it. The release
+# is updated in place, with update.properties uploaded after every file it names, so the app's update check never
+# meets a missing manifest or a manifest naming a file not yet there.
 # Off while the repository is private: CI skips there, so nothing ever passes to trigger this.
 on:
   workflow_run:
@@ -29,13 +31,23 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       sha: ${{ steps.name.outputs.sha }}
-      version: ${{ steps.name.outputs.version }}
+      code: ${{ steps.name.outputs.code }}
       label: ${{ steps.name.outputs.label }}
+      newer: ${{ steps.newer.outputs.newer }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          fetch-depth: 0
+
+      # The build code is the commit count, so a commit off main could outnumber every later snapshot.
+      - name: The commit is on main
+        run: |
+          if ! git merge-base --is-ancestor HEAD origin/main; then
+            echo "::error::snapshots build commits on main only"
+            exit 1
+          fi
 
       - name: Name the snapshot
         id: name
@@ -44,22 +56,39 @@ jobs:
           version=$(sed -n 's/^    versionName: *//p' androidApp/module.yaml | head -1)
           {
             echo "sha=$sha"
-            echo "version=$version"
+            echo "code=$(git rev-list --count HEAD)"
             echo "label=$version-SNAPSHOT-${sha:0:7}"
           } >> "$GITHUB_OUTPUT"
+
+      # A re-run or a slow run for an older commit must not replace a newer snapshot; a dispatch may rebuild the same one.
+      - name: Newer than the published snapshot
+        id: newer
+        env:
+          CODE: ${{ steps.name.outputs.code }}
+          DISPATCH: ${{ github.event_name == 'workflow_dispatch' }}
+        run: |
+          published=$(curl -fsSL "https://github.com/${{ github.repository }}/releases/download/snapshot/update.properties" | sed -n 's/^code=//p' || true)
+          if [ -n "$published" ] && { [ "$published" -gt "$CODE" ] || { [ "$published" -eq "$CODE" ] && [ "$DISPATCH" != true ]; }; }; then
+            echo "::notice::the published snapshot is build $published; this is build $CODE, so nothing is published"
+            echo "newer=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "newer=true" >> "$GITHUB_OUTPUT"
+          fi
 
   build:
     name: Build
     needs: prepare
+    if: ${{ needs.prepare.outputs.newer == 'true' }}
     uses: ./.github/workflows/build-artifacts.yml
     with:
-      version: ${{ needs.prepare.outputs.version }}
+      code: ${{ needs.prepare.outputs.code }}
+      channel: snapshot
       label: ${{ needs.prepare.outputs.label }}
       ref: ${{ needs.prepare.outputs.sha }}
     secrets: inherit
 
   publish:
-    name: Replace the snapshot prerelease
+    name: Move the snapshot prerelease
     needs: [prepare, build]
     runs-on: ubuntu-latest
     permissions:
@@ -67,6 +96,7 @@ jobs:
     env:
       SHA: ${{ needs.prepare.outputs.sha }}
       LABEL: ${{ needs.prepare.outputs.label }}
+      CODE: ${{ needs.prepare.outputs.code }}
       GH_TOKEN: ${{ github.token }}
     steps:
       - name: Checkout
@@ -87,9 +117,22 @@ jobs:
             scripts/changelog.sh preview
           } > snapshot-notes.md
 
-      - name: Replace the prerelease
+      - name: Write the update manifest
+        run: scripts/update-manifest.sh "$LABEL" "$CODE" snapshot artifacts/android/* artifacts/desktop-*/* > update.properties
+
+      - name: Move the prerelease
         run: |
-          gh release delete snapshot --cleanup-tag --yes || true
-          gh release create snapshot --prerelease --target "$SHA" --title "Snapshot $LABEL" \
-            --notes-file snapshot-notes.md \
-            artifacts/android/* artifacts/desktop-*/* artifacts/web/*
+          files=(artifacts/android/* artifacts/desktop-*/* artifacts/web/*)
+          if gh release view snapshot >/dev/null 2>&1; then
+            gh api -X PATCH "repos/${{ github.repository }}/git/refs/tags/snapshot" -f sha="$SHA" -F force=true >/dev/null
+            gh release edit snapshot --prerelease --title "Snapshot $LABEL" --notes-file snapshot-notes.md
+          else
+            gh release create snapshot --prerelease --target "$SHA" --title "Snapshot $LABEL" --notes-file snapshot-notes.md
+          fi
+          gh release upload snapshot --clobber "${files[@]}"
+          gh release upload snapshot --clobber update.properties
+          # Then drop the previous build's files, which no manifest names any more.
+          keep=$(printf '%s\n' update.properties "${files[@]##*/}")
+          gh release view snapshot --json assets -q '.assets[].name' | while read -r name; do
+            grep -qxF "$name" <<<"$keep" || gh release delete-asset snapshot "$name" --yes </dev/null
+          done

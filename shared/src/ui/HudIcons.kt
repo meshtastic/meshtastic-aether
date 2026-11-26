@@ -188,6 +188,21 @@ internal object HudIcons {
         }
     }
 
+    /** An arrow down into a tray: an update is ready. */
+    val Update: ImageVector by lazy {
+        icon("Update") {
+            stroked {
+                moveTo(12f, 4f)
+                lineTo(12f, 15f)
+                moveTo(7.5f, 10.5f)
+                lineTo(12f, 15f)
+                lineTo(16.5f, 10.5f)
+                moveTo(5f, 19.5f)
+                lineTo(19f, 19.5f)
+            }
+        }
+    }
+
     fun look(choice: PaletteChoice): ImageVector = when (choice) {
         PaletteChoice.Standard -> LookStandard
         PaletteChoice.Projector -> LookProjector

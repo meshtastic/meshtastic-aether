@@ -2,6 +2,7 @@
 
 package org.meshtastic.aether.ui
 
+import org.meshtastic.aether.update.Updater
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.MutableTransitionState
 import androidx.compose.animation.fadeIn
@@ -112,6 +113,7 @@ internal fun StatusOverlay(
     hasKeyboard: Boolean,
     modifier: Modifier = Modifier,
     isTelevision: Boolean = false,
+    updater: Updater? = null,
 ) {
     val motion = MaterialTheme.motionScheme
     val open = controls.overlayOpen
@@ -168,6 +170,11 @@ internal fun StatusOverlay(
             AnimatedVisibility(visible = open && controls.driversOpen && !wide, enter = enter, exit = exit) {
                 DriversSurface(status, Modifier.holdsHud(controls).heightIn(max = halfHeight))
             }
+            if (updater != null) {
+                AnimatedVisibility(visible = open && controls.updateOpen, enter = enter, exit = exit) {
+                    UpdatePanel(updater, Modifier.holdsHud(controls))
+                }
+            }
             AnimatedVisibility(visible = armed, enter = fadeIn(motion.defaultEffectsSpec()), exit = fadeOut(motion.slowEffectsSpec())) {
                 Surface(color = MaterialTheme.colorScheme.errorContainer, shape = MaterialTheme.shapes.large) {
                     Text(
@@ -181,7 +188,7 @@ internal fun StatusOverlay(
             AnimatedVisibility(visibleState = visible, enter = enter, exit = exit) {
                 HudToolbar(
                     controls, palette, onPalette, onDisconnect, onToggleFullscreen, hasKeyboard,
-                    stacked = compact, isTelevision = isTelevision,
+                    stacked = compact, isTelevision = isTelevision, updater = updater,
                 )
             }
         }
@@ -257,6 +264,7 @@ private fun HudToolbar(
     hasKeyboard: Boolean,
     stacked: Boolean,
     isTelevision: Boolean = false,
+    updater: Updater? = null,
 ) {
     val focusFirst = remember { FocusRequester() }
     LaunchedEffect(Unit) {
@@ -273,6 +281,7 @@ private fun HudToolbar(
         HeadphonesButton(controls, hasKeyboard)
         DriversButton(controls, hasKeyboard)
         if (onToggleFullscreen != null) HudButton("Fullscreen", HudIcons.Fullscreen, hasKeyboard, onToggleFullscreen)
+        UpdateButton(updater, controls) { onClick -> HudButton("Update", HudIcons.Update, hasKeyboard, onClick) }
         DisconnectButton(controls, onDisconnect, hasKeyboard)
     }
     Column(

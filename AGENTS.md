@@ -13,7 +13,7 @@ This project uses the [Kotlin Toolchain](https://kotlin-toolchain.org/) (a dedic
 - No Locrian; weekday picks the key, time of day picks mode brightness, density, register and decay.
 - A node's role picks the instrument family and its hardware model picks the voice within it (about 15 instruments); packet kind only changes articulation. Encrypted traffic is a pitchless Breath. `hopsTaken == null` means unknown distance, not direct.
 - Mesh-driven parameters follow `docs/mesh-driven-parameters.md`: neutral values equal the constants they replaced, rotation is integrated state with comfort caps, and the clock skeleton (weekday key, time-of-day mode, hour chime, night dim, Form arc) stays.
-- The app only listens: nothing is sent to the mesh, and the only network traffic is the link to the node the person chose.
+- The app only listens: nothing is sent to the mesh, and the only network traffic is the link to the node the person chose and the update check: Android and desktop builds from CI fetch their channel's `update.properties` from the repository's GitHub releases, and download the APK or jar it names only when the person asks to install.
 - A real capture holds real names and positions, so captures stay local (`captures/` is ignored) and committed fixtures are synthetic.
 - Check a wasm run by its `ERROR` lines as well as `Passed` and `Failed`: the browser runner stops a run at 30 s, so keep long renders in `shared/test@jvm`.
 - Commits are Conventional, signed off (`git commit -s`), carry no attribution trailers, and the license is GPL-3.0-or-later.
@@ -46,6 +46,7 @@ This project uses the [Kotlin Toolchain](https://kotlin-toolchain.org/) (a dedic
 - `shared/src/ui`: `AmbientEngine` (owns the clock, composer, synth and sink; each tick carries `composer.params()` to the scene and the overlay's Drivers panel; feeds `Coverage` and logs its line), connect screen, controls, the HUD overlay, settings.
 - `shared/src/visual`: scene model and drawing, driven by the engine's events and the sink's playback frame.
 - `shared/src/log`: `Log` with a file sink on desktop, logcat on Android.
+- `shared/src/update`: `BuildInfo` (stamped in CI), the `update.properties` manifest and the `Updater` contract; `src@updatable` (jvm and android) fetches and verifies, `src@android` installs through `PackageInstaller` (never for an app store install), `src@jvm` swaps the executable jar and restarts. iOS, the web and local builds have no updater. `AETHER_UPDATE_MANIFEST` points the check at another manifest for testing.
 - Apps: `desktopApp`, `androidApp`, `iosApp`, `webApp`. Tools: `tools` (offline render and analyze), `blescan` (Bluetooth scan check).
 
 The contracts `MeshEvent.kt`, `NoteEvent.kt` and `AudioSink.kt` change only on purpose, with every consumer updated.
@@ -58,7 +59,7 @@ Launch flags: `--demo`, `--replay`, `--tcp host[:port]`, `--ask`, `--fullscreen`
 - Expressive opt-ins are file-level (`@file:OptIn(ExperimentalMaterial3ExpressiveApi::class)`), never in a build flag.
 - The theme is `MaterialExpressiveTheme` with `MotionScheme.standard()`: no overshoot, and the toolbar keeps its standard colors so a saturated slab never burns in.
 - UI colors come from `MaterialTheme` roles, never hardcoded values; only the scene reads `LocalAmbientPalette`.
-- A user-visible change adds a fragment to `changelog.d/` (`scripts/changelog.sh check` validates it); never edit `CHANGELOG.md` or the manifest versions by hand, the release cut does both (`RELEASING.md`).
+- A user-visible change adds a fragment to `changelog.d/` (`scripts/changelog.sh check` validates it); never edit `CHANGELOG.md` or the manifest versions by hand, the release cut does both (`RELEASING.md`). Never commit a stamped `BuildInfo.kt` or Android `versionCode`: CI writes them (`scripts/stamp-build.sh`).
 - Test names in `shared/test` take no commas or parentheses: Kotlin/Native rejects them, and only the iOS test compile shows it. Check with `grep -rn 'fun \`[^\`]*[,()][^\`]*\`' shared/test/`.
 - Compose UI tests live in `shared/test@jvm` (`androidx.compose.ui.test.v2.runComposeUiTest`), and no check may need them on wasm. A running session animates forever, so a test cannot wait for it to go idle: test the pieces (`HostCommands`, the chooser, the countdown) on their own.
 - Host menus and Back call `AppCommands` and the shared key path (`perform`), never their own copies of an action, so the two-press disconnect and the haptics apply everywhere.

@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
 # Stamp one app version into every platform manifest, or check that they agree.
 #
-#   scripts/version.sh set <X.Y.Z>     write versionName/versionCode (Android) and MARKETING_VERSION/CURRENT_PROJECT_VERSION (iOS)
+#   scripts/version.sh set <X.Y.Z>     write versionName (Android) and MARKETING_VERSION/CURRENT_PROJECT_VERSION (iOS)
 #   scripts/version.sh check <X.Y.Z>   fail unless every manifest carries <X.Y.Z> and its code
 #   scripts/version.sh show            print the version each manifest carries
 #
-# The build number is MAJOR * 1000000 + MINOR * 1000 + PATCH, so it rises with every release, as Google Play and
-# the App Store require. Desktop and web carry no version of their own.
+# The iOS build number is MAJOR * 1000000 + MINOR * 1000 + PATCH, so it rises with every release, as the App Store
+# requires. The Android versionCode is the commit count, which CI stamps with scripts/stamp-build.sh, so snapshots
+# install over each other too. Desktop and web carry no version of their own.
 set -euo pipefail
 
 root=$(cd "$(dirname "$0")/.." && pwd)
@@ -32,19 +33,13 @@ valid() {
 }
 
 android_name() { sed -n 's/^    versionName: *\(.*\)$/\1/p' "$android" | head -1; }
-android_code() { sed -n 's/^    versionCode: *\([0-9]*\)$/\1/p' "$android" | head -1; }
 ios_names() { sed -n 's/.*MARKETING_VERSION = \([^;]*\);.*/\1/p' "$ios" | sort -u; }
 ios_codes() { sed -n 's/.*CURRENT_PROJECT_VERSION = \([^;]*\);.*/\1/p' "$ios" | sort -u; }
 
 set_version() {
   local version=$1 code
   code=$(code_for "$version")
-  if grep -q '^    versionName:' "$android"; then
-    sed -i.bak -e "s/^    versionName: .*/    versionName: $version/" -e "s/^    versionCode: .*/    versionCode: $code/" "$android"
-  else
-    # Append both under settings.android, after applicationId.
-    sed -i.bak "s/^\(    applicationId: .*\)$/\1\n    versionCode: $code\n    versionName: $version/" "$android"
-  fi
+  sed -i.bak -e "s/^    versionName: .*/    versionName: $version/" "$android"
   sed -i.bak -e "s/MARKETING_VERSION = [^;]*;/MARKETING_VERSION = $version;/" \
     -e "s/CURRENT_PROJECT_VERSION = [^;]*;/CURRENT_PROJECT_VERSION = $code;/" "$ios"
   rm -f "$android.bak" "$ios.bak"
@@ -55,7 +50,6 @@ check_version() {
   local version=$1 code bad=0
   code=$(code_for "$version")
   [ "$(android_name)" = "$version" ] || { echo "androidApp/module.yaml versionName is '$(android_name)', want $version" >&2; bad=1; }
-  [ "$(android_code)" = "$code" ] || { echo "androidApp/module.yaml versionCode is '$(android_code)', want $code" >&2; bad=1; }
   [ "$(ios_names)" = "$version" ] || { echo "iOS MARKETING_VERSION is '$(ios_names | tr '\n' ' ')', want $version" >&2; bad=1; }
   [ "$(ios_codes)" = "$code" ] || { echo "iOS CURRENT_PROJECT_VERSION is '$(ios_codes | tr '\n' ' ')', want $code" >&2; bad=1; }
   [ $bad -eq 0 ] && echo "every manifest carries $version (build $code)"
@@ -66,6 +60,6 @@ check_version() {
 case $1 in
   set) [ $# -eq 2 ] || usage; valid "$2"; set_version "$2" ;;
   check) [ $# -eq 2 ] || usage; valid "$2"; check_version "$2" ;;
-  show) echo "android: $(android_name) ($(android_code))"; echo "ios: $(ios_names | tr '\n' ' ')($(ios_codes | tr '\n' ' '))" ;;
+  show) echo "android: $(android_name)"; echo "ios: $(ios_names | tr '\n' ' ')($(ios_codes | tr '\n' ' '))" ;;
   *) usage ;;
 esac

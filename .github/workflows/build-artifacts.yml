@@ -1,12 +1,17 @@
 name: Build artifacts
 
 # The release and snapshot builds share these jobs: the Android APK and AAB (signed when the keystore secrets exist),
-# a desktop executable jar on Linux and macOS, and the zipped web build, each uploaded as a workflow artifact.
+# a desktop executable jar on Linux and macOS, and the zipped web build, each uploaded as a workflow artifact. Each job
+# stamps the label, build code and update channel first (scripts/stamp-build.sh).
 on:
   workflow_call:
     inputs:
-      version:
-        description: 'The version the manifests carry, checked against the APK'
+      code:
+        description: 'The build code, the commit count of the built commit; the Android versionCode'
+        required: true
+        type: string
+      channel:
+        description: 'What the build follows for updates: release, snapshot or dev'
         required: true
         type: string
       label:
@@ -40,7 +45,8 @@ jobs:
     runs-on: ubuntu-latest
     env:
       VERSION: ${{ inputs.label }}
-      MANIFEST_VERSION: ${{ inputs.version }}
+      CODE: ${{ inputs.code }}
+      CHANNEL: ${{ inputs.channel }}
       HAS_KEYSTORE: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
     steps:
       - name: Checkout
@@ -60,6 +66,10 @@ jobs:
           key: kotlin-${{ runner.os }}-${{ hashFiles('kotlin', 'libs.versions.toml', 'common.module-template.yaml', '**/module.yaml') }}
           restore-keys: |
             kotlin-${{ runner.os }}-
+
+      # After the cache step: its key hashes module.yaml, which the stamp changes on every commit.
+      - name: Stamp the version, build code and update channel
+        run: scripts/stamp-build.sh "$VERSION" "$CODE" "$CHANNEL"
 
       - name: Build the release APK and AAB
         run: |
@@ -93,8 +103,8 @@ jobs:
             cp "$aab" "out/aether-$VERSION-android-unsigned.aab"
           fi
           badging=$("$tools/aapt2" dump badging out/*.apk)
-          if ! grep -q "versionName='$MANIFEST_VERSION'" <<<"$badging"; then
-            echo "::error::the APK does not carry versionName $MANIFEST_VERSION"
+          if ! grep -q "versionCode='$CODE' versionName='$VERSION'" <<<"$badging"; then
+            echo "::error::the APK does not carry versionCode $CODE and versionName $VERSION"
             exit 1
           fi
 
@@ -116,6 +126,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     env:
       VERSION: ${{ inputs.label }}
+      CODE: ${{ inputs.code }}
+      CHANNEL: ${{ inputs.channel }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -134,6 +146,10 @@ jobs:
           key: kotlin-${{ runner.os }}-${{ hashFiles('kotlin', 'libs.versions.toml', 'common.module-template.yaml', '**/module.yaml') }}
           restore-keys: |
             kotlin-${{ runner.os }}-
+
+      # After the cache step: its key hashes module.yaml, which the stamp changes on every commit.
+      - name: Stamp the version, build code and update channel
+        run: scripts/stamp-build.sh "$VERSION" "$CODE" "$CHANNEL"
 
       # The jar bundles the Compose native libraries for the OS it is built on, so each OS gets its own.
       - name: Package the executable jar
@@ -153,6 +169,8 @@ jobs:
     runs-on: ubuntu-latest
     env:
       VERSION: ${{ inputs.label }}
+      CODE: ${{ inputs.code }}
+      CHANNEL: ${{ inputs.channel }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -171,6 +189,10 @@ jobs:
           key: kotlin-${{ runner.os }}-${{ hashFiles('kotlin', 'libs.versions.toml', 'common.module-template.yaml', '**/module.yaml') }}
           restore-keys: |
             kotlin-${{ runner.os }}-
+
+      # After the cache step: its key hashes module.yaml, which the stamp changes on every commit.
+      - name: Stamp the version, build code and update channel
+        run: scripts/stamp-build.sh "$VERSION" "$CODE" "$CHANNEL"
 
       - name: Build and zip the static site
         run: |

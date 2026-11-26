@@ -7,6 +7,7 @@ apply:
 
 aliases:
   - ble: [jvm, android, iosArm64, iosSimulatorArm64]
+  - updatable: [jvm, android]
 
 dependencies:
   - $compose.runtime

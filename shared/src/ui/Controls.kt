@@ -100,6 +100,9 @@ internal class Controls(volume: Float = 1f, headphones: Boolean = false) {
     /** Whether the overlay lists the mesh-driven parameters; shown only while the overlay is. */
     var driversOpen by mutableStateOf(false)
 
+    /** Whether the overlay shows the update panel; shown only while the overlay is. */
+    var updateOpen by mutableStateOf(false)
+
     /** Volume 0..1 before muting. */
     var volume by mutableFloatStateOf(volume.coerceIn(0f, 1f))
 

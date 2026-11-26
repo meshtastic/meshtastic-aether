@@ -1,5 +1,7 @@
 package org.meshtastic.aether
 
+import org.meshtastic.aether.ui.appUpdater
+import org.meshtastic.aether.ui.UpdateChecks
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -171,6 +173,7 @@ fun App(
 ) {
     val platform = remember { getPlatform() }
     val settings = remember { Settings(createKeyValueStore()) }
+    UpdateChecks(appUpdater)
     AppRoot(
         settings, platform, onToggleFullscreen, initialLink, startupError, isFullscreen, hiddenCursor, look, launchedFullscreen,
         ask, screenReaderActive, commands,
@@ -424,6 +427,7 @@ private fun Running(
                 hasKeyboard = platform.hasKeyboard,
                 modifier = Modifier.align(Alignment.TopStart),
                 isTelevision = platform.isTelevision,
+                updater = appUpdater,
             )
         }
     }

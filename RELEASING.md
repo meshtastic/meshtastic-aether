@@ -4,11 +4,13 @@ Aether releases from [`.github/workflows/release.yml`](.github/workflows/release
 
 ## Snapshots
 
-[`.github/workflows/snapshot.yml`](.github/workflows/snapshot.yml) runs after CI passes on a push to `main`. It builds that commit and replaces the rolling `snapshot` prerelease and its tag, with files named `X.Y.Z-SNAPSHOT-<sha>` after the manifest version and notes that list the unreleased changelog. A newer push cancels an older snapshot build. `gh workflow run snapshot.yml --repo meshtastic/meshtastic-aether` builds `main` on demand. Snapshots build against the meshtastic-sdk snapshot the catalog pins, like every build.
+[`.github/workflows/snapshot.yml`](.github/workflows/snapshot.yml) runs after CI passes on a push to `main`. It refuses a commit that is not on `main`, builds it and moves the rolling `snapshot` prerelease and its tag to it in place, with files named `X.Y.Z-SNAPSHOT-<sha>` after the manifest version and notes that list the unreleased changelog. The new files go up first, then `update.properties`, then the previous build's files are deleted, so the update check never finds the manifest missing or naming a file not yet uploaded. A newer push cancels an older snapshot build. `gh workflow run snapshot.yml --repo meshtastic/meshtastic-aether` builds `main` on demand. Snapshots build against the meshtastic-sdk snapshot the catalog pins, like every build.
 
 ## Version
 
-One version, `X.Y.Z`, lives in every platform manifest: `versionName` and `versionCode` in `androidApp/module.yaml`, and `MARKETING_VERSION` and `CURRENT_PROJECT_VERSION` in `iosApp/module.xcodeproj/project.pbxproj`. [`scripts/version.sh`](scripts/version.sh) writes them (`set X.Y.Z`), checks them (`check X.Y.Z`) and prints them (`show`). The build number is `MAJOR * 1000000 + MINOR * 1000 + PATCH`, so it rises with every release. Desktop and web carry no version of their own. The workflow creates the annotated `vX.Y.Z` tag, so nobody tags by hand.
+One version, `X.Y.Z`, lives in every platform manifest: `versionName` in `androidApp/module.yaml`, and `MARKETING_VERSION` and `CURRENT_PROJECT_VERSION` in `iosApp/module.xcodeproj/project.pbxproj`. [`scripts/version.sh`](scripts/version.sh) writes them (`set X.Y.Z`), checks them (`check X.Y.Z`) and prints them (`show`). The iOS build number is `MAJOR * 1000000 + MINOR * 1000 + PATCH`, so it rises with every release. Desktop and web carry no version of their own.
+
+Every CI build is stamped before it is built ([`scripts/stamp-build.sh`](scripts/stamp-build.sh)) with its label (`X.Y.Z` or `X.Y.Z-SNAPSHOT-<sha>`), its build code and its update channel. The build code is the commit count of the built commit: it is the Android `versionCode`, so every snapshot and release installs over the one before, and the update check compares it. A release and the snapshot of the same commit share a code. A dry run is stamped with the `dev` channel, so its files never offer updates. The workflow creates the annotated `vX.Y.Z` tag, so nobody tags by hand.
 
 ## Changelog
 
@@ -37,3 +39,7 @@ The Android files are signed when these repository secrets exist, and ship unsig
 7. It tags `vX.Y.Z` and publishes the GitHub Release with every file. A dry run stops before this step and leaves the files as workflow artifacts.
 
 The iOS app is not attached: an `.ipa` needs a signing identity and provisioning profile.
+
+## Updates
+
+Every release and the snapshot carry `update.properties` ([`scripts/update-manifest.sh`](scripts/update-manifest.sh)): the label, the build code, the tag, and per platform the file and its SHA-256. Only a signed APK is listed, since Android refuses an unsigned one over a signed install. A release build reads `releases/latest/download/update.properties`, which skips prereleases; a snapshot build reads the `snapshot` release's. Android verifies the digest, the package name, the signing key and a higher `versionCode` before handing the APK to the system installer, and does nothing for a Play, F-Droid or Amazon install. The desktop jar verifies the digest, keeps the old jar as `<jar>.bak`, swaps the new one in and restarts. The Android build declares `REQUEST_INSTALL_PACKAGES`, which Google Play restricts: an AAB uploaded to Play needs it removed.

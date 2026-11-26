@@ -17,6 +17,7 @@ import androidx.compose.ui.window.rememberWindowState
 import org.meshtastic.aether.log.Log
 import org.meshtastic.aether.ui.AppCommands
 import org.meshtastic.aether.ui.parseLaunchArgs
+import org.meshtastic.aether.update.DesktopLaunch
 import java.awt.Cursor
 import java.awt.Dimension
 import java.awt.Point
@@ -69,7 +70,9 @@ private const val APP_NAME = "Aether"
 fun main(args: Array<String>) {
     // macOS names the menu bar's app menu and the Dock entry from this, read once when AWT starts; without it they show the JVM class.
     System.setProperty("apple.awt.application.name", APP_NAME)
-    val launch = parseLaunchArgs(args)
+    val appArgs = DesktopLaunch.afterUpdate(args)
+    DesktopLaunch.args = appArgs
+    val launch = parseLaunchArgs(appArgs.toTypedArray())
     KeepAwake.start()
     val icon = loadIcon()
     icon?.let(::setDockIcon)
