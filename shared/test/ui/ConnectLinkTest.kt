@@ -8,13 +8,24 @@ import kotlin.test.assertNull
 class ConnectLinkTest {
     // Regression: the browser has no raw sockets and offering Network there leads to a dead pane.
     @Test
-    fun `the chooser offers only the kinds the platform can run`() {
-        assertEquals(listOf(LinkKind.Demo, LinkKind.WebSocket), availableKinds(supportsTcp = false, bluetooth = false))
+    fun `the screen opens on the pending kind then the last chosen then the first real link`() {
+        val all = availableKinds(supportsTcp = true, bluetooth = true)
+        val web = availableKinds(supportsTcp = false, bluetooth = false)
+        assertEquals(LinkKind.WebSocket, initialKind(all, LinkKind.WebSocket, LinkKind.Demo))
+        assertEquals(LinkKind.Demo, initialKind(all, null, LinkKind.Demo))
+        assertEquals(LinkKind.Network, initialKind(all, null, null))
+        assertEquals(LinkKind.WebSocket, initialKind(web, null, null))
+        assertEquals(LinkKind.WebSocket, initialKind(web, LinkKind.Network, LinkKind.Bluetooth), "kinds the platform lacks are skipped")
+    }
+
+    @Test
+    fun `the chooser offers only the kinds the platform can run with real links first and the demo last`() {
+        assertEquals(listOf(LinkKind.WebSocket, LinkKind.Demo), availableKinds(supportsTcp = false, bluetooth = false))
         assertEquals(
-            listOf(LinkKind.Demo, LinkKind.Network, LinkKind.Bluetooth, LinkKind.WebSocket),
+            listOf(LinkKind.Network, LinkKind.Bluetooth, LinkKind.WebSocket, LinkKind.Demo),
             availableKinds(supportsTcp = true, bluetooth = true),
         )
-        assertEquals(listOf(LinkKind.Demo, LinkKind.Bluetooth, LinkKind.WebSocket), availableKinds(supportsTcp = false, bluetooth = true))
+        assertEquals(listOf(LinkKind.Bluetooth, LinkKind.WebSocket, LinkKind.Demo), availableKinds(supportsTcp = false, bluetooth = true))
     }
 
     // Regression: a signal word flipped at the wrong dBm; the edges belong to the stronger word.

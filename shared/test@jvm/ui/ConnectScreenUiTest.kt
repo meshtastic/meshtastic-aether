@@ -2,6 +2,8 @@ package org.meshtastic.aether.ui
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.semantics.LiveRegionMode
@@ -17,6 +19,7 @@ import androidx.compose.ui.test.assertWidthIsAtLeast
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.isSelected
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performKeyInput
@@ -38,28 +41,61 @@ class ConnectScreenUiTest {
         width: Int = 800,
         height: Int = 600,
         chosen: MutableList<LinkChoice> = mutableListOf(),
-        focusPrimary: Boolean = false,
+        focusChooser: Boolean = false,
+        lastKind: LinkKind? = null,
+        onKind: (LinkKind) -> Unit = {},
     ) = setContent {
         AmbientTheme {
             Box(Modifier.size(width.dp, height.dp)) {
-                ConnectScreen(chosen::add, pending, failure, LinkChoice.Tcp("node.local", 4403), supportsTcp = true, bluetooth = false, focusPrimary = focusPrimary)
+                ConnectScreen(chosen::add, pending, failure, LinkChoice.Tcp("node.local", 4403), supportsTcp = true, bluetooth = false, focusChooser = focusChooser, lastKind = lastKind, onKind = onKind)
             }
         }
     }
 
-    // A D-pad user has no pointer to land on the primary button, so a TV starts with it focused and Select connects.
+    // A D-pad or keyboard user starts on the link chooser, on the current choice, and moves to the fields and button from there.
     @Test
-    fun `on a television the primary button starts focused and elsewhere nothing is`() = runComposeUiTest {
-        show(focusPrimary = true)
+    fun `with the focus flag the selected link type starts focused and the connect button does not`() = runComposeUiTest {
+        show(focusChooser = true)
         waitForIdle()
-        onNode(hasClickAction() and hasText("Start the demo")).assertIsFocused()
+        onNode(hasText("Network") and hasClickAction() and isSelected()).assertIsFocused()
+        onNode(hasClickAction() and hasText("Connect over TCP")).assertIsNotFocused()
     }
 
     @Test
-    fun `without the television flag the primary button does not take focus`() = runComposeUiTest {
+    fun `without the focus flag nothing on the connect screen takes focus`() = runComposeUiTest {
         show()
         waitForIdle()
-        onNode(hasClickAction() and hasText("Start the demo")).assertIsNotFocused()
+        onNode(hasText("Network") and hasClickAction() and isSelected()).assertIsNotFocused()
+        onNode(hasClickAction() and hasText("Connect over TCP")).assertIsNotFocused()
+    }
+
+    @Test
+    fun `the screen opens on Network and on the last chosen kind once there is one`() = runComposeUiTest {
+        var shown by androidx.compose.runtime.mutableStateOf<LinkKind?>(null)
+        setContent {
+            AmbientTheme {
+                Box(Modifier.size(800.dp, 600.dp)) {
+                    androidx.compose.runtime.key(shown) {
+                        ConnectScreen({}, null, null, null, supportsTcp = true, bluetooth = false, lastKind = shown)
+                    }
+                }
+            }
+        }
+        waitForIdle()
+        onNode(hasText("Network") and hasClickAction()).assertIsSelected()
+        shown = LinkKind.Demo
+        waitForIdle()
+        onNode(hasText("Demo") and hasClickAction()).assertIsSelected()
+    }
+
+    @Test
+    fun `choosing a link kind reports it so it can be remembered`() = runComposeUiTest {
+        val kinds = mutableListOf<LinkKind>()
+        show(onKind = { kinds += it })
+        waitForIdle()
+        onNode(hasText("Demo") and hasClickAction()).performClick()
+        waitForIdle()
+        assertEquals(listOf(LinkKind.Demo), kinds)
     }
 
     // Regression: editing the host left the countdown running and it connected to the saved link.
@@ -106,11 +142,11 @@ class ConnectScreenUiTest {
     @Test
     fun `the chooser exposes which kind is selected`() = runComposeUiTest {
         show()
-        onNodeWithText("Demo").assertIsSelected()
-        onNodeWithText("Network").assertIsNotSelected()
-        onNodeWithText("Network").performClick()
         onNodeWithText("Network").assertIsSelected()
         onNodeWithText("Demo").assertIsNotSelected()
+        onNodeWithText("Demo").performClick()
+        onNodeWithText("Demo").assertIsSelected()
+        onNodeWithText("Network").assertIsNotSelected()
     }
 
     // Regression: the error was plain colored text that a screen reader never announced.

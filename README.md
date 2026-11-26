@@ -53,7 +53,7 @@ To record the sound for a video, start the desktop app with `AETHER_RECORD_AUDIO
 
 ## Connect
 
-The connect screen opens on a connected group of toggle buttons that picks one link type at a time: Demo, Network (TCP), Bluetooth and WebSocket. A target lists only the types it supports: Network is desktop, Android and iOS, and Bluetooth is not on web. The group opens on Demo, or on the type of the saved link.
+The connect screen opens on a connected group of toggle buttons that picks one link type at a time: Network (TCP), Bluetooth, WebSocket and Demo. A target lists only the types it supports: Network is desktop, Android and iOS, and Bluetooth is not on web. The group opens on the saved link's type while its countdown runs, else on the type you last chose, else on Network (WebSocket on web). On a TV or with a keyboard, focus starts on the selected type.
 
 - Demo: a scripted five-minute mesh, no node needed. The button reads Start the demo, and `--demo` does the same at launch.
 - Network: a host field and a port field (digits only; a blank port means 4403), then Connect over TCP. `--tcp host[:port]` connects at launch on desktop, and the `tcp` intent extra does the same on Android.

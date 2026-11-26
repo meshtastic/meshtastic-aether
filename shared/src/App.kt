@@ -69,6 +69,7 @@ import org.meshtastic.aether.ui.Controls
 import org.meshtastic.aether.ui.Countdown
 import org.meshtastic.aether.ui.Effect
 import org.meshtastic.aether.ui.LinkChoice
+import org.meshtastic.aether.ui.LinkKind
 import org.meshtastic.aether.ui.LiveLink
 import org.meshtastic.aether.ui.LoopingReplaySource
 import org.meshtastic.aether.ui.PendingConnect
@@ -243,7 +244,9 @@ internal fun AppRoot(
                     lastTcp = settings.link as? LinkChoice.Tcp,
                     modifier = Modifier.windowInsetsPadding(WindowInsets.safeDrawing)
                         .then(if (platform.isTelevision) Modifier.padding(horizontal = TV_MARGIN, vertical = TV_MARGIN / 2) else Modifier),
-                    focusPrimary = platform.isTelevision,
+                    focusChooser = platform.isTelevision || platform.hasKeyboard,
+                    lastKind = LinkKind.entries.firstOrNull { it.name == settings.linkKind },
+                    onKind = { settings.linkKind = it.name },
                 )
 
                 else -> Running(

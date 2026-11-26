@@ -31,7 +31,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -130,21 +129,23 @@ internal fun ConnectScreen(
     modifier: Modifier = Modifier,
     supportsTcp: Boolean = remember { getPlatform().supportsTcp },
     bluetooth: Boolean = remember { bleSupported() },
-    focusPrimary: Boolean = false,
+    focusChooser: Boolean = false,
+    lastKind: LinkKind? = null,
+    onKind: (LinkKind) -> Unit = {},
 ) {
-    val primaryFocus = remember { FocusRequester() }
+    val chooserFocus = remember { FocusRequester() }
     LaunchedEffect(Unit) {
-        // The button sits under BoxWithConstraints, which composes during layout, so the first frames may not have it yet.
-        if (focusPrimary) repeat(FOCUS_TRIES) { if (runCatching { primaryFocus.requestFocus() }.getOrDefault(false)) return@LaunchedEffect else withFrameNanos { } }
+        // The chooser sits under BoxWithConstraints, which composes during layout, so the first frames may not have it yet.
+        if (focusChooser) repeat(FOCUS_TRIES) { if (runCatching { chooserFocus.requestFocus() }.getOrDefault(false)) return@LaunchedEffect else withFrameNanos { } }
     }
     val kinds = availableKinds(supportsTcp, bluetooth)
     val pendingLink = pending?.link
     var host by remember { mutableStateOf(lastTcp?.host ?: DEFAULT_HOST) }
     var port by remember { mutableStateOf((lastTcp?.port ?: LinkChoice.DEFAULT_TCP_PORT).toString()) }
     var ws by remember { mutableStateOf((pendingLink as? LinkChoice.WebSocket)?.url ?: DEFAULT_WS_URL) }
-    var kind by remember { mutableStateOf(pendingLink?.kind()?.takeIf { it in kinds } ?: LinkKind.Demo) }
+    var kind by remember { mutableStateOf(initialKind(kinds, pendingLink?.kind(), lastKind)) }
     var chosen by remember { mutableStateOf<LinkKind?>(null) }
-    val selected = if (kind in kinds) kind else LinkKind.Demo
+    val selected = if (kind in kinds) kind else kinds.first()
 
     fun cancelPending() {
         pending?.countdown?.cancel()
@@ -179,7 +180,8 @@ internal fun ConnectScreen(
         LinkTypeChooser(kinds, selected, onSelect = {
             cancelPending()
             kind = it
-        })
+            onKind(it)
+        }, selectedFocus = chooserFocus)
     }
 
     val fields: @Composable ColumnScope.(Boolean) -> Unit = { sideBySide ->
@@ -265,7 +267,7 @@ internal fun ConnectScreen(
         {
             Button(
                 { submit() },
-                Modifier.fillMaxWidth().heightIn(min = MinTouch).focusRequester(primaryFocus),
+                Modifier.fillMaxWidth().heightIn(min = MinTouch),
                 enabled = link != null,
             ) {
                 Text(

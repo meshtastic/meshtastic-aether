@@ -47,6 +47,11 @@ internal class Settings(private val store: KeyValueStore) {
     val savedPalette: PaletteChoice?
         get() = PaletteChoice.entries.firstOrNull { it.name == store.get(KEY_PALETTE) }
 
+    /** The link type last chosen on the connect screen, by name; the screen opens on it next time. */
+    var linkKind: String?
+        get() = store.get(KEY_LINK_KIND)
+        set(value) = if (value == null) store.remove(KEY_LINK_KIND) else store.put(KEY_LINK_KIND, value)
+
     var palette: PaletteChoice
         get() = savedPalette ?: PaletteChoice.Standard
         set(value) = store.put(KEY_PALETTE, value.name)
@@ -68,6 +73,7 @@ internal class Settings(private val store: KeyValueStore) {
     private companion object {
         const val KEY_HEADPHONES = "headphones"
         const val KEY_LINK = "link"
+        const val KEY_LINK_KIND = "link_kind"
         const val KEY_PALETTE = "palette"
         const val KEY_VOLUME = "volume"
         const val KEY_MUTED = "muted"
