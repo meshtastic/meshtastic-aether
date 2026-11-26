@@ -6,4 +6,4 @@ In short: be respectful, welcoming and constructive. Harassment, discrimination 
 
 ## Reporting
 
-Report unacceptable behavior to the Meshtastic community moderators through the channels listed at [meshtastic.org](https://meshtastic.org), or privately to the maintainers of this repository through a [GitHub Security Advisory](https://github.com/jamesarich/meshtastic-aether/security/advisories/new). Reports are handled confidentially.
+Report unacceptable behavior to the Meshtastic community moderators through the channels listed at [meshtastic.org](https://meshtastic.org), or privately to the maintainers of this repository through a [GitHub Security Advisory](https://github.com/meshtastic/meshtastic-aether/security/advisories/new). Reports are handled confidentially.

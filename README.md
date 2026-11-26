@@ -15,9 +15,9 @@ The score and the instruments are synthesized in pure Kotlin on every target, wi
 
 ## Screenshots
 
-The scene while it listens to a generated DEF CON mesh (150 simulated nodes, from the `defcon` preset of `meshtastic-mcp replay`): each orb is a node, each ring a packet, and the cloud rotates slowly in 3D.
+https://github.com/user-attachments/assets/1b64e4fc-3ec5-411e-a212-d27ff67afc4b
 
-![Meshtastic Aether listening to a simulated DEF CON mesh](docs/screenshots/scene-1.jpg)
+The 90 second demo above has sound. Below, the scene while it listens to a generated DEF CON mesh (150 simulated nodes, from the `defcon` preset of `meshtastic-mcp replay`): each orb is a node, each ring a packet, and the cloud rotates slowly in 3D.
 
 ![The same mesh seconds later](docs/screenshots/scene-2.jpg)
 

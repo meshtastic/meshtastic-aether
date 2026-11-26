@@ -2,7 +2,7 @@
 
 ## Reporting a vulnerability
 
-Do not open a public GitHub issue. File a private [GitHub Security Advisory](https://github.com/jamesarich/meshtastic-aether/security/advisories/new) on this repository.
+Do not open a public GitHub issue. File a private [GitHub Security Advisory](https://github.com/meshtastic/meshtastic-aether/security/advisories/new) on this repository.
 
 Maintainers aim to acknowledge a report within five business days and to ship a fix or mitigation within 90 days, depending on severity. The advisory credits the reporter unless they prefer to stay anonymous.
 

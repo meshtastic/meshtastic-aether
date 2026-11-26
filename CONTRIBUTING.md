@@ -53,7 +53,7 @@ The Kotlin Toolchain is in alpha, so commands can change between versions. `./ko
 Clone:
 
 ```shell
-git clone git@github.com:jamesarich/meshtastic-aether.git
+git clone git@github.com:meshtastic/meshtastic-aether.git
 cd meshtastic-aether
 ```
 
