@@ -10,6 +10,13 @@ import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.assertIsNotFocused
+import androidx.compose.ui.test.requestFocus
+import androidx.compose.ui.test.performKeyInput
+import androidx.compose.ui.test.pressKey
+import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
@@ -29,7 +36,7 @@ import kotlin.test.assertTrue
 @OptIn(ExperimentalTestApi::class)
 class HudUiTest {
     private val toolbarLabels = listOf(
-        "Mute", "Volume", "Standard look", "Projector look", "OLED night look", "Headphones", "Drivers", "Fullscreen", "Disconnect",
+        "Mute", "Volume", "Look", "Headphones", "Drivers", "Fullscreen", "Disconnect",
     )
 
     private fun androidx.compose.ui.test.ComposeUiTest.hud(
@@ -39,6 +46,7 @@ class HudUiTest {
         heightDp: Int = 700,
         onPalette: (PaletteChoice) -> Unit = {},
         onDisconnect: () -> Unit = {},
+        isTelevision: Boolean = false,
     ) = setContent {
         AmbientTheme {
             Box(Modifier.size(widthDp.dp, heightDp.dp)) {
@@ -50,6 +58,7 @@ class HudUiTest {
                     onDisconnect = onDisconnect,
                     onToggleFullscreen = {},
                     hasKeyboard = true,
+                    isTelevision = isTelevision,
                 )
             }
         }
@@ -90,6 +99,35 @@ class HudUiTest {
         assertEquals(ToggleableState.On, onNodeWithContentDescription("Headphones").fetchSemanticsNode().config.getOrNull(SemanticsProperties.ToggleableState))
     }
 
+    // Regression: the slider consumed Left and Right, so a TV remote could never reach the buttons past it.
+    @Test
+    fun `on a television Right leaves the volume slider and Down lowers the volume`() = runComposeUiTest {
+        val controls = Controls().also { it.overlayOpen = true; it.volume = 0.5f }
+        hud(controls, isTelevision = true)
+        waitForIdle()
+        onNodeWithContentDescription("Volume").requestFocus()
+        onNodeWithContentDescription("Volume").performKeyInput { pressKey(Key.DirectionRight) }
+        waitForIdle()
+        assertEquals(0.5f, controls.volume, 1e-6f)
+        onNodeWithContentDescription("Look").assertIsFocused()
+        onNodeWithContentDescription("Volume").requestFocus()
+        onNodeWithContentDescription("Volume").performKeyInput { pressKey(Key.DirectionDown) }
+        waitForIdle()
+        assertEquals(0.5f - Controls.VOLUME_STEP, controls.volume, 1e-6f)
+    }
+
+    @Test
+    fun `with a keyboard Right still adjusts the volume slider and does not move focus`() = runComposeUiTest {
+        val controls = Controls().also { it.overlayOpen = true; it.volume = 0.5f }
+        hud(controls, isTelevision = false)
+        waitForIdle()
+        onNodeWithContentDescription("Volume").requestFocus()
+        onNodeWithContentDescription("Volume").performKeyInput { pressKey(Key.DirectionRight) }
+        waitForIdle()
+        assertTrue(controls.volume > 0.5f, "Right raised the slider to ${controls.volume}")
+        onNodeWithContentDescription("Look").assertIsNotFocused()
+    }
+
     // Regression: Mute was a text button toggling its own label; as a toggle its state must be readable.
     @Test
     fun `mute toggles its checked state and the controls mute flag`() = runComposeUiTest {
@@ -116,27 +154,52 @@ class HudUiTest {
         assertEquals(0, onAllNodes(hasText("Unmute") or hasContentDescription("Unmute")).fetchSemanticsNodes().size)
     }
 
-    // Regression: the look buttons swapped Button for OutlinedButton with no selected state; a screen reader heard three buttons.
+    // Regression: three always-visible look buttons took three toolbar slots for one choice; one menu button takes one.
     @Test
-    fun `the look chooser exposes exactly the current look as selected radio buttons`() = runComposeUiTest {
+    fun `the look button names the current look and its menu marks exactly that one as selected`() = runComposeUiTest {
         val controls = Controls().also { it.overlayOpen = true }
         hud(controls, palette = PaletteChoice.Projector)
         waitForIdle()
+        val button = onNodeWithContentDescription("Look")
+        assertEquals("Projector", button.fetchSemanticsNode().config.getOrNull(SemanticsProperties.StateDescription))
+        assertEquals(androidx.compose.ui.semantics.Role.DropdownList, button.fetchSemanticsNode().config.getOrNull(SemanticsProperties.Role))
+        onNodeWithText("Standard").assertDoesNotExist()
+        button.performClick()
+        waitForIdle()
         for (choice in PaletteChoice.entries) {
-            val config = onNodeWithContentDescription("${choice.label} look").fetchSemanticsNode().config
-            assertEquals(choice == PaletteChoice.Projector, config.getOrNull(SemanticsProperties.Selected), choice.name)
-            assertEquals(androidx.compose.ui.semantics.Role.RadioButton, config.getOrNull(SemanticsProperties.Role), choice.name)
+            val node = onNode(hasText(choice.label) and hasClickAction()).fetchSemanticsNode()
+            assertEquals(choice == PaletteChoice.Projector, node.config.getOrNull(SemanticsProperties.Selected), choice.name)
         }
     }
 
     @Test
-    fun `choosing a look reports it`() = runComposeUiTest {
+    fun `choosing a look from the menu reports it and closes the menu`() = runComposeUiTest {
         val controls = Controls().also { it.overlayOpen = true }
         var chosen: PaletteChoice? = null
         hud(controls, onPalette = { chosen = it })
         waitForIdle()
-        onNodeWithContentDescription("OLED night look").performClick()
+        onNodeWithContentDescription("Look").performClick()
+        waitForIdle()
+        onNode(hasText("OLED night") and hasClickAction()).performClick()
+        waitForIdle()
         assertEquals(PaletteChoice.OledNight, chosen)
+        onNodeWithText("OLED night").assertDoesNotExist()
+    }
+
+    // Regression: an open menu takes focus into its popup, so the HUD's idle timer would close the HUD under it.
+    @Test
+    fun `the hud is held while the look menu is open and released when it closes`() = runComposeUiTest {
+        val controls = Controls().also { it.overlayOpen = true }
+        hud(controls)
+        waitForIdle()
+        assertFalse(controls.menuOpen)
+        onNodeWithContentDescription("Look").performClick()
+        waitForIdle()
+        assertTrue(controls.menuOpen)
+        assertTrue(controls.held)
+        onNode(hasText("Standard") and hasClickAction()).performClick()
+        waitForIdle()
+        assertFalse(controls.menuOpen)
     }
 
     // Regression: the Disconnect button ended the session on one tap.

@@ -6,12 +6,14 @@ All notable changes to Meshtastic Aether are documented here. The format is base
 
 ### Fixed
 
+- On a TV the D-pad can leave the volume slider: Left and Right move along the toolbar and Up and Down change the volume.
 - On a TV the first Back press no longer gets spent on a HUD button's focus: one press closes the HUD.
 - The dither on the background no longer costs a full-screen offscreen pass on weak GPUs (about 3 fps on a Chromecast).
 - Orbs glide to their new places when a node joins or leaves, where they used to jump.
 
 ### Added
 
+- The three look buttons are one Look menu in the HUD toolbar, which frees two slots and a D-pad stop.
 - A headphone mode: the HUD toggle, the P key and a saved setting place each dry voice to the side of the head with an interaural delay and head shadow, crossfaded over 0.3 s. Off by default; pads, reverb and limiter are unchanged.
 - Gravity and orbits: each orb circles its place with Kepler-style timing, linked nodes lean together, and each packet kicks its node. A new mesh-driven gravity parameter, from mean link quality, tightens or loosens it all, and it has a row in the Drivers panel.
 - Android TV and Google TV: a leanback launcher entry with a banner, Select to open the HUD, Play/Pause to mute, a focused Connect button, a larger safe margin, and `adb` launch extras (`--es tcp host:port`, `--ez demo true`, `--ez replay true`, `--es look oled`, `--ez ask true`).

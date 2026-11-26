@@ -63,7 +63,7 @@ The HUD has a status card at the top left (link, node count, key and mode, secti
 
 - Mute: a toggle that shows a speaker, or a crossed speaker while muted. It takes focus when the HUD opens.
 - Volume: a slider. Moving it unmutes.
-- Look: three radio buttons for Standard, Projector and OLED night, the selected one filled.
+- Look: one button that shows the current look's icon and opens a menu of Standard, Projector and OLED night, each with its icon and a check on the selected one. The HUD stays up while the menu is open.
 - Headphones: a toggle that places the dry voices to the side of the head instead of panning them for speakers. It is remembered and eases in over a fraction of a second. Leave it off for speakers, where the delay and shading sound wrong.
 - Drivers: a toggle that lists each mesh-driven parameter with its live value and driver. The panel sits at the right on windows 840 dp and wider, and above the toolbar (up to half the window height) on narrower ones.
 - Fullscreen: only where the host has a switch (desktop).

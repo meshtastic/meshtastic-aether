@@ -91,8 +91,11 @@ internal class Controls(volume: Float = 1f, headphones: Boolean = false) {
     /** A pointer is down on a HUD control; the auto-hide timer waits. */
     var pressed by mutableStateOf(false)
 
+    /** A HUD menu is open (it takes focus into its own popup); the auto-hide timer waits. */
+    var menuOpen by mutableStateOf(false)
+
     /** Whether the viewer is using a HUD control right now. */
-    val held: Boolean get() = focusWithin || pressed
+    val held: Boolean get() = focusWithin || pressed || menuOpen
 
     /** Whether the overlay lists the mesh-driven parameters; shown only while the overlay is. */
     var driversOpen by mutableStateOf(false)

@@ -146,6 +146,17 @@ internal object HudIcons {
         }
     }
 
+    /** A check mark: the selected item in a menu. */
+    val Check: ImageVector by lazy {
+        icon("Check") {
+            stroked {
+                moveTo(5f, 12.5f)
+                lineTo(10f, 17.5f)
+                lineTo(19f, 7f)
+            }
+        }
+    }
+
     val Fullscreen: ImageVector by lazy {
         icon("Fullscreen") {
             stroked {

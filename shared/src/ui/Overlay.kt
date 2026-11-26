@@ -9,11 +9,8 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
@@ -28,9 +25,10 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.FloatingToolbarDefaults
 import androidx.compose.material3.HorizontalFloatingToolbar
@@ -50,7 +48,10 @@ import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -60,10 +61,21 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.ui.focus.FocusManager
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEvent
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
@@ -169,7 +181,7 @@ internal fun StatusOverlay(
             AnimatedVisibility(visibleState = visible, enter = enter, exit = exit) {
                 HudToolbar(
                     controls, palette, onPalette, onDisconnect, onToggleFullscreen, hasKeyboard,
-                    stacked = compact,
+                    stacked = compact, isTelevision = isTelevision,
                 )
             }
         }
@@ -244,6 +256,7 @@ private fun HudToolbar(
     onToggleFullscreen: (() -> Unit)?,
     hasKeyboard: Boolean,
     stacked: Boolean,
+    isTelevision: Boolean = false,
 ) {
     val focusFirst = remember { FocusRequester() }
     LaunchedEffect(Unit) {
@@ -253,8 +266,8 @@ private fun HudToolbar(
     val colors = FloatingToolbarDefaults.standardFloatingToolbarColors()
     val volume: @Composable RowScope.() -> Unit = {
         MuteButton(controls, hasKeyboard, Modifier.focusRequester(focusFirst))
-        VolumeSlider(controls)
-        LookChooser(palette, onPalette, hasKeyboard)
+        VolumeSlider(controls, isTelevision)
+        LookMenu(controls, palette, onPalette, hasKeyboard)
     }
     val actions: @Composable RowScope.() -> Unit = {
         HeadphonesButton(controls, hasKeyboard)
@@ -318,43 +331,87 @@ private fun MuteButton(controls: Controls, tooltips: Boolean, modifier: Modifier
 }
 
 @Composable
-private fun VolumeSlider(controls: Controls) {
+private fun VolumeSlider(controls: Controls, isTelevision: Boolean) {
+    val focus = LocalFocusManager.current
     Slider(
         value = controls.volume,
         onValueChange = {
             controls.volume = it
             controls.muted = false
         },
-        modifier = Modifier.width(SLIDER_WIDTH).heightIn(min = MinTouch).semantics {
-            contentDescription = "Volume"
-            stateDescription = "${(controls.volume * PERCENT).roundToInt()} percent" + if (controls.muted) ", muted" else ""
-        },
+        modifier = Modifier.width(SLIDER_WIDTH).heightIn(min = MinTouch)
+            .then(if (isTelevision) Modifier.onPreviewKeyEvent { televisionSliderKey(it, controls, focus) } else Modifier)
+            .semantics {
+                contentDescription = "Volume"
+                stateDescription = "${(controls.volume * PERCENT).roundToInt()} percent" + if (controls.muted) ", muted" else ""
+            },
     )
 }
 
-/** Three looks, one selected: radio buttons with the look's name as their description. */
+/**
+ * On a television the volume slider must not hold the D-pad: Left and Right move focus along the toolbar and Up and Down
+ * change the volume, the same as the Up and Down keys do from the scene. Everything else reaches the slider.
+ */
+private fun televisionSliderKey(event: KeyEvent, controls: Controls, focus: FocusManager): Boolean {
+    val horizontal = when (event.key) {
+        Key.DirectionLeft -> FocusDirection.Left
+        Key.DirectionRight -> FocusDirection.Right
+        else -> null
+    }
+    if (horizontal != null) {
+        if (event.type == KeyEventType.KeyDown) focus.moveFocus(horizontal)
+        return true
+    }
+    val action = when (event.key) {
+        Key.DirectionUp -> KeyAction.VolumeUp
+        Key.DirectionDown -> KeyAction.VolumeDown
+        else -> return false
+    }
+    if (event.type == KeyEventType.KeyDown) controls.apply(action, fullscreen = false, canFullscreen = false)
+    return true
+}
+
+/**
+ * The look as one toolbar button that shows the current look's icon and opens a menu of the three, each with its icon
+ * and a check on the selected one. A screen reader hears "Look" and the current look's name; the HUD does not hide
+ * while the menu is open.
+ */
 @Composable
-private fun LookChooser(palette: PaletteChoice, onPalette: (PaletteChoice) -> Unit, tooltips: Boolean) {
-    Row(Modifier.selectableGroup()) {
-        for (choice in PaletteChoice.entries) {
-            val selected = choice == palette
-            val label = "${choice.label} look"
-            HudTooltip(label, tooltips) {
-                val colors = MaterialTheme.colorScheme
-                Box(
-                    Modifier.size(MinTouch).clip(CircleShape)
-                        .then(if (selected) Modifier.background(colors.secondaryContainer) else Modifier)
-                        .selectable(selected = selected, role = Role.RadioButton, onClick = { onPalette(choice) })
-                        .semantics { contentDescription = label },
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(
-                        HudIcons.look(choice),
-                        contentDescription = null,
-                        modifier = Modifier.size(24.dp),
-                        tint = if (selected) colors.onSecondaryContainer else colors.onSurfaceVariant,
-                    )
-                }
+private fun LookMenu(controls: Controls, palette: PaletteChoice, onPalette: (PaletteChoice) -> Unit, tooltips: Boolean) {
+    var expanded by remember { mutableStateOf(false) }
+    LaunchedEffect(expanded) { controls.menuOpen = expanded }
+    DisposableEffect(Unit) { onDispose { controls.menuOpen = false } }
+    Box {
+        HudTooltip("Look", tooltips && !expanded) {
+            IconButton(
+                onClick = { expanded = true },
+                modifier = Modifier.size(MinTouch).semantics {
+                    contentDescription = "Look"
+                    stateDescription = palette.label
+                    role = Role.DropdownList
+                },
+            ) { HudIcon(HudIcons.look(palette)) }
+        }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            for (choice in PaletteChoice.entries) {
+                val selected = choice == palette
+                DropdownMenuItem(
+                    text = { Text(choice.label) },
+                    onClick = {
+                        onPalette(choice)
+                        expanded = false
+                    },
+                    modifier = Modifier.semantics {
+                        this.selected = selected
+                        role = Role.RadioButton
+                    },
+                    leadingIcon = { HudIcon(HudIcons.look(choice)) },
+                    trailingIcon = if (selected) {
+                        { HudIcon(HudIcons.Check) }
+                    } else {
+                        null
+                    },
+                )
             }
         }
     }
