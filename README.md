@@ -36,6 +36,8 @@ The scene while it listens to a generated DEF CON mesh (150 simulated nodes, fro
 
 The `./kotlin` wrapper downloads the Kotlin Toolchain on first use. [`CONTRIBUTING.md`](CONTRIBUTING.md) lists the build and test commands.
 
+To record the sound for a video, start the desktop app with `AETHER_RECORD_AUDIO=out.wav`. The file is 16-bit stereo and stays playable if the app is killed.
+
 ## Connect
 
 The connect screen opens on a connected group of toggle buttons that picks one link type at a time: Demo, Network (TCP), Bluetooth and WebSocket. A target lists only the types it supports: Network is desktop, Android and iOS, and Bluetooth is not on web. The group opens on Demo, or on the type of the saved link.

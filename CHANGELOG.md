@@ -10,6 +10,7 @@ All notable changes to Meshtastic Aether are documented here. The format is base
 
 ### Added
 
+- Desktop: set `AETHER_RECORD_AUDIO=out.wav` to record exactly what the app plays, for demo videos. A `out.wav.start` file holds the wall-clock start in epoch milliseconds.
 - A macOS menu bar with Disconnect, Enter Full Screen, Mute and Minimize that call the same actions as the keys.
 - Android Back closes the HUD, then returns to the connect screen.
 - The desktop app runs on JetBrains Runtime.
