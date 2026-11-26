@@ -13,6 +13,16 @@ A Compose Multiplatform app on the [meshtastic-sdk](https://github.com/meshtasti
 
 The score and the instruments are synthesized in pure Kotlin on every target, with a per-platform audio output. The app has no dashboard, charts or node lists on the scene.
 
+## Screenshots
+
+The scene while it listens to a generated DEF CON mesh (150 simulated nodes, from the `defcon` preset of `meshtastic-mcp replay`): each orb is a node, each ring a packet, and the cloud rotates slowly in 3D.
+
+![Meshtastic Aether listening to a simulated DEF CON mesh](docs/screenshots/scene-1.jpg)
+
+![The same mesh seconds later](docs/screenshots/scene-2.jpg)
+
+![Rings overlapping around the dense center](docs/screenshots/scene-3.jpg)
+
 ## Run
 
 ```sh
