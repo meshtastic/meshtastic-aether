@@ -133,7 +133,7 @@ fun AmbientScene(engine: AmbientEngine, modifier: Modifier = Modifier) {
         buffers.fit(n)
         var oi = 0
         for (o in scene.orbs) {
-            project(o.x + scene.driftX(o.node), o.y + scene.driftY(o.node), o.z + o.zOffset + scene.driftZ(o.node), tmp)
+            project(o.shownX + scene.driftX(o.node), o.shownY + scene.driftY(o.node), o.shownZ + o.zOffset + scene.driftZ(o.node), tmp)
             o.projX = tmp.x
             o.projY = tmp.y
             o.projScale = tmp.scale

@@ -35,6 +35,12 @@ class Orb internal constructor(val node: Long, var name: String?, internal var p
     var z = 0.0
         internal set
 
+    /** Where the orb is drawn: eased toward the laid-out [x], [y], [z] so a relayout glides; a new orb starts at its place. */
+    internal var shownX = 0.0
+    internal var shownY = 0.0
+    internal var shownZ = 0.0
+    internal var placed = false
+
     /** The last projected screen offset, scale and depth, written by the scene each frame. */
     internal var projX = 0.0
     internal var projY = 0.0
@@ -477,8 +483,12 @@ class SceneModel(private val sampleRate: Int) {
 
     private fun stepOrbLooks(dtSeconds: Double) {
         val ease = 1 - exp(-dtSeconds / DEPTH_EASE_SECONDS)
+        val glide = 1 - exp(-dtSeconds / RELAYOUT_GLIDE_SECONDS)
         val refAltitude = origin?.altitudeM
         for (o in orbMap.values) {
+            o.shownX += (o.x - o.shownX) * glide
+            o.shownY += (o.y - o.shownY) * glide
+            o.shownZ += (o.z - o.shownZ) * glide
             val target = EventLook.rssiDepthBias(o.rssi) + EventLook.altitudeLift(o.position?.altitudeM, refAltitude)
             o.zOffset += (target - o.zOffset) * ease
             val hz = EventLook.flickerHz(o.batteryPct)
@@ -612,7 +622,15 @@ class SceneModel(private val sampleRate: Int) {
                 }
             }
         }
-        for (o in list) o.z = depthFor(o.node, o.x * o.x + o.y * o.y)
+        for (o in list) {
+            o.z = depthFor(o.node, o.x * o.x + o.y * o.y)
+            if (!o.placed) {
+                o.shownX = o.x
+                o.shownY = o.y
+                o.shownZ = o.z
+                o.placed = true
+            }
+        }
     }
 
     private fun isFree(list: List<Orb>, upTo: Int, x: Double, y: Double): Boolean {
@@ -656,6 +674,9 @@ class SceneModel(private val sampleRate: Int) {
         private const val IMPULSE_TAU_SECONDS = 10.0
         private const val RSSI_SMOOTHING = 0.3
         private const val DEPTH_EASE_SECONDS = 5.0
+
+        /** Time constant of an orb gliding to a new laid-out place when another node joins or leaves. */
+        private const val RELAYOUT_GLIDE_SECONDS = 2.5
 
         private const val HAZE_TAU_SECONDS = 8.0
         private const val HAZE_STEP = 0.12

@@ -4,6 +4,10 @@ All notable changes to Meshtastic Aether are documented here. The format is base
 
 ## [Unreleased]
 
+### Fixed
+
+- Orbs glide to their new places when a node joins or leaves, where they used to jump.
+
 ### Added
 
 - A macOS menu bar with Disconnect, Enter Full Screen, Mute and Minimize that call the same actions as the keys.

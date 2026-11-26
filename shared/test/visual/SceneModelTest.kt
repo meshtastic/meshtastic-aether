@@ -464,4 +464,25 @@ class SceneModelTest {
         assertEquals(0.0, s.anchor!!.y)
         assertTrue(s.orbs.none { it.node == me })
     }
+
+    @Test
+    fun `an orb glides to its new place when a node joins and a new orb starts in place`() {
+        val s = SceneModel(sr.toInt())
+        s.onEvent(seen(1, GeoPoint(45.0, -93.0)), 0)
+        s.onEvent(seen(2, GeoPoint(45.01, -93.0)), 0)
+        s.update(0)
+        val first = s.orbs.first { it.node == 1L }
+        assertEquals(first.x, first.shownX, 1e-12, "a placed orb starts at its place")
+        s.onEvent(seen(3, GeoPoint(45.0, -92.9)), 0)
+        s.update(sr / 60)
+        val joined = s.orbs.first { it.node == 3L }
+        assertEquals(joined.x, joined.shownX, 1e-12, "the new orb appears in place, not sliding in")
+        val jump = hypot(first.x - first.shownX, first.y - first.shownY)
+        assertTrue(jump > 0.05, "the relayout moved the target, jump $jump")
+        s.update(sr / 60 * 2)
+        val moved = hypot(first.x - first.shownX, first.y - first.shownY)
+        assertTrue(moved < jump && moved > 0.5 * jump, "one frame closes only a sliver: $moved of $jump")
+        for (f in 3..1200) s.update(sr / 60 * f)
+        assertEquals(first.x, first.shownX, 1e-3, "it arrives")
+    }
 }
