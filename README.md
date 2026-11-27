@@ -29,6 +29,12 @@ The HUD over the same mesh, with the Drivers panel listing what the mesh is doin
 
 ![The HUD with the status card, toolbar and Drivers panel](docs/screenshots/hud.jpg)
 
+The connect screen, with the settings cog at the top right, and the settings screen with the update track and the project links:
+
+![The connect screen with its link types and the settings cog](docs/screenshots/connect.jpg)
+
+![The settings screen with the Release and Snapshot tracks and the About links](docs/screenshots/settings.jpg)
+
 ## Run
 
 ```sh
