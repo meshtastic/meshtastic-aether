@@ -10,7 +10,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.material3.ButtonGroupDefaults
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
-import androidx.compose.material3.Text
+import androidx.compose.material3.Icon
 import androidx.compose.material3.ToggleButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -20,7 +20,6 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 
 /** The ways the connect screen can start a session; one pane shows at a time. */
@@ -63,8 +62,8 @@ private val ChooserHeight = 48.dp
 private val ChooserPadding = PaddingValues(horizontal = 4.dp)
 
 /**
- * A connected single-select group of toggle buttons; the selected one reports `selected` to accessibility and carries
- * [selectedFocus], so a D-pad or keyboard user starts on the current choice.
+ * A connected single-select group of icon toggle buttons, each named by its label for accessibility. The selected
+ * one reports `selected` and carries [selectedFocus], so a D-pad or keyboard user starts on the current choice.
  */
 @Composable
 internal fun LinkTypeChooser(
@@ -88,12 +87,12 @@ internal fun LinkTypeChooser(
                 modifier = Modifier.weight(1f).heightIn(min = ChooserHeight)
                     .then(if (checked && selectedFocus != null) Modifier.focusRequester(selectedFocus) else Modifier)
                     .semantics {
-                    role = Role.RadioButton
-                    this.selected = checked
-                },
+                        role = Role.RadioButton
+                        this.selected = checked
+                    },
                 shapes = shapes,
                 contentPadding = ChooserPadding,
-            ) { Text(kind.label, maxLines = 1, overflow = TextOverflow.Clip) }
+            ) { Icon(LinkIcons.of(kind), contentDescription = kind.label) }
         }
     }
 }
