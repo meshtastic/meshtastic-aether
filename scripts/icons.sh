@@ -27,6 +27,15 @@ mkdir -p "$root/desktopApp/resources"
 svg 512 "$icon" "$tmp/d.png"
 opaque "$tmp/d.png" "$root/desktopApp/resources/icon.png"
 
+# jpackage icons: the Windows installer wants an .ico and the macOS bundle an .icns.
+mkdir -p "$root/desktopApp/packaging"
+magick "$root/desktopApp/resources/icon.png" -define icon:auto-resize=256,128,64,48,32,16 "$root/desktopApp/packaging/icon.ico"
+# An .icns is a big-endian length-prefixed container; one ic09 chunk holds the 512 px PNG.
+be32() { printf "$(printf '\\%03o\\%03o\\%03o\\%03o' $(($1 >> 24 & 255)) $(($1 >> 16 & 255)) $(($1 >> 8 & 255)) $(($1 & 255)))"; }
+png=$root/desktopApp/resources/icon.png
+size=$(wc -c <"$png" | tr -d ' ')
+{ printf 'icns'; be32 $((16 + size)); printf 'ic09'; be32 $((8 + size)); cat "$png"; } >"$root/desktopApp/packaging/icon.icns"
+
 web=$root/webApp/resources
 cp "$small" "$web/favicon.svg"
 for s in 16 32 48; do svg "$s" "$small" "$tmp/f$s.png"; done

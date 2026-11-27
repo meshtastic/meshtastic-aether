@@ -40,7 +40,7 @@ The HUD over the same mesh, with the Drivers panel listing what the mesh is doin
 ./kotlin test -m shared -p jvm                  # shared tests (wasmJs: -p wasmJs)
 ```
 
-[Releases](https://github.com/meshtastic/meshtastic-aether/releases) carry the Android APK and AAB, a desktop jar for Linux x64 and for Apple silicon macOS (run it with Java 25: `java -jar aether-X.Y.Z-desktop-linux-x64.jar`; build any other desktop from source) and a zipped web build to serve from any static host. The `snapshot` prerelease carries the same files built from the latest `main` that passed CI. The `./kotlin` wrapper downloads the Kotlin Toolchain on first use. [`CONTRIBUTING.md`](CONTRIBUTING.md) lists the build and test commands.
+[Releases](https://github.com/meshtastic/meshtastic-aether/releases) carry the Android APK and AAB, the desktop installers (a `.deb` for Linux x64, a `.dmg` for Apple silicon macOS, an `.msi` for Windows x64, each with its own runtime; the macOS app is unsigned, so open it once from the right-click menu) and, for Linux and macOS, the desktop jar (run it with Java 25: `java -jar aether-X.Y.Z-desktop-linux-x64.jar`; build any other desktop from source) and a zipped web build to serve from any static host. The `snapshot` prerelease carries the same files built from the latest `main` that passed CI. The `./kotlin` wrapper downloads the Kotlin Toolchain on first use. [`CONTRIBUTING.md`](CONTRIBUTING.md) lists the build and test commands.
 
 ### Android TV and Google TV
 
@@ -85,7 +85,7 @@ The HUD has a status card at the top left (link, node count, key and mode, secti
 - Headphones: a toggle that places the dry voices to the side of the head instead of panning them for speakers. It is remembered and eases in over a fraction of a second. Leave it off for speakers, where the delay and shading sound wrong.
 - Drivers: a toggle that lists each mesh-driven parameter with its live value and driver. The panel sits at the right on windows 840 dp and wider, and above the toolbar (up to half the window height) on narrower ones.
 - Fullscreen: on desktop, on web, and on Android phones and tablets, where it shows or hides the system bars. Hidden on a TV.
-- Update: shown only when a newer build is out. It opens a panel with Install on Android, Install and restart on the desktop jar, or a link to the download page.
+- Update: shown only when a newer build is out. It opens a panel with Install on Android, Install and restart on the desktop jar, or a link to the download page on an installed desktop app.
 - Disconnect: the power glyph, in the error color.
 
 Under 600 dp the toolbar splits into two rows, volume and look above the actions. With a keyboard each button shows a tooltip with its name.

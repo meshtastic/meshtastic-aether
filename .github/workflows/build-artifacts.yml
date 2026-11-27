@@ -1,7 +1,8 @@
 name: Build artifacts
 
 # The release and snapshot builds share these jobs: the Android APK and AAB (signed when the keystore secrets exist),
-# a desktop executable jar on Linux and macOS, and the zipped web build, each uploaded as a workflow artifact. Each job
+# the desktop installers (a deb on Linux, a dmg on macOS, an msi on Windows) with the executable jar the desktop updater
+# swaps in on Linux and macOS, and the zipped web build, each uploaded as a workflow artifact. Each job
 # stamps the label, build code and update channel first (scripts/stamp-build.sh).
 on:
   workflow_call:
@@ -115,14 +116,19 @@ jobs:
           path: out/
 
   desktop:
-    name: Desktop jar (${{ matrix.id }})
+    name: Desktop (${{ matrix.id }})
     strategy:
       matrix:
         include:
           - os: ubuntu-latest
             id: linux-x64
+            jar: true
           - os: macos-latest
             id: macos-arm64
+            jar: true
+          - os: windows-latest
+            id: windows-x64
+            jar: false
     runs-on: ${{ matrix.os }}
     env:
       VERSION: ${{ inputs.label }}
@@ -153,12 +159,20 @@ jobs:
 
       # The jar bundles the Compose native libraries for the OS it is built on, so each OS gets its own.
       - name: Package the executable jar
+        shell: bash
         run: |
           ./kotlin package -m desktopApp -f executable-jar
           mkdir -p out
-          cp build/tasks/_desktopApp_executableJarJvm/desktopApp-jvm-executable.jar "out/aether-$VERSION-desktop-${{ matrix.id }}.jar"
+          jar=build/tasks/_desktopApp_executableJarJvm/desktopApp-jvm-executable.jar
+          if [ "${{ matrix.jar }}" = true ]; then cp "$jar" "out/aether-$VERSION-desktop-${{ matrix.id }}.jar"; fi
+          echo "JAR=$jar" >> "$GITHUB_ENV"
 
-      - name: Keep the jar
+      # Wraps that jar and a jlinked JetBrains Runtime, which the step above made the Toolchain download.
+      - name: Package the installer
+        shell: bash
+        run: scripts/package-desktop.sh "$VERSION" "${{ matrix.id }}" "$JAR" out
+
+      - name: Keep the desktop files
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: desktop-${{ matrix.id }}

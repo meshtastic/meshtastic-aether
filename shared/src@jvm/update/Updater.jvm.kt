@@ -32,9 +32,11 @@ internal fun desktopAssetKey(osName: String, osArch: String): String? {
 /**
  * The executable jar this process runs from, when it can be replaced in place: the class path is that one `.jar` (the
  * Spring Boot launcher's outer jar; nested classes report `jar:nested:` sources) in a directory this user may write.
- * Null for `./kotlin run`, whose class path is many entries, or a read-only install; those get the download page.
+ * Null for `./kotlin run`, whose class path is many entries, a read-only install, or an app installed from a deb, dmg
+ * or msi ([installed]), whose jar belongs to the package; those get the download page.
  */
-internal fun replaceableJar(classPath: String, pathSeparator: String, canWrite: (File) -> Boolean): File? {
+internal fun replaceableJar(classPath: String, pathSeparator: String, installed: Boolean = false, canWrite: (File) -> Boolean): File? {
+    if (installed) return null
     val entries = classPath.split(pathSeparator).filter { it.isNotEmpty() }
     val jar = entries.singleOrNull()?.takeIf { it.endsWith(".jar") }?.let { File(it).absoluteFile } ?: return null
     return jar.takeIf { it.isFile && jar.parentFile?.let(canWrite) == true }
@@ -81,7 +83,11 @@ internal actual fun createUpdater(): Updater? {
 private class DesktopUpdater(manifestUrl: String) :
     HttpUpdater(manifestUrl, BuildInfo.CODE, assetsBesideManifest = manifestOverride() != null) {
     private val assetKey = desktopAssetKey(System.getProperty("os.name").orEmpty(), System.getProperty("os.arch").orEmpty())
-    private val jar: File? = replaceableJar(System.getProperty("java.class.path").orEmpty(), File.pathSeparator) { it.canWrite() }
+    private val jar: File? = replaceableJar(
+        System.getProperty("java.class.path").orEmpty(),
+        File.pathSeparator,
+        installed = System.getProperty("jpackage.app-path") != null,
+    ) { it.canWrite() }
 
     override fun modeFor(latest: PublishedBuild): InstallMode =
         if (jar != null && assetFor(latest) != null) InstallMode.INSTALL_AND_RESTART else InstallMode.OPEN_PAGE
