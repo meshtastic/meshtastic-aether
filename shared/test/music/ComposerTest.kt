@@ -634,33 +634,4 @@ class ComposerTest {
         assertEquals(2, dyadExtras(0L, 30_000L))
         assertEquals(4, dyadExtras(0L, 30_000L, 61_000L))
     }
-
-    // Regression: a new chord staggered every pad voice, so a held tone ended at the tick and came back up to 0.9 s
-    // later, a dip of up to about 7 dB on the very tones voice leading holds.
-    @Test
-    fun `at a chord change a held pad tone strikes on the tick and only moving voices stagger`() {
-        val c = malletComposer(41L, sr, pinFormFull = true)
-        val pads = ArrayList<NoteEvent>()
-        var f = 0L
-        while (f < 60L * 60 * sr) {
-            pads += c.advance(f, lookahead, moment(f)).notes.filter { it.voice == Voice.Pad && it.node == null && it.velocity == 0.5f }
-            f += step
-        }
-        val pans = listOf(-0.5f, -0.17f, 0.17f, 0.5f)
-        val bed = pads.filter { it.pan in pans }
-        val ticks = bed.groupBy { it.atFrame / (20L * sr) }.entries.sortedBy { it.key }.map { it.value }
-        var held = 0
-        ticks.zipWithNext().forEach { (prev, cur) ->
-            val tick = cur.minOf { it.atFrame }
-            for (n in cur) {
-                val before = prev.firstOrNull { it.pan == n.pan } ?: continue
-                if (before.pitchHz == n.pitchHz) {
-                    held++
-                    assertEquals(tick, n.atFrame, "a held tone at pan ${n.pan} came in late")
-                }
-            }
-        }
-        assertTrue(held > 50, "only $held held tones")
-        assertTrue(bed.any { (it.atFrame % (20L * sr)) != 0L }, "no voice ever staggered")
-    }
 }

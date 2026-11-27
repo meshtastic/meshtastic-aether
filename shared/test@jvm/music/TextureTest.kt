@@ -5,6 +5,7 @@ import kotlin.math.abs
 import kotlin.test.Test
 import kotlin.test.assertTrue
 
+/** Hours of composing are too long for the Wasm runner's 30 s limit, so this lives in the JVM tests. */
 class TextureTest {
     private val sr = 8_000
     private val t0 = 1_800_000_000_000L
