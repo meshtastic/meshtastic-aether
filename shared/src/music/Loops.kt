@@ -104,7 +104,7 @@ internal class Loops(private val score: Score, private val rng: Rng, private val
         val recent = nodes.recentlyHeard(REMEMBERED_NODES)
         if (!score.mood.quiet || recent.isEmpty()) return
         val id = recent[loop.index % recent.size]
-        val motif = Motifs.of(id)
+        val motif = nodes.motifs.current(id)
         val from = loop.index % (motif.size - FRAGMENT_NOTES + 1)
         val band = Ornaments.band(id)
         val pan = nodes.panOf(id)

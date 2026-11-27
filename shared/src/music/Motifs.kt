@@ -36,3 +36,55 @@ object Motifs {
         return Motif(roles, gaps)
     }
 }
+
+/**
+ * Each node's motif as it develops, after Mutable Instruments Marbles' deja vu (MIT): the first time a node plays it
+ * plays its original [Motifs.of]; after each play every step past the first may redraw its interval and gap, so the
+ * phrase drifts while its opening note, the node's own chord role, never moves. Every [RETURN_EVERY] plays the
+ * original comes back, a return the ear can hold on to. Draws are seeded by node and play count, not the composer's
+ * stream, so they change no other choice.
+ */
+internal class MotifMemory {
+    private class State(var motif: Motif, var plays: Int)
+
+    private val states = HashMap<Long, State>()
+
+    /** The motif [node] plays now; the next call may hear it changed. */
+    fun next(node: Long): Motif {
+        val s = states.getOrPut(node) { State(Motifs.of(node), 0) }
+        val out = s.motif
+        s.plays++
+        s.motif = if (s.plays % RETURN_EVERY == 0) Motifs.of(node) else mutate(node, out, s.plays)
+        return out
+    }
+
+    /** The motif [node] would play next, without playing it. */
+    fun current(node: Long): Motif = states[node]?.motif ?: Motifs.of(node)
+
+    fun forget(node: Long) {
+        states.remove(node)
+    }
+
+    private fun mutate(node: Long, from: Motif, plays: Int): Motif {
+        val rng = Rng(Rng.mix(node xor SALT xor plays.toLong() * PLAY_STRIDE))
+        val roles = from.roles.copyOf()
+        val gaps = from.gaps.copyOf()
+        for (i in 1 until roles.size) {
+            val step = (from.roles[i] - from.roles[i - 1]).mod(Chord.ROLES)
+            val newStep = if (rng.nextDouble() < CHANGE) 1 + rng.nextInt(Chord.ROLES - 1) else step
+            roles[i] = (roles[i - 1] + newStep).mod(Chord.ROLES)
+            if (rng.nextDouble() < CHANGE) gaps[i] = Motifs.GAPS_SECONDS[rng.nextInt(Motifs.GAPS_SECONDS.size)]
+        }
+        return Motif(roles, gaps)
+    }
+
+    companion object {
+        /** Chance per play that one step of the motif redraws its interval, and separately its gap. */
+        const val CHANGE = 0.2
+
+        /** The original motif returns on every this many plays. */
+        const val RETURN_EVERY = 8
+        private const val SALT = 0x44454A41L
+        private const val PLAY_STRIDE = 0x7F4A7C15L
+    }
+}
