@@ -215,7 +215,8 @@ Built:
 - Mesh, composer, synth and audio sink, with the visual and UI reading the engine, on jvm, android, iOS (source and simulator build) and wasmJs.
 - SDK, simulated, replay and demo sources; a connect screen with TCP, Bluetooth, USB serial, WebSocket and a saved link with auto-connect.
 - Clouds-topology reverb, polyBLEP, FM, modal, Karplus-Strong and pitch-shifter voices in pure Kotlin.
-- A file log on desktop, an overlay with key controls, and the `tools` render and analyze commands.
+- An update check on Android and desktop with a Release or Snapshot track in Settings, desktop installers (deb, dmg, msi) and a web build deployed from every snapshot.
+- A file log on desktop, an overlay with key controls, and the `tools` render, analyze and video commands.
 - Mesh-driven parameters, pass 1: the per-event layer and palettes, `MeshMood` with `ParamValues`, rotation (speed, tilt and wobble, direction), gravity and orbits, the coverage log, the overlay Drivers panel and the demo sweep. A 6 hour run on a Mac against a real mesh held 59.9 fps and 340 MB with no warnings; no person has judged the sound or the visuals from it.
 
 Not built:
@@ -224,4 +225,4 @@ Not built:
 - A desktop capture mode; replay plays a bundled synthetic capture.
 - WebSerial.
 - MIDI and OSC output.
-- A run of iOS and web on a device or in a browser, and of Android on a phone or tablet (Android TV has run on a Chromecast with Google TV).
+- A run of iOS on a device, of web in a browser past the connect screen, and of Android on a phone or tablet (Android TV has run on a Chromecast with Google TV).
