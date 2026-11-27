@@ -48,8 +48,9 @@ internal fun UpdateChecks(updater: Updater?, track: UpdateTrack?) {
     val launched = remember { BooleanArray(1) }
     LaunchedEffect(updater, track) {
         track?.let(updater::follow)
-        if (!launched[0]) delay(FIRST_CHECK_DELAY_MS)
+        val first = !launched[0]
         launched[0] = true
+        if (first) delay(FIRST_CHECK_DELAY_MS)
         while (true) {
             delay(nextCheckDelayMillis(updater.check()))
         }

@@ -46,13 +46,19 @@ internal abstract class HttpUpdater(
     override val install: StateFlow<InstallState> = _install.asStateFlow()
     @Volatile private var currentManifest = initialManifest
     private val checkLock = Mutex()
+
+    /** Makes a track change and a check's write atomic: a check never lands an old track's answer after [follow]. */
+    private val stateLock = Any()
     private var installing: Job? = null
 
     override fun follow(track: UpdateTrack) {
         // A test manifest is the one being tested; a track has no say over it.
         if (assetsBesideManifest) return
-        currentManifest = manifestFor(track) ?: return
-        _update.value = UpdateState.Idle
+        val next = manifestFor(track) ?: return
+        synchronized(stateLock) {
+            currentManifest = next
+            _update.value = UpdateState.Idle
+        }
     }
 
     override suspend fun check(): UpdateState = checkLock.withLock {
@@ -66,7 +72,7 @@ internal abstract class HttpUpdater(
                 compare(runningCode, latest)
             } ?: UpdateState.Failed
         } catch (e: CancellationException) {
-            if (manifest == currentManifest) _update.value = previous
+            synchronized(stateLock) { if (manifest == currentManifest) _update.value = previous }
             throw e
         } catch (_: NotPublished) {
             // The snapshot's manifest is briefly missing while it is replaced; an offer already made stands.
@@ -76,8 +82,10 @@ internal abstract class HttpUpdater(
             if (previous is UpdateState.Available) previous else UpdateState.Failed
         }
         // The track changed while this ran: the answer belongs to the old one, and follow() already reset the state.
-        if (manifest != currentManifest) return@withLock _update.value
-        _update.value = answer
+        synchronized(stateLock) {
+            if (manifest != currentManifest) return@withLock _update.value
+            _update.value = answer
+        }
         answer
     }
 
