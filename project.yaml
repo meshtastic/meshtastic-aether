@@ -4,9 +4,11 @@ modules:
   - desktopApp
   - iosApp
   - plugins/build-info
+  - plugins/detekt
   - shared
   - tools
   - webApp
 
 plugins:
   - ./plugins/build-info
+  - ./plugins/detekt

@@ -1,0 +1,11 @@
+# detekt rules for Aether, layered on detekt's defaults (buildUponDefaultConfig). Only settings that fit a rule to
+# this project live here; a finding is fixed in code, not switched off.
+
+naming:
+  FunctionNaming:
+    # Composables are PascalCase by the Compose API guidelines.
+    ignoreAnnotated: ['Composable']
+  InvalidPackageDeclaration:
+    # The Toolchain layout has no org/meshtastic/aether directories: src/ui holds org.meshtastic.aether.ui.
+    rootPackage: org.meshtastic.aether
+    requireRootInDeclaration: true
