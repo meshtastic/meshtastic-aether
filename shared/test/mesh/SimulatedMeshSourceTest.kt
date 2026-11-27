@@ -236,6 +236,31 @@ class SimulatedMeshSourceTest {
         assertTrue(channels.count { it == 0 } * 2 > channels.size, "channel 0 is the primary and most used")
     }
 
+    @Test
+    fun `a node is heard at a steady strength and route from packet to packet`() = runTest {
+        // A real node's SNR and hop count hardly move between packets; drawing them fresh per packet made every note
+        // of one node change loudness, distance and echoes at random.
+        val heard = run(SimulatedMeshSource(36L, nodeCount = 30) { currentTime }, 24 * HOUR)
+            .filterIsInstance<MeshEvent.PacketHeard>().filter { it.snr != null && it.hopsTaken != null }
+        val byNode = heard.groupBy { it.from }.filterValues { it.size >= 10 }
+        assertTrue(byNode.size >= 10, "too few busy nodes: ${byNode.size}")
+        for ((node, packets) in byNode) {
+            val snr = packets.map { it.snr!! }
+            assertTrue(snr.max() - snr.min() <= 6f, "node $node SNR spread ${snr.max() - snr.min()} dB")
+            val usualHops = packets.groupingBy { it.hopsTaken }.eachCount().values.max()
+            assertTrue(usualHops * 10 >= packets.size * 7, "node $node usual route on $usualHops of ${packets.size}")
+        }
+    }
+
+    @Test
+    fun `environment sensors sit on a few percent of nodes as on a real mesh`() = runTest {
+        // Event captures show environment metrics on 3 to 4 percent of nodes (docs/mesh-driven-parameters.md).
+        val nodes = 200
+        val env = run(SimulatedMeshSource(37L, nodeCount = nodes) { currentTime }, HOUR)
+            .filterIsInstance<MeshEvent.Environment>().map { it.node }.toSet()
+        assertTrue(env.size in nodes / 100..nodes / 10, "${env.size} of $nodes nodes report the environment")
+    }
+
     private fun MeshEvent.shifted(by: Long): MeshEvent = when (this) {
         is MeshEvent.PacketHeard -> copy(atMillis = atMillis + by)
         is MeshEvent.NodeSeen -> copy(atMillis = atMillis + by)

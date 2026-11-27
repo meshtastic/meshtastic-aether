@@ -90,7 +90,7 @@ Implementations:
   - Warm-up: `nodes` re-sends a full `Snapshot` after every reconnect and retained handshake packets flush at `Ready`, so for a short window after each `Connected` the source updates state silently and emits no `PacketHeard`.
   - Storage is `InMemoryStorageProvider`, and auto-reconnect is on.
 - `ReplayMeshSource(capture)` replays a capture of timestamped `FromRadio` frames at 1x or faster; the app ships a bundled synthetic capture. Real captures hold real names and positions, so they stay local and are never committed, and committed fixtures are synthetic or scrubbed.
-- `SimulatedMeshSource(seed)` runs 5-40 fake nodes, each broadcasting on its own period per portnum, roughly like firmware defaults (position, telemetry and nodeinfo on intervals of minutes to hours, with jitter), plus occasional text, a share of encrypted broadcasts and rare routing. Traffic is periodic, not Poisson: real traffic is a set of slow loops of unrelated periods, which is Eno's tape-loop method for free, and the music is tuned against that.
+- `SimulatedMeshSource(seed)` runs 5-40 fake nodes, each broadcasting on its own period per portnum, roughly like firmware defaults (position, telemetry and nodeinfo on intervals of minutes to hours, with jitter), plus occasional text, a share of encrypted broadcasts and rare routing. Each node is heard at its own steady RSSI, SNR and route, with a little variation per packet, and environment sensors sit on about 4 percent of nodes, as in real captures. Traffic is periodic, not Poisson: real traffic is a set of slow loops of unrelated periods, which is Eno's tape-loop method for free, and the music is tuned against that.
 - `DemoMeshSource` is a scripted five-minute mesh for the connect screen: nodes arrive one by one, traffic rises and falls, a router, a tracker and a sensor speak, and a pressure fall reverses the rotation. The mesh-driven parameters document describes the sweep.
 
 Links per target, picked on the connect screen:
@@ -150,7 +150,7 @@ Building blocks, ported (licenses checked against the repositories):
 
 Headphone placement (`BinauralPanner`): a spherical-head model, not measured HRIRs. Each dry voice is placed at the side its note's pan gives. The far ear hears it up to 0.66 ms later (Woodworth's delay with a 0.0875 m head) and with its highs shaded by Brown and Duda's head-shadow shelf; a voice straight ahead is identical to the constant-power pan. Pads keep their pan and chorus (their 4 ms delays would comb with a delay), the reverb stays stereo and the limiter stays last. A switch crossfades over 0.3 s, so it never clicks. It is off by default. On a Chromecast release build the audio thread measured 45.6 percent of a core with it on and 50.6 percent without, within run-to-run noise.
 
-The `tools` module renders the synth offline to WAV for listening tests.
+The `tools` module renders the synth offline to WAV for listening tests, from any start time (`--at`), and analyzes a WAV per five-minute window: peak, RMS, clipping, spectral centroid, onsets, BS.1770 integrated loudness, the share of energy at or below 120 Hz, a score for a level envelope that repeats every 20 s, and the longest rest 40 dB under the window's median.
 
 ### AudioSink
 

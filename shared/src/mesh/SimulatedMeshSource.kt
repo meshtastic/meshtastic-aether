@@ -18,6 +18,7 @@ internal class SimDevice(
     val hardware: String = "HELTEC_V3",
     val knowsHopStart: Boolean = true,
     val viaMqtt: Boolean = false,
+    val link: SimLink = SimLink(),
 )
 
 /** A simulated node's battery and uptime at time zero. */
@@ -38,6 +39,16 @@ internal class SimClimate(
     val hasWind: Boolean = false,
     val windDirDeg: Double = 0.0,
     val windBaseMps: Double = 3.0,
+)
+
+/**
+ * How a simulated node is heard: a steady signal strength and route, as a real node's are, with each packet varying
+ * only a little around them.
+ */
+internal class SimLink(
+    val baseRssiDbm: Double = (RSSI_MIN_DBM + RSSI_MAX_DBM) / 2,
+    val snrOffsetDb: Double = 0.0,
+    val baseHops: Int = 0,
 )
 
 internal class SimNode(
@@ -84,6 +95,7 @@ private const val MAX_NODES = 200
 private const val ATTRIBUTE_SALT = 0xA77B1E5L
 private const val SELF_SALT = 0x5E1F5E1FL
 private const val TRAFFIC_SALT = 0x5DEECE66DL
+private const val LINK_SALT = 0x11A4B5L
 
 /** Node numbers: a base, 24 random bits in steps of 16, plus the node's index. */
 private const val NUM_BASE = 0x0A000000L
@@ -102,11 +114,18 @@ private const val ALTITUDE_MAX_M = 1500.0
 /** The share of nodes with each trait. */
 private const val POWERED_ROLE_MAINS_CHANCE = 0.7
 private const val MAINS_CHANCE = 0.06
-private const val ENVIRONMENT_CHANCE = 0.4
+
+/**
+ * Environment sensors sit on 3 to 4 percent of real nodes (docs/mesh-driven-parameters.md, "What real meshes send"),
+ * so a simulated render hears the landscape a real mesh gives, not a weather station on every other node.
+ */
+private const val ENVIRONMENT_CHANCE = 0.04
 private const val POSITION_CHANCE = 0.8
 private const val NAMED_CHANCE = 0.85
 private const val KNOWS_HOP_START_CHANCE = 0.9
 private const val MQTT_CHANCE = 0.1
+
+/** Wind appears on no captured mesh; a rare one stays so the wind paths still run in simulation. */
 private const val WIND_CHANCE = 0.3
 
 private const val BASE_TEMP_MIN_C = 2.0
@@ -138,7 +157,7 @@ private val STREAM_SPECS = listOf(
 )
 
 /** Node [i] of the mesh; draws in a fixed order from [rnd] and [attr], so a seed means the same node. */
-private fun simNode(i: Int, rnd: Rng, attr: Rng): SimNode {
+private fun simNode(i: Int, rnd: Rng, attr: Rng, link: Rng): SimNode {
     val num = NUM_BASE + (rnd.nextLong() ushr NUM_RANDOM_SHIFT) * NUM_STRIDE + i
     val role = attr.weighted(SIM_ROLES)
     val external = attr.nextDouble() < if (role in POWERED_ROLES) POWERED_ROLE_MAINS_CHANCE else MAINS_CHANCE
@@ -155,6 +174,11 @@ private fun simNode(i: Int, rnd: Rng, attr: Rng): SimNode {
         hardware = attr.weighted(SIM_HARDWARE),
         knowsHopStart = rnd.nextDouble() < KNOWS_HOP_START_CHANCE,
         viaMqtt = rnd.nextDouble() < MQTT_CHANCE,
+        link = SimLink(
+            baseRssiDbm = link.range(RSSI_MIN_DBM, RSSI_MAX_DBM),
+            snrOffsetDb = link.range(-SNR_OFFSET_DB, SNR_OFFSET_DB),
+            baseHops = link.nextInt(HOP_LIMIT + 1),
+        ),
     )
     val power = SimPower(
         batteryBasePct = if (external) POWERED_PCT else attr.range(BATTERY_MIN_PCT, BATTERY_MAX_PCT).toInt(),
@@ -201,6 +225,19 @@ private const val SNR_MIN_DB = -15.0
 private const val SNR_MAX_DB = 10.0
 private const val RSSI_MIN_DBM = -125.0
 private const val RSSI_MAX_DBM = -60.0
+
+/** Each packet's RSSI and SNR wander this far around the node's own; a node's own SNR sits this far off the line. */
+private const val RSSI_JITTER_DB = 3.0
+private const val SNR_JITTER_DB = 1.5
+private const val SNR_OFFSET_DB = 3.0
+
+/** A packet takes a route one hop longer or shorter than the node's usual one this often. */
+private const val REROUTE_CHANCE = 0.15
+private const val HALF = 0.5
+
+/** SNR follows RSSI: a weak node near the floor is near the SNR floor, a strong one near the top. */
+private fun snrForRssi(rssiDbm: Double): Double =
+    SNR_MIN_DB + (SNR_MAX_DB - SNR_MIN_DB) * (rssiDbm - RSSI_MIN_DBM) / (RSSI_MAX_DBM - RSSI_MIN_DBM)
 private const val TEXT_DM_CHANCE = 0.25
 
 /** Text lengths: at least the minimum, plus an exponential tail with this mean, capped at the firmware's 200. */
@@ -305,9 +342,10 @@ class SimulatedMeshSource(
         val ss = ArrayList<SimStream>()
         val offsets = ArrayList<Long>()
         val attr = Rng(seed xor ATTRIBUTE_SALT)
+        val link = Rng(seed xor LINK_SALT)
         val healthOffsets = ArrayList<Long>()
         for (i in 0 until nodeCount) {
-            ns += simNode(i, rnd, attr)
+            ns += simNode(i, rnd, attr, link)
             healthOffsets += (attr.nextDouble() * HEALTH_PERIOD_MS).toLong()
             for (spec in STREAM_SPECS) {
                 if (spec.chance != null && rnd.nextDouble() >= spec.chance) continue
@@ -397,10 +435,14 @@ class SimulatedMeshSource(
 
     private fun heard(n: SimNode, kind: PacketKind, rnd: Rng): MeshEvent.PacketHeard {
         val knowsHops = n.device.knowsHopStart
-        val snr = rnd.range(SNR_MIN_DB, SNR_MAX_DB).toFloat()
-        val rssi = rnd.range(RSSI_MIN_DBM, RSSI_MAX_DBM).toInt()
+        val link = n.device.link
+        val rssiDbm = (link.baseRssiDbm + rnd.range(-RSSI_JITTER_DB, RSSI_JITTER_DB))
+            .coerceIn(RSSI_MIN_DBM, RSSI_MAX_DBM)
+        val rssi = rssiDbm.toInt()
+        val snr = (snrForRssi(rssiDbm) + link.snrOffsetDb + rnd.range(-SNR_JITTER_DB, SNR_JITTER_DB))
+            .coerceIn(SNR_MIN_DB, SNR_MAX_DB).toFloat()
         val relays = relayPool.filter { it !== n }
-        val taken = if (!knowsHops || relays.isEmpty()) 0 else rnd.nextInt(HOP_LIMIT + 1)
+        val taken = if (!knowsHops || relays.isEmpty()) 0 else hopsTaken(link, rnd)
         val relay = if (knowsHops && taken > 0) relays[rnd.nextInt(relays.size)] else null
         val toUs = kind == PacketKind.Traceroute || (kind == PacketKind.Text && rnd.nextDouble() < TEXT_DM_CHANCE)
         val textLength = if (kind == PacketKind.Text) textLength(rnd) else null
@@ -421,6 +463,12 @@ class SimulatedMeshSource(
             textLength = textLength,
             channel = if (kind == PacketKind.Encrypted) null else channel,
         )
+    }
+
+    /** The node's usual route, or one hop longer or shorter now and then. */
+    private fun hopsTaken(link: SimLink, rnd: Rng): Int {
+        if (rnd.nextDouble() >= REROUTE_CHANCE) return link.baseHops
+        return (link.baseHops + if (rnd.nextDouble() < HALF) 1 else -1).coerceIn(0, HOP_LIMIT)
     }
 
     private fun health(n: SimNode, simMs: Long, rnd: Rng): MeshEvent.Health {
