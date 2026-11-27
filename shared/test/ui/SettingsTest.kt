@@ -2,6 +2,7 @@ package org.meshtastic.aether.ui
 
 import org.meshtastic.aether.ble.BleRadio
 import org.meshtastic.aether.theme.PaletteChoice
+import org.meshtastic.aether.update.UpdateTrack
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -114,6 +115,17 @@ class SettingsTest {
         assertEquals(PaletteChoice.OledNight, Settings(store).palette)
         store.put("palette", "Neon")
         assertEquals(PaletteChoice.Standard, Settings(store).palette)
+    }
+
+    // Regression: a stored track must win over the build's channel, and an unset or unknown one must leave the channel in charge.
+    @Test
+    fun `the update track is unset until chosen and ignores an unknown saved value`() {
+        val store = MemoryStore()
+        assertNull(Settings(store).updateTrack)
+        Settings(store).updateTrack = UpdateTrack.Snapshot
+        assertEquals(UpdateTrack.Snapshot, Settings(store).updateTrack)
+        store.put("update_track", "Nightly")
+        assertNull(Settings(store).updateTrack)
     }
 
     // Port rules: the phone API default is 4403 and a TCP port is 1..65535.

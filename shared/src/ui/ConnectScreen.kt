@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
@@ -23,6 +24,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
@@ -38,6 +40,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -143,6 +146,7 @@ internal fun ConnectScreen(
     focusChooser: Boolean = false,
     lastKind: LinkKind? = null,
     onKind: (LinkKind) -> Unit = {},
+    onSettings: (() -> Unit)? = null,
 ) {
     val chooserFocus = remember { FocusRequester() }
     LaunchedEffect(Unit) {
@@ -344,6 +348,11 @@ internal fun ConnectScreen(
                     }
                 }
                 if (primary != null) Column(column.fillMaxWidth().padding(top = 12.dp)) { primary() }
+            }
+        }
+        if (onSettings != null) {
+            IconButton(onSettings, Modifier.align(Alignment.TopEnd).size(MinTouch).semantics { contentDescription = "Settings" }) {
+                HudIcon(HudIcons.Settings)
             }
         }
     }

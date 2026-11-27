@@ -76,6 +76,9 @@ import org.meshtastic.aether.ui.LiveLink
 import org.meshtastic.aether.ui.LoopingReplaySource
 import org.meshtastic.aether.ui.PendingConnect
 import org.meshtastic.aether.ui.ScreenGutter
+import org.meshtastic.aether.ui.SettingsScreen
+import org.meshtastic.aether.update.BuildInfo
+import org.meshtastic.aether.update.UpdateTrack
 import org.meshtastic.aether.ui.Settings
 import org.meshtastic.aether.ui.StatusOverlay
 import org.meshtastic.aether.ui.controlsHint
@@ -173,7 +176,6 @@ fun App(
 ) {
     val platform = remember { getPlatform() }
     val settings = remember { Settings(createKeyValueStore()) }
-    UpdateChecks(appUpdater)
     AppRoot(
         settings, platform, onToggleFullscreen, initialLink, startupError, isFullscreen, hiddenCursor, look, launchedFullscreen,
         ask, screenReaderActive, commands,
@@ -197,6 +199,11 @@ internal fun AppRoot(
     commands: AppCommands? = null,
 ) {
     val initialLink = if (ask) null else launchLink
+    var track by remember { mutableStateOf(settings.updateTrack ?: UpdateTrack.of(BuildInfo.CHANNEL)) }
+    UpdateChecks(appUpdater, track)
+    var settingsOpen by remember { mutableStateOf(false) }
+    val settingsBack = rememberNavigationEventState(NavigationEventInfo.None)
+    NavigationBackHandler(settingsBack, isBackEnabled = settingsOpen, onBackCompleted = { settingsOpen = false })
     var palette by remember { mutableStateOf(resolveLook(look, settings.savedPalette, launchedFullscreen)) }
     AmbientTheme(palette) {
         val startup = remember { initialLink?.let { runCatching { sessionFor(it) } } }
@@ -245,7 +252,19 @@ internal fun AppRoot(
                     contentAlignment = Alignment.Center,
                 ) { Text("Tap to start", style = MaterialTheme.typography.headlineSmall, color = colors.text) }
 
+                current == null && settingsOpen -> SettingsScreen(
+                    updater = appUpdater,
+                    track = track,
+                    onTrack = {
+                        track = it
+                        settings.updateTrack = it
+                    },
+                    onBack = { settingsOpen = false },
+                    modifier = Modifier.windowInsetsPadding(WindowInsets.safeDrawing),
+                )
+
                 current == null -> ConnectScreen(
+                    onSettings = { settingsOpen = true },
                     onChoose = ::start,
                     pending = pending,
                     failure = failure,

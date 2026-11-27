@@ -188,6 +188,47 @@ internal object HudIcons {
         }
     }
 
+    /** A ring with eight spokes: settings. */
+    val Settings: ImageVector by lazy {
+        icon("Settings") {
+            stroked {
+                moveTo(15.5f, 12f)
+                arcTo(3.5f, 3.5f, 0f, true, true, 8.5f, 12f)
+                arcTo(3.5f, 3.5f, 0f, true, true, 15.5f, 12f)
+                close()
+                moveTo(18.40f, 12.00f)
+                lineTo(21.20f, 12.00f)
+                moveTo(16.53f, 16.53f)
+                lineTo(18.51f, 18.51f)
+                moveTo(12.00f, 18.40f)
+                lineTo(12.00f, 21.20f)
+                moveTo(7.47f, 16.53f)
+                lineTo(5.49f, 18.51f)
+                moveTo(5.60f, 12.00f)
+                lineTo(2.80f, 12.00f)
+                moveTo(7.47f, 7.47f)
+                lineTo(5.49f, 5.49f)
+                moveTo(12.00f, 5.60f)
+                lineTo(12.00f, 2.80f)
+                moveTo(16.53f, 7.47f)
+                lineTo(18.51f, 5.49f)
+            }
+        }
+    }
+
+    /** An arrow pointing left: back out of a screen. */
+    val Back: ImageVector by lazy {
+        icon("Back") {
+            stroked {
+                moveTo(19f, 12f)
+                lineTo(5f, 12f)
+                moveTo(11f, 6f)
+                lineTo(5f, 12f)
+                lineTo(11f, 18f)
+            }
+        }
+    }
+
     /** An arrow down into a tray: an update is ready. */
     val Update: ImageVector by lazy {
         icon("Update") {

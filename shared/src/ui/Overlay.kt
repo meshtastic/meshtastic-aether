@@ -316,7 +316,7 @@ private fun HudTooltip(label: String, enabled: Boolean, content: @Composable () 
 }
 
 @Composable
-private fun HudIcon(vector: ImageVector) = Icon(vector, contentDescription = null, modifier = Modifier.size(24.dp))
+internal fun HudIcon(vector: ImageVector) = Icon(vector, contentDescription = null, modifier = Modifier.size(24.dp))
 
 @Composable
 private fun HudButton(label: String, icon: ImageVector, tooltips: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {

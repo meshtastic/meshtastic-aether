@@ -15,6 +15,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
@@ -26,6 +29,7 @@ import org.meshtastic.aether.update.InstallMode
 import org.meshtastic.aether.update.InstallState
 import org.meshtastic.aether.update.PublishedBuild
 import org.meshtastic.aether.update.UpdateState
+import org.meshtastic.aether.update.UpdateTrack
 import org.meshtastic.aether.update.Updater
 import org.meshtastic.aether.update.createUpdater
 import org.meshtastic.aether.update.nextCheckDelayMillis
@@ -36,12 +40,18 @@ private val PANEL_WIDTH = 360.dp
 /** The process's updater: null on iOS, the web, an app-store install and a local build. */
 internal val appUpdater: Updater? by lazy { createUpdater() }
 
-/** Checks 10 s after launch, then daily (hourly after a failure or an empty channel) for as long as the app runs. */
+/**
+ * Checks 10 s after launch, then daily (hourly after a failure or an empty channel) for as long as the app runs. A
+ * change of [track] follows the new one and checks it at once.
+ */
 @Composable
-internal fun UpdateChecks(updater: Updater?) {
+internal fun UpdateChecks(updater: Updater?, track: UpdateTrack?) {
     if (updater == null) return
-    LaunchedEffect(updater) {
-        delay(FIRST_CHECK_DELAY_MS)
+    var launched by remember { mutableStateOf(false) }
+    LaunchedEffect(updater, track) {
+        track?.let(updater::follow)
+        if (!launched) delay(FIRST_CHECK_DELAY_MS)
+        launched = true
         while (true) {
             delay(nextCheckDelayMillis(updater.check()))
         }

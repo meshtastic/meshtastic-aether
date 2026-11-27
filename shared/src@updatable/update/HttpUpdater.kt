@@ -32,7 +32,7 @@ internal fun manifestOverride(): String? = System.getenv("AETHER_UPDATE_MANIFEST
  * goes in. One per process, so a download outlives the dialog that started it.
  */
 internal abstract class HttpUpdater(
-    private val manifestUrl: String,
+    manifestUrl: String,
     private val runningCode: Long,
     /** A test manifest names files that sit beside it, not on GitHub. */
     private val assetsBesideManifest: Boolean = false,
@@ -42,8 +42,16 @@ internal abstract class HttpUpdater(
     override val update: StateFlow<UpdateState> = _update.asStateFlow()
     protected val _install = MutableStateFlow<InstallState>(InstallState.Idle)
     override val install: StateFlow<InstallState> = _install.asStateFlow()
+    @Volatile private var currentManifest = manifestUrl
     private val checkLock = Mutex()
     private var installing: Job? = null
+
+    override fun follow(track: UpdateTrack) {
+        // A test manifest is the one being tested; a track has no say over it.
+        if (assetsBesideManifest) return
+        currentManifest = manifestUrl(track.channel) ?: return
+        _update.value = UpdateState.Idle
+    }
 
     override suspend fun check(): UpdateState = checkLock.withLock {
         val previous = _update.value
@@ -110,8 +118,8 @@ internal abstract class HttpUpdater(
     }
 
     private suspend fun fetchLatest(): PublishedBuild? =
-        PublishedBuild.parse(fetchText(manifestUrl))
-            ?.let { if (assetsBesideManifest) it.copy(downloadBase = manifestUrl.substringBeforeLast('/')) else it }
+        PublishedBuild.parse(fetchText(currentManifest))
+            ?.let { if (assetsBesideManifest) it.copy(downloadBase = currentManifest.substringBeforeLast('/')) else it }
 
     /** The asset this platform installs, or null when the build carries none for it. */
     protected abstract fun assetFor(latest: PublishedBuild): Asset?

@@ -1,0 +1,1 @@
+- A settings screen, opened from the cog on the connect screen, picks whether updates follow releases or snapshots, checks for one on demand, and carries the project links and notices.
