@@ -180,6 +180,25 @@ API design to imitate: `Transport` + `scheduleRepeat`/`scheduleOnce` on musical 
 
 ---
 
+## 6. Theory: ambient, tuning, sonification and visual
+
+Findings from ambient and generative music theory, sonification and calm-technology research and generative visual art that the engine takes, with what each changed. Rates marked as design guesses have no source and are tuned by ear on renders.
+
+- Just intonation needs per-chord tuning. A fixed 5-limit frame on the key puts a 40/27 fifth (a syntonic comma, 21.5 cents, flat) into ii, v and bVII; adaptive tuning moves chord tones by a comma to keep intervals pure (Stange, Wick and Hinrichsen, Computer Music Journal 42(3), 2018; Hermode Tuning). Tenney's harmonic distance (log2 of numerator times denominator, octaves ignored) scores purity. The composer tunes each chord this way and keeps the key's tonic and fifth fixed.
+- A key is confirmed by a home chord, not only implied by the pitch set; tonal tension models (Lerdahl, Tonal Pitch Space) measure distance from the tonic. The progression starts on the tonic and pulls back toward it.
+- A common period under incommensurable loops defeats them. Eno's loops work because nothing shares a period; a bed re-struck on one 20 s tick, with each tone releasing as the next attacks, put an 8 dB dip on that period. The bed now carries its tones through the tick.
+- Beating near 4 Hz is the most noticeable fluctuation and roughness takes over near 15 Hz (Zwicker and Fastl, Psychoacoustics). Slow beats (well under 1 Hz) make a drone live ("if the tuning is too precise, the result is flat", Radigue, interviewed in Array); fast ones become a cue. A low-battery twin beats at 2 Hz at most.
+- Rare events stand out by breaking one feature of an established bed, not by loudness, and vibrato is a strong stream-segregation cue (Bregman, Auditory Scene Analysis; Sonification Handbook, chapter 3, https://sonification.de/handbook). Treat battery and uptime as character, not information to decode.
+- Calm technology moves information between periphery and center (Weiser and Brown, 1996); Jeremijenko's Live Wire (a string twitching with LAN traffic, Xerox PARC) is the direct ancestor of the rotation's per-packet push. Mankoff et al.'s ambient-display heuristics (CHI 2003) are the evaluation checklist.
+- Data that does not exist is no data. Environment sensors are on 3 to 4 percent of real nodes (section "What real meshes send" in [`mesh-driven-parameters.md`](mesh-driven-parameters.md)), so a quantity no node reports adds nothing to the texture instead of sitting at the middle of its range.
+- Motifs that drift but return: Mutable Instruments Marbles' deja vu (MIT, `marbles/random/random_sequence.h`) loops a random sequence and redraws steps with a set probability; Feldman's late works vary one property per return. Node motifs redraw a step at a time and return to their original form every eighth play. Change rates are design guesses.
+- Layer entrances keep repeating music listenable: in Janata et al. (Music Perception 36(2), 2018) instrument entrances were the strongest factor keeping listeners on unfamiliar loops. Not built: staggered layer entries and exits within a section.
+- Loudness of the active bed already sits at -16 to -19 LUFS (BS.1770, measured on one-hour renders); AES TD1008 recommends -16 LUFS for music streams. The form's slide toward -35 LUFS at its trough is the energy arc, so no gain rider fights it.
+- Visual: integrated phases (Whitney, Digital Harmony, 1980) and perceptual color (OKLab, Björn Ottosson, public domain) keep motion and color even; audio-visual binding tolerates sound lagging picture more than leading it, so a ripple starts at or just before its note. Not built: OKLCH hue shifts, resonance orbits.
+- Evaluation: the analyzer measures loudness, low-band share, the 20 s pulse and rests, so changes to the bed are checked on hour-long renders before anyone listens.
+
+---
+
 ## Sources (primary unless noted)
 - Listen to Wikipedia: https://github.com/hatnote/listen-to-wikipedia (LICENSE, static/js/app.js, static/index.html)
 - BitListen: https://github.com/MaxLaumeister/bitlisten

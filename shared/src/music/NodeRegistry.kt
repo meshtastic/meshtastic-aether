@@ -10,6 +10,9 @@ internal class NodeRegistry {
     private class NodeInfo(var position: GeoPoint?, var lastHeard: Long)
 
     private val nodes = HashMap<Long, NodeInfo>()
+
+    /** Each heard node's developing motif; it goes with the node. */
+    val motifs = MotifMemory()
     private var sumLat = 0.0
     private var sumLon = 0.0
     private var positioned = 0
@@ -30,6 +33,7 @@ internal class NodeRegistry {
     }
 
     fun remove(node: Long) {
+        motifs.forget(node)
         nodes.remove(node)?.position?.let { sumLat -= it.lat; sumLon -= it.lon; positioned-- }
     }
 

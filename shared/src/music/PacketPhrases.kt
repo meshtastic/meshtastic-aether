@@ -106,18 +106,23 @@ internal class PacketPhrases(
         return at
     }
 
-    /** A text climbs the chord stack from the band above the key, one note per step, with no echoes or answer. */
+    /**
+     * A text climbs through the sender's motif from the band above the key, one note per step and an octave higher on
+     * each pass, with no echoes or answer: every sender's message has its own shape.
+     */
     private fun textPhrase(sound: PacketSound, textLength: Int?, start: Long) {
         val chord = score.chord
         val ttl = score.sec(Ornaments.TTL_SECONDS)
+        val roles = nodes.motifs.current(sound.node).roles
         var first: Long? = null
         for (i in 0 until Traits.textPhraseNotes(textLength)) {
             val intended = start + score.sec(TEXT_STEP_SECONDS * i)
-            val hz = Ornaments.pitchHz(i % Chord.ROLES, 1 + i / Chord.ROLES, chord, score.keyHz)
+            val band = minOf(1 + i / roles.size, Ornaments.BANDS - 1)
+            val hz = Ornaments.pitchHz(roles[i % roles.size], band, chord, score.keyHz)
             val at = place(sound, intended, hz, sound.velocity, intended + ttl) ?: continue
             if (first == null) first = at
         }
-        first?.let { mqttShimmer(sound, it, Ornaments.pitchHz(0, 1, chord, score.keyHz)) }
+        first?.let { mqttShimmer(sound, it, Ornaments.pitchHz(roles[0], 1, chord, score.keyHz)) }
     }
 
     /** The node's motif in a quiet mesh, else its one note; then its shimmer, echoes and an answer. */
@@ -137,7 +142,7 @@ internal class PacketPhrases(
 
     /** The node's motif, each note softer than the last; null when its first note found no slot. */
     private fun motifPhrase(sound: PacketSound, start: Long, deadline: Long): Placed? {
-        val motif = Motifs.of(sound.node)
+        val motif = nodes.motifs.current(sound.node)
         val chord = score.chord
         val speed = score.phraseSpeed()
         var offset = 0.0
@@ -158,7 +163,9 @@ internal class PacketPhrases(
                 break
             }
         }
-        return if (firstAt < 0) null else Placed(firstAt, anchor, anchor - start)
+        if (firstAt < 0) return null
+        nodes.motifs.advance(sound.node)
+        return Placed(firstAt, anchor, anchor - start)
     }
 
     /** Echoes by hop count after the last note, each softer and wetter; odd ones sound from the relay when known. */

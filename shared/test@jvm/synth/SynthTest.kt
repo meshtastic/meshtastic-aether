@@ -139,6 +139,22 @@ class SynthTest {
         }
     }
 
+    // Regression: carrying a 40 s pad on with a 5 s note near its end set the 5 s note's 2 s release, cutting the
+    // long tone's 8 s tail short.
+    @Test
+    fun `a short note carrying a long pad keeps the long release`() {
+        fun tail(withShort: Boolean): Double {
+            val synth = Synth(rate)
+            synth.schedule(controls(0, texture()))
+            val pads = listOf(note(Voice.Pad, 0, 220.0, 0.5f, 40.0)) +
+                if (withShort) listOf(note(Voice.Pad, 35L * rate, 220.0, 0.5f, 5.0)) else emptyList()
+            synth.schedule(notes(*pads.toTypedArray()))
+            return synth.renderAll(45 * rate).rms(42 * rate, 43 * rate)
+        }
+        val db = 20 * kotlin.math.log10(tail(true) / tail(false))
+        assertTrue(db > -1.5, "the carried tail is $db dB under the long pad's own")
+    }
+
     @Test
     fun `a pad at a new pitch starts its own voice and the old tone releases`() {
         val synth = Synth(rate)

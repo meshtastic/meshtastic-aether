@@ -180,11 +180,11 @@ class ComposerTraitsTest {
     }
 
     @Test
-    fun `text length sets the number of notes in the phrase and the sixth note is an octave over the first`() {
-        fun phrase(len: Int?): List<NoteEvent> {
+    fun `text length sets the number of notes and the phrase restates the sender's motif an octave up`() {
+        fun phrase(len: Int?, node: Long = 9L): List<NoteEvent> {
             val c = fresh()
-            c.onEvent(heard(9L, PacketKind.Text, text = len))
-            return ornaments(c.drive(step, 5), 9L)
+            c.onEvent(heard(node, PacketKind.Text, text = len))
+            return ornaments(c.drive(step, 5), node)
         }
         assertEquals(4, phrase(null).size)
         assertEquals(3, phrase(30).size)
@@ -192,7 +192,22 @@ class ComposerTraitsTest {
         assertEquals(5, phrase(120).size)
         val long = phrase(200)
         assertEquals(6, long.size)
-        assertEquals(2.0, long[5].pitchHz / long[0].pitchHz, 1e-9)
+        val size = Motifs.of(9L).size
+        assertEquals(2.0, long[size].pitchHz / long[0].pitchHz, 1e-9)
+    }
+
+    // Regression: every text played the same arpeggio up the chord stack, whoever sent it.
+    @Test
+    fun `two senders with different motifs send differently shaped texts`() {
+        fun shape(node: Long): List<Double> {
+            val c = fresh()
+            c.onEvent(heard(node, PacketKind.Text, text = 200))
+            val notes = ornaments(c.drive(step, 5), node)
+            return notes.map { it.pitchHz / notes[0].pitchHz }
+        }
+        val a = 9L
+        val b = (10L..200L).first { Motifs.of(it).roles.toList() != Motifs.of(a).roles.toList() }
+        assertTrue(shape(a) != shape(b), "senders $a and $b sent the same phrase")
     }
 
     private fun voicesFor(role: String?, hardware: String?, node: Long = 40L, kind: PacketKind = PacketKind.Position): Set<Voice> {
