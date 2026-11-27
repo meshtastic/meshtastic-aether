@@ -241,4 +241,22 @@ class LoudnessTest {
         assertEquals(0.0, st.longestQuietSec, 1e-9)
         assertEquals(20.0, st.longestRestSec, 0.11)
     }
+
+    @Test
+    fun `channels in opposite polarity are not a rest`() {
+        // A signed channel average cancels to zero when the right channel is the left inverted, though both play.
+        val st = analyze(SR * 140) { i ->
+            val x = sine(0.5, 440.0, i)
+            val t = i.toDouble() / SR
+            if (t >= 60.0 && t < 80.0) x to -x else x to x
+        }.single()
+        assertEquals(0.0, st.longestRestSec, 1e-9)
+    }
+
+    @Test
+    fun `a DC offset does not count as low band energy`() {
+        // A Hann window spreads DC into the bin next to zero (11.7 Hz at 48 kHz) unless the mean comes off first.
+        val st = analyze(SR * 4) { i -> (0.5f + sine(0.2, 1000.0, i)).let { it to it } }.single()
+        assertTrue(st.lowBandRatio < 0.01, "low band ${st.lowBandRatio} from DC")
+    }
 }
