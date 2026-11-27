@@ -39,6 +39,7 @@ import kotlinx.coroutines.delay
 import org.meshtastic.aether.theme.AmbientTheme
 import org.meshtastic.aether.theme.LocalAmbientPalette
 import org.meshtastic.aether.theme.PaletteChoice
+import org.meshtastic.aether.visual.SpatialSource
 import org.meshtastic.aether.ui.AppCommands
 import org.meshtastic.aether.ui.ConnectContext
 import org.meshtastic.aether.ui.ConnectScreen
@@ -82,11 +83,12 @@ data class LaunchOptions(
  * What the host window offers the running session. [onToggleFullscreen] is the host's fullscreen switch, null where the
  * target has none, and [isFullscreen] its state. [hiddenCursor] is a blank pointer icon the app shows after 3 s without
  * pointer movement, null where the host cannot hide the cursor. Then whether a screen reader is on, and the menu
- * commands.
+ * commands. [onEnterSpatial] opens the host's headset or AR view of the running session, null where it has none.
  */
 @Immutable
 data class HostWindow(
     val onToggleFullscreen: (() -> Unit)? = null,
+    val onEnterSpatial: ((SpatialSource) -> Unit)? = null,
     val isFullscreen: Boolean = false,
     val hiddenCursor: PointerIcon? = null,
     val screenReaderActive: Boolean = false,

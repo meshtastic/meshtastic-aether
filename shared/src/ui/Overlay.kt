@@ -61,7 +61,8 @@ internal const val DISCONNECT_HINT = "Press Disconnect again within 3 seconds"
 
 /**
  * What the HUD needs from the session around it: the look in force and where a new pick goes, the Disconnect action,
- * the host's fullscreen switch (null where it has none) and the updater (null where the build has none).
+ * the host's fullscreen switch (null where it has none), the updater (null where the build has none) and the way into
+ * the host's headset or AR view (null where it has none).
  */
 @Immutable
 internal data class HudHost(
@@ -70,6 +71,7 @@ internal data class HudHost(
     val onDisconnect: () -> Unit,
     val onToggleFullscreen: (() -> Unit)?,
     val updater: Updater? = null,
+    val onEnterSpatial: (() -> Unit)? = null,
 )
 
 /**
