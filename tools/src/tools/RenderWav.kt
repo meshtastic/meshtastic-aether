@@ -32,10 +32,13 @@ sealed interface Command {
     ) : Command
 
     data class Analyze(val wav: String) : Command
+
+    data class Video(val spec: VideoSpec, val out: String) : Command
 }
 
 const val USAGE = "usage: RenderWav <silent|sparse|busy> <hours> <outPath> [seed] [--at <UTC instant>]  |  " +
-    "RenderWav analyze <wav>"
+    "RenderWav analyze <wav>  |  RenderWav video <seconds> <out.mp4> [--nodes N] [--speed X] [--seed N] " +
+    "[--at <UTC instant>] [--warmup S] [--fps N] [--size WxH] [--look standard|projector|oled]"
 
 private const val AT_FLAG = "--at"
 
@@ -44,7 +47,7 @@ private const val RENDER_ARGS = 3
 private const val DEFAULT_SEED = 1L
 
 /** The `--at` instant as epoch milliseconds, or the fixed Wednesday evening start when the flag is absent. */
-private fun startEpochMs(all: List<String>, at: Int): Long {
+internal fun startEpochMs(all: List<String>, at: Int): Long {
     if (at < 0) return START_EPOCH_MS
     val value = all.getOrNull(at + 1)
     require(value != null) { "$AT_FLAG needs an instant; $USAGE" }
@@ -55,7 +58,10 @@ private fun startEpochMs(all: List<String>, at: Int): Long {
     }
 }
 
-fun parseArgs(all: List<String>): Command {
+fun parseArgs(all: List<String>): Command =
+    if (all.firstOrNull() == "video") parseVideoArgs(all) else parseRenderOrAnalyze(all)
+
+private fun parseRenderOrAnalyze(all: List<String>): Command {
     require(all.isNotEmpty()) { USAGE }
     val at = all.indexOf(AT_FLAG)
     val startEpochMs = startEpochMs(all, at)
@@ -83,7 +89,7 @@ private const val SAMPLE_RATE = 48_000
 private const val STEREO = 2
 private const val BLOCK = 512
 private const val LOOKAHEAD = 12_000L
-private const val START_EPOCH_MS = 1_795_636_800_000L // 2026-11-25T20:00:00Z, a Wednesday evening
+internal const val START_EPOCH_MS = 1_795_636_800_000L // 2026-11-25T20:00:00Z, a Wednesday evening
 
 private const val MILLIS_PER_SECOND = 1000L
 private const val MILLIS_PER_MINUTE = 60_000L
@@ -267,5 +273,11 @@ fun main(args: Array<String>) {
             )
         }
         is Command.Analyze -> print(formatStats(analyzeWav(cmd.wav)))
+        is Command.Video -> {
+            val t0 = System.nanoTime()
+            val pictures = renderVideo(cmd.spec, cmd.out)
+            val secs = (System.nanoTime() - t0) / NANOS_PER_SECOND
+            println("rendered $pictures pictures in ${"%.1f".format(secs)} s -> ${cmd.out}")
+        }
     }
 }
