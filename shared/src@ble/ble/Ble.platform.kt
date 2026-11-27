@@ -12,3 +12,5 @@ internal actual fun bleSupported(): Boolean = true
 actual fun bleScan(): Flow<BleRadio>? = BleScanner.scan().map { BleRadio(it.name, it.rssi, it.address, it) }
 
 internal actual fun createBleTransport(radio: BleRadio): RadioTransport? = BleTransport(radio.handle as DiscoveredRadio)
+
+internal actual fun bleChooser(): (suspend () -> BleRadio?)? = null

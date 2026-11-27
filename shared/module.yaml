@@ -40,6 +40,9 @@ dependencies@ios:
   - $libs.meshtastic.sdk.transport.tcp
   - $libs.meshtastic.sdk.transport.ble
 
+dependencies@wasmJs:
+  - $libs.meshtastic.sdk.transport.ble
+
 settings:
   android:
     minSdk: 26 # meshtastic-sdk's floor
