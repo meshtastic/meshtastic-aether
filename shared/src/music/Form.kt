@@ -78,7 +78,7 @@ class Form(seed: Long, private val pinnedFull: Boolean = false) {
 
     private fun smoothstep(lo: Double, hi: Double, x: Double): Double {
         val u = ((x - lo) / (hi - lo)).coerceIn(0.0, 1.0)
-        return u * u * (3 - 2 * u)
+        return u * u * (SMOOTHSTEP_SQUARE_COEFFICIENT - 2 * u) // Hermite smoothstep, 3u² - 2u³
     }
 
     private fun lerp(a: Double, b: Double, u: Double) = a + (b - a) * u
@@ -86,6 +86,7 @@ class Form(seed: Long, private val pinnedFull: Boolean = false) {
     companion object {
         const val ARC_SECONDS = 110.0 * 60.0
         const val SECONDS_PER_MINUTE = 60.0
+        private const val SMOOTHSTEP_SQUARE_COEFFICIENT = 3
         private const val FADE = 120.0
         private const val THIN = 0.35
         private const val THIN_CHANCE = 0.25

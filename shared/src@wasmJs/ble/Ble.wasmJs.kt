@@ -6,6 +6,7 @@ import kotlinx.coroutines.flow.Flow
 import org.meshtastic.sdk.RadioTransport
 import org.meshtastic.sdk.transport.ble.requestBleTransport
 import kotlin.js.ExperimentalWasmJsInterop
+import kotlin.js.JsException
 
 @JsFun("() => typeof navigator !== 'undefined' && 'bluetooth' in navigator")
 private external fun hasWebBluetooth(): Boolean
@@ -17,7 +18,14 @@ internal actual fun bleSupported(): Boolean = hasWebBluetooth()
 actual fun bleScan(): Flow<BleRadio>? = null
 
 internal actual fun bleChooser(): (suspend () -> BleRadio?)? = {
-    requestBleTransport()?.let { BleRadio(CHOSEN_NAME, null, it.identity.raw, it) }
+    val transport = try {
+        requestBleTransport()
+    } catch (e: JsException) {
+        throw BleChooserException(e.message, e) // the browser refused: insecure page or no user gesture
+    } catch (e: IllegalStateException) {
+        throw BleChooserException(e.message, e) // Kable: this browser has no Web Bluetooth
+    }
+    transport?.let { BleRadio(CHOSEN_NAME, null, it.identity.raw, it) }
 }
 
 internal actual fun createBleTransport(radio: BleRadio): RadioTransport? = radio.handle as? RadioTransport

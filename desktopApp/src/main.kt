@@ -113,15 +113,19 @@ fun main(args: Array<String>) {
             window.minimumSize = Dimension(MIN_WIDTH, MIN_HEIGHT)
             if (isMac) MacMenuBar(state, commands, toggleFullscreen)
             App(
-                initialLink = launch.link,
-                startupError = launch.error,
-                isFullscreen = state.placement == WindowPlacement.Fullscreen,
-                hiddenCursor = hidden,
-                look = launch.look,
-                launchedFullscreen = launch.fullscreen,
-                ask = launch.ask,
-                commands = commands,
-                onToggleFullscreen = toggleFullscreen,
+                launch = LaunchOptions(
+                    link = launch.link,
+                    startupError = launch.error,
+                    look = launch.look,
+                    launchedFullscreen = launch.fullscreen,
+                    ask = launch.ask,
+                ),
+                host = HostWindow(
+                    onToggleFullscreen = toggleFullscreen,
+                    isFullscreen = state.placement == WindowPlacement.Fullscreen,
+                    hiddenCursor = hidden,
+                    commands = commands,
+                ),
             )
         }
     }

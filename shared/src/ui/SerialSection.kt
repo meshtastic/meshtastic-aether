@@ -56,6 +56,8 @@ internal fun SerialSection(
         if (request == 0) return@LaunchedEffect
         looking = true
         error = null
+        // The platform port lists document no exceptions, and a failure must show as text, not end the screen.
+        @Suppress("TooGenericExceptionCaught")
         try {
             ports = orderedPorts(find())
             Log.i("serial", "found ${ports?.size} port(s)")

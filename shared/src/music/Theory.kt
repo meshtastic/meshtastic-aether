@@ -2,19 +2,46 @@ package org.meshtastic.aether.music
 
 import kotlin.math.pow
 
+/** The major scale in semitones above the tonic; the six modes are its rotations. */
+private val MAJOR_SCALE = listOf(0, 2, 4, 5, 7, 9, 11)
+
+/** The major pentatonic drops fa and ti (0-based degrees) from the major scale. */
+private val MAJOR_PENTATONIC_DROPS = setOf(3, 6)
+
+/** The minor pentatonic drops the 2nd and 6th (0-based degrees) from natural minor. */
+private val MINOR_PENTATONIC_DROPS = setOf(1, 5)
+
+/** The major scale started on its 0-based [degree], measured from that note. */
+private fun majorRotation(degree: Int): List<Int> = MAJOR_SCALE.indices.map { i ->
+    (MAJOR_SCALE[(i + degree) % MAJOR_SCALE.size] - MAJOR_SCALE[degree]).mod(Theory.SEMITONES_PER_OCTAVE)
+}
+
+/** Each [Mode]'s semitones by ordinal, built once; an enum's own initializer cannot read its entries. */
+private val MODE_SEMITONES: List<List<Int>> = Mode.entries.map { mode ->
+    when (mode) {
+        Mode.MajorPentatonic ->
+            majorRotation(Mode.Ionian.ordinal).filterIndexed { i, _ -> i !in MAJOR_PENTATONIC_DROPS }
+        Mode.MinorPentatonic ->
+            majorRotation(Mode.Aeolian.ordinal).filterIndexed { i, _ -> i !in MINOR_PENTATONIC_DROPS }
+        else -> majorRotation(mode.ordinal)
+    }
+}
+
 /**
  * The eight scales in use (six modes and two pentatonics); Locrian is deliberately absent. Semitones above the tonic,
- * one octave.
+ * one octave. The six modes are declared in the order of the major-scale degree they start on.
  */
-enum class Mode(val semitones: List<Int>) {
-    Ionian(listOf(0, 2, 4, 5, 7, 9, 11)),
-    Dorian(listOf(0, 2, 3, 5, 7, 9, 10)),
-    Phrygian(listOf(0, 1, 3, 5, 7, 8, 10)),
-    Lydian(listOf(0, 2, 4, 6, 7, 9, 11)),
-    Mixolydian(listOf(0, 2, 4, 5, 7, 9, 10)),
-    Aeolian(listOf(0, 2, 3, 5, 7, 8, 10)),
-    MajorPentatonic(listOf(0, 2, 4, 7, 9)),
-    MinorPentatonic(listOf(0, 3, 5, 7, 10));
+enum class Mode {
+    Ionian,
+    Dorian,
+    Phrygian,
+    Lydian,
+    Mixolydian,
+    Aeolian,
+    MajorPentatonic,
+    MinorPentatonic;
+
+    val semitones: List<Int> get() = MODE_SEMITONES[ordinal]
 
     /** Notes per octave: 7 for the modes, 5 for the pentatonics. */
     val size: Int get() = semitones.size

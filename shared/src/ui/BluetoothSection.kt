@@ -30,18 +30,19 @@ import androidx.compose.ui.semantics.error
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
+import org.meshtastic.aether.ble.BleChooserException
 import org.meshtastic.aether.ble.BleRadio
 import org.meshtastic.aether.ble.RadioList
 import org.meshtastic.aether.ble.bleChooser
 import org.meshtastic.aether.ble.bleScan
 import org.meshtastic.aether.ble.ensureBlePermissions
 import org.meshtastic.aether.log.Log
+import org.meshtastic.sdk.MeshtasticException
 
 /**
  * Scan for Meshtastic radios over Bluetooth and pick one; the scan stops when the section leaves the screen. Where the
@@ -98,9 +99,7 @@ private suspend fun BleScan.scanUntilStopped() {
     error = null
     try {
         openScan()?.let { collectRadios(it) }
-    } catch (e: CancellationException) {
-        throw e
-    } catch (e: Throwable) {
+    } catch (e: MeshtasticException) {
         Log.e("ble", "scan failed", e)
         stop(e.message ?: e::class.simpleName)
     } finally {
@@ -165,9 +164,7 @@ private fun ChooserSection(
                         val radio = chooser()
                         Log.i("ble", if (radio == null) "chooser dismissed" else "chose ${radio.address}")
                         radio?.let(onPick)
-                    } catch (e: CancellationException) {
-                        throw e
-                    } catch (e: Throwable) {
+                    } catch (e: BleChooserException) {
                         Log.e("ble", "chooser failed", e)
                         error = e.message ?: e::class.simpleName
                     } finally {

@@ -41,18 +41,17 @@ class MainActivity : ComponentActivity() {
         val isTelevision = (getSystemService(UI_MODE_SERVICE) as? UiModeManager)?.currentModeType == Configuration.UI_MODE_TYPE_TELEVISION
         setContent {
             App(
-                initialLink = launch.link,
-                startupError = launch.error,
-                look = launch.look,
-                ask = launch.ask,
-                onToggleFullscreen = if (isTelevision) {
-                    null
-                } else {
-                    {
-                        immersive = !immersive
-                        if (immersive) controller.hide(WindowInsetsCompat.Type.systemBars()) else controller.show(WindowInsetsCompat.Type.systemBars())
-                    }
-                },
+                launch = LaunchOptions(link = launch.link, startupError = launch.error, look = launch.look, ask = launch.ask),
+                host = HostWindow(
+                    onToggleFullscreen = if (isTelevision) {
+                        null
+                    } else {
+                        {
+                            immersive = !immersive
+                            if (immersive) controller.hide(WindowInsetsCompat.Type.systemBars()) else controller.show(WindowInsetsCompat.Type.systemBars())
+                        }
+                    },
+                ),
             )
         }
     }

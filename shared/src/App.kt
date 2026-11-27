@@ -63,9 +63,13 @@ import org.meshtastic.aether.update.UpdateTrack
 private const val AUTO_CONNECT_SECONDS = 5
 private const val SECOND_MS = 1_000L
 
-/** How the host launched the app: a link to open or a launch argument it could not read, the look and the flags. */
+/**
+ * How the host launched the app. [link] skips the connect screen; [startupError] is a launch argument the host could
+ * not read, shown as a failure on the connect screen. [look] is a launch flag that overrides the saved look; with no
+ * flag and nothing saved a [launchedFullscreen] start uses the Projector look.
+ */
 @Immutable
-internal data class LaunchOptions(
+data class LaunchOptions(
     val link: LinkChoice? = null,
     val startupError: String? = null,
     val look: PaletteChoice? = null,
@@ -74,11 +78,13 @@ internal data class LaunchOptions(
 )
 
 /**
- * What the host window offers the running session: its fullscreen switch and state, a blank cursor to hide the pointer
- * with, whether a screen reader is on, and its menu commands.
+ * What the host window offers the running session. [onToggleFullscreen] is the host's fullscreen switch, null where the
+ * target has none, and [isFullscreen] its state. [hiddenCursor] is a blank pointer icon the app shows after 3 s without
+ * pointer movement, null where the host cannot hide the cursor. Then whether a screen reader is on, and the menu
+ * commands.
  */
 @Immutable
-internal data class HostWindow(
+data class HostWindow(
     val onToggleFullscreen: (() -> Unit)? = null,
     val isFullscreen: Boolean = false,
     val hiddenCursor: PointerIcon? = null,
@@ -101,38 +107,12 @@ internal class LookState(initial: PaletteChoice, private val settings: Settings)
     }
 }
 
-/**
- * The app: a tap-to-start screen where the browser needs a gesture, then the connect screen, then the scene.
- *
- * - [onToggleFullscreen] is the host's fullscreen switch, null where the target has none; [isFullscreen] is its state.
- * - [initialLink] skips the connect screen; [startupError] is a launch argument the host could not read, shown as a
- *   failure on the connect screen.
- * - [look] is a launch flag that overrides the saved look; with no flag and nothing saved a [launchedFullscreen] start
- *   uses the Projector look.
- * - [hiddenCursor] is a blank pointer icon the app shows after 3 s without pointer movement, null where the host
- *   cannot hide the cursor.
- */
+/** The app: a tap-to-start screen where the browser needs a gesture, then the connect screen, then the scene. */
 @Composable
-fun App(
-    onToggleFullscreen: (() -> Unit)? = null,
-    initialLink: LinkChoice? = null,
-    startupError: String? = null,
-    isFullscreen: Boolean = false,
-    hiddenCursor: PointerIcon? = null,
-    look: PaletteChoice? = null,
-    launchedFullscreen: Boolean = false,
-    ask: Boolean = false,
-    screenReaderActive: Boolean = false,
-    commands: AppCommands? = null,
-) {
+fun App(launch: LaunchOptions = LaunchOptions(), host: HostWindow = HostWindow()) {
     val platform = remember { getPlatform() }
     val settings = remember { Settings(createKeyValueStore()) }
-    AppRoot(
-        settings,
-        platform,
-        LaunchOptions(initialLink, startupError, look, launchedFullscreen, ask),
-        HostWindow(onToggleFullscreen, isFullscreen, hiddenCursor, screenReaderActive, commands),
-    )
+    AppRoot(settings, platform, launch, host)
 }
 
 /** [App] with its settings and platform supplied, so a test can run it on a fake store. */
