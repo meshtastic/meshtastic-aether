@@ -160,7 +160,7 @@ internal class SceneRenderer {
         val ringCenter = Offset(pa.x.toFloat(), pa.y.toFloat())
         val breathing = ANCHOR_RING_REST + ANCHOR_RING_BREATH * ring
         val ringRadius = screen.radius * ANCHOR_RING * breathing * pa.scale.toFloat()
-        val color = scene.anchor?.let { colors.node(it.node) } ?: palette.anchor
+        val color = desaturate(scene.anchor?.let { colors.node(it.node) } ?: palette.anchor, sat)
         halos.draw(this, ringCenter, ringRadius * ANCHOR_FILL_SPREAD, color, anchorFillAlpha(ring) * coreDim)
         drawCircle(
             color.copy(alpha = anchorRingAlpha(ring) * coreDim),
