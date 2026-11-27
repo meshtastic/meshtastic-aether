@@ -51,7 +51,18 @@ class ConnectScreenUiTest {
     ) = setContent {
         AmbientTheme {
             Box(Modifier.size(width.dp, height.dp)) {
-                ConnectScreen(chosen::add, pending, failure, LinkChoice.Tcp("node.local", 4403), supportsTcp = true, bluetooth = false, focusChooser = focusChooser, lastKind = lastKind, onKind = onKind, secureWebSocket = secureWebSocket, serial = serial)
+                ConnectScreen(
+                    chosen::add,
+                    ConnectContext(pending, failure, LinkChoice.Tcp("node.local", 4403), lastKind),
+                    target = ConnectTarget(
+                        supportsTcp = true,
+                        bluetooth = false,
+                        serial = serial,
+                        secureWebSocket = secureWebSocket,
+                        focusChooser = focusChooser,
+                    ),
+                    onKind = onKind,
+                )
             }
         }
     }
@@ -80,7 +91,11 @@ class ConnectScreenUiTest {
             AmbientTheme {
                 Box(Modifier.size(800.dp, 600.dp)) {
                     androidx.compose.runtime.key(shown) {
-                        ConnectScreen({}, null, null, null, supportsTcp = true, bluetooth = false, lastKind = shown)
+                        ConnectScreen(
+                            {},
+                            ConnectContext(null, null, lastKind = shown),
+                            target = ConnectTarget(supportsTcp = true, bluetooth = false),
+                        )
                     }
                 }
             }
@@ -110,7 +125,11 @@ class ConnectScreenUiTest {
             AmbientTheme {
                 Box(Modifier.size(800.dp, 600.dp)) {
                     androidx.compose.runtime.key(secure) {
-                        ConnectScreen({}, null, null, null, supportsTcp = true, bluetooth = false, lastKind = LinkKind.WebSocket, secureWebSocket = secure)
+                        ConnectScreen(
+                            {},
+                            ConnectContext(null, null, lastKind = LinkKind.WebSocket),
+                            target = ConnectTarget(supportsTcp = true, bluetooth = false, secureWebSocket = secure),
+                        )
                     }
                 }
             }

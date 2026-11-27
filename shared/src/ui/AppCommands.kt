@@ -9,7 +9,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 
 /**
- * What a host menu can ask of the running session. The session registers its actions while it runs and clears them when it
+ * What a host menu can ask of the running session. The session registers its actions while it runs and clears them when
+ * it
  * ends, so a menu item calls exactly what the matching key calls, including the two-press disconnect.
  */
 class AppCommands {
@@ -47,7 +48,10 @@ class AppCommands {
     }
 }
 
-/** Registers the running session's key actions with the host for as long as this is composed, and mirrors the mute state. */
+/**
+ * Registers the running session's key actions with the host for as long as this is composed, and mirrors the mute
+ * state.
+ */
 @Composable
 internal fun HostCommands(commands: AppCommands?, muted: Boolean, perform: State<(KeyAction) -> Boolean>) {
     DisposableEffect(commands) {

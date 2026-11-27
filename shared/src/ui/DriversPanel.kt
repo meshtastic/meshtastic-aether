@@ -17,7 +17,10 @@ internal fun paramValueText(p: ParamInfo): String = if (p.unit.isEmpty()) p.valu
 /** What moves the parameter with its own reading, or why it holds its neutral value. */
 internal fun paramDriverText(p: ParamInfo): String = p.driverText
 
-/** One row per mesh-driven parameter: name, live value and unit, and the signal driving it. The surface around it scrolls; every row is body text of 16 sp. */
+/**
+ * One row per mesh-driven parameter: name, live value and unit, and the signal driving it. The surface around it
+ * scrolls; every row is body text of 16 sp.
+ */
 @Composable
 internal fun DriversPanel(rows: List<ParamInfo>, modifier: Modifier = Modifier) {
     val colors = MaterialTheme.colorScheme

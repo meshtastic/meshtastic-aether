@@ -53,12 +53,8 @@ class HudUiTest {
                 StatusOverlay(
                     status = EngineStatus(nodes = 3, key = "D", mode = "Dorian", section = "1 - opening"),
                     controls = controls,
-                    palette = palette,
-                    onPalette = onPalette,
-                    onDisconnect = onDisconnect,
-                    onToggleFullscreen = {},
-                    hasKeyboard = true,
-                    isTelevision = isTelevision,
+                    host = HudHost(palette, onPalette, onDisconnect, onToggleFullscreen = {}),
+                    input = HudInput(hasKeyboard = true, isTelevision = isTelevision),
                 )
             }
         }
@@ -265,7 +261,7 @@ class HudUiTest {
         setContent {
             AmbientTheme {
                 Box(Modifier.size(1000.dp, 700.dp)) {
-                    StatusOverlay(EngineStatus(), controls, PaletteChoice.Standard, {}, {}, null, false)
+                    StatusOverlay(EngineStatus(), controls, HudHost(PaletteChoice.Standard, {}, {}, null), HudInput(false))
                 }
             }
         }

@@ -19,50 +19,6 @@ import androidx.compose.ui.unit.Dp
 import org.meshtastic.aether.theme.Brand
 
 /**
- * The glyph's geometry as fractions of its size, taken from the 1024 unit icon (`branding/icon.svg`). Ring values are
- * in the ring's own frame: origin at the orb center, x along the ring's long axis, before the [RING_ROTATION_DEGREES] turn.
- */
-internal object GlyphGeometry {
-    const val CENTER = 0.5f
-    const val ORB_RADIUS = 132f / 1024f
-    const val HALO_RADIUS = 336f / 1024f
-    const val ORB_HIGHLIGHT_X = 470f / 1024f
-    const val ORB_HIGHLIGHT_Y = 466f / 1024f
-    const val ORB_GRADIENT_RADIUS = 190f / 1024f
-
-    const val RING_ROTATION_DEGREES = -24f
-    const val RING_HALF_WIDTH = 300f / 1024f
-    const val RING_HALF_HEIGHT = 96f / 1024f
-    const val BACK_ARC_STROKE = 30f / 1024f
-    const val FRONT_ARC_STROKE = 36f / 1024f
-    const val FRONT_ARC_SHADOW_STROKE = 52f / 1024f
-
-    /** Compose arc angles: degrees clockwise from 3 o'clock. The back arc passes over the top of the orb, the front arc under it. */
-    const val BACK_ARC_START = 180f
-    const val BACK_ARC_SWEEP = 180f
-    const val FRONT_ARC_START = 180f
-    const val FRONT_ARC_SWEEP = -180f
-
-    /** A node on the ring: [x] and [y] in the ring's frame, [radius] and [glowRadius] (0 for none), all fractions of the size. */
-    data class Node(val x: Float, val y: Float, val radius: Float, val glowRadius: Float = 0f)
-
-    /** The two small nodes behind the orb, then the bright node in front. */
-    val backNodes = listOf(
-        Node(-196f / 1024f, -73f / 1024f, 20f / 1024f),
-        Node(150f / 1024f, -83f / 1024f, 14f / 1024f),
-    )
-    val brightNode = Node(212f / 1024f, 68f / 1024f, 30f / 1024f, glowRadius = 58f / 1024f)
-
-    /** The M mark on the orb: its width and its center's lift above the orb's center, as fractions of the orb's radius. */
-    const val MARK_WIDTH = 240f / 216f
-    const val MARK_LIFT = 10f / 108f
-
-    /** The mark's own box, the official artwork's 100 x 55 viewBox. */
-    const val MARK_BOX_WIDTH = 100f
-    const val MARK_BOX_HEIGHT = 55f
-}
-
-/**
  * The Meshtastic M mark as the official artwork draws it (`design/logo/svg/Mesh_Logo_*.svg`): its two paths with their
  * transforms applied, in its 100 x 55 box. Unaltered: the glyph only scales and places it.
  */
@@ -74,12 +30,11 @@ internal const val M_MARK_PATH =
 private val markPath = PathParser().parsePathString(M_MARK_PATH).toPath()
 
 private val GlyphSurface = Brand.Neutral950
-private val Green300 = Color(0xFFB5F5CE)
-private val Green400 = Color(0xFF8FF0B2)
-private val Green700 = Color(0xFF2D8F52)
-private val BackNodeColors = listOf(Green400.copy(alpha = 0.75f), Green300.copy(alpha = 0.6f))
+private val BackNodeColors = listOf(Brand.Green400.copy(alpha = 0.75f), Brand.Green300.copy(alpha = 0.6f))
 
-/** The Aether icon's glyph without its background: a luminous orb, a tilted orbit ring with nodes, and a bright node. */
+/**
+ * The Aether icon's glyph without its background: a luminous orb, a tilted orbit ring with nodes, and a bright node.
+ */
 @Composable
 fun AetherGlyph(size: Dp, modifier: Modifier = Modifier) {
     Canvas(modifier.size(size)) { drawGlyph(this.size.minDimension) }
@@ -91,7 +46,7 @@ private fun DrawScope.drawGlyph(side: Float) {
     drawCircle(
         Brush.radialGradient(
             0f to Brand.Accent.copy(alpha = 0.34f),
-            0.55f to Brand.Accent.copy(alpha = 0.10f),
+            g.HALO_MID_STOP to Brand.Accent.copy(alpha = 0.10f),
             1f to Brand.Accent.copy(alpha = 0f),
             center = c,
             radius = side * g.HALO_RADIUS,
@@ -108,9 +63,9 @@ private fun DrawScope.drawGlyph(side: Float) {
     drawCircle(
         Brush.radialGradient(
             0f to Brand.Neutral100,
-            0.3f to Green300,
-            0.7f to Brand.Accent,
-            1f to Green700,
+            g.ORB_LIGHT_STOP to Brand.Green300,
+            g.ORB_ACCENT_STOP to Brand.Accent,
+            1f to Brand.Green700,
             center = Offset(side * g.ORB_HIGHLIGHT_X, side * g.ORB_HIGHLIGHT_Y),
             radius = side * g.ORB_GRADIENT_RADIUS,
         ),
@@ -125,8 +80,8 @@ private fun DrawScope.drawGlyph(side: Float) {
             val p = Offset(n.x * side, n.y * side)
             drawCircle(
                 Brush.radialGradient(
-                    0f to Green300.copy(alpha = 0.9f),
-                    1f to Green300.copy(alpha = 0f),
+                    0f to Brand.Green300.copy(alpha = 0.9f),
+                    1f to Brand.Green300.copy(alpha = 0f),
                     center = p,
                     radius = n.glowRadius * side,
                 ),
@@ -183,8 +138,8 @@ private fun DrawScope.drawArcPair(side: Float, front: Boolean) {
     drawArc(
         Brush.linearGradient(
             0f to Brand.Accent.copy(alpha = 0.55f),
-            0.6f to Green400,
-            1f to Green300,
+            g.RING_MID_STOP to Brand.Green400,
+            1f to Brand.Green300,
             start = Offset(-g.RING_HALF_WIDTH * side, 0f),
             end = Offset(g.RING_HALF_WIDTH * side, 0f),
         ),
