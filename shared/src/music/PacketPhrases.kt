@@ -96,9 +96,10 @@ internal class PacketPhrases(
         )
         if (sound.twinCents >= MIN_TWIN_CENTS) {
             score.slots.allocate(at, sound.durationFrames, at)?.let {
+                val twinHz = hz * Traits.centsRatio(twinCents(sound.twinCents, hz))
                 score.notes += NoteEvent(
-                    it, sound.voice, hz * Traits.centsRatio(sound.twinCents), velocity * Traits.TWIN_GAIN, sound.pan,
-                    sound.send, sound.durationFrames, sound.brightness, sound.node,
+                    it, sound.voice, twinHz, velocity * Traits.TWIN_GAIN, sound.pan, sound.send, sound.durationFrames,
+                    sound.brightness, sound.node,
                 )
             }
         }

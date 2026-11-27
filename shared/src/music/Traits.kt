@@ -5,6 +5,20 @@ import kotlin.math.pow
 
 private const val SECONDS_PER_HOUR = 3600.0
 
+/**
+ * Fastest beat a battery twin may make against its note. Beating near 4 Hz is what the ear finds most salient (Zwicker
+ * and Fastl's fluctuation strength), and 15 cents on a 600 Hz note beats at 5 Hz, which made a weak battery the
+ * loudest cue on the mesh. At 2 Hz it still wavers but stays in the texture.
+ */
+internal const val MAX_TWIN_BEAT_HZ = 2.0
+
+/** [cents] for a twin of a [noteHz] note, lowered where it would beat faster than [MAX_TWIN_BEAT_HZ]. */
+internal fun twinCents(cents: Double, noteHz: Double): Double {
+    if (noteHz <= 0.0) return cents
+    val capped = Theory.CENTS_PER_OCTAVE * ln(1.0 + MAX_TWIN_BEAT_HZ / noteHz) / ln(2.0)
+    return minOf(cents, capped)
+}
+
 /** Proximity at which the RSSI mappings are neutral: half way between [Traits.RSSI_FAR_DBM] and the near end. */
 private const val MID_PROXIMITY = 0.5
 

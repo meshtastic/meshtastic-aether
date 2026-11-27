@@ -8,7 +8,6 @@ import kotlin.math.min
 private const val WEATHER_MS = 3600L * 1000
 
 /** A weather quantity with no recent reading scales to the middle of its range. */
-private const val NEUTRAL_READING = 0.5
 
 private const val GESTURE_SAMPLE_MS = 60_000L
 private const val LOW_SWELL_WAIT_MS = 10L * 60 * 1000
@@ -71,9 +70,8 @@ internal class WeatherGestures(private val score: Score, private val mood: MeshM
         readings.remove(node)
     }
 
-    /** The current [q] scaled to 0..1 against its own range, or the middle when no node reported it lately. */
-    fun scaled(q: Quantity, nowMs: Long): Double =
-        median(q, nowMs)?.let { scaler.scale(q, it).toDouble() } ?: NEUTRAL_READING
+    /** The current [q] scaled to 0..1 against its own range, or null when no node reported it lately. */
+    fun reading(q: Quantity, nowMs: Long): Double? = median(q, nowMs)?.let { scaler.scale(q, it).toDouble() }
 
     fun run(nowFrame: Long, moment: LocalMoment) {
         val ms = moment.epochMillis
