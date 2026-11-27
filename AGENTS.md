@@ -46,7 +46,7 @@ This project uses the [Kotlin Toolchain](https://kotlin-toolchain.org/) (a dedic
 - `shared/src/ui`: `AmbientEngine` (owns the clock, composer, synth and sink; each tick carries `composer.params()` to the scene and the overlay's Drivers panel; feeds `Coverage` and logs its line), connect screen, controls, the HUD overlay, settings.
 - `shared/src/visual`: scene model and drawing, driven by the engine's events and the sink's playback frame.
 - `shared/src/log`: `Log` with a file sink on desktop, logcat on Android.
-- `shared/src/update`: `BuildInfo` (stamped in CI), the `update.properties` manifest and the `Updater` contract; `src@updatable` (jvm and android) fetches and verifies, `src@android` installs through `PackageInstaller` (never for an app store install), `src@jvm` swaps the executable jar and restarts. iOS, the web and local builds have no updater. `AETHER_UPDATE_MANIFEST` points the check at another manifest for testing.
+- `shared/src/update`: `BuildInfo` (stamped in CI), the `update.properties` manifest and the `Updater` contract; `src@updatable` (jvm and android) fetches and verifies, `src@android` installs through `PackageInstaller` (never for an app store install), `src@jvm` swaps the executable jar and restarts (never for an app installed from a deb, dmg or msi, which `jpackage.app-path` marks). iOS, the web and local builds have no updater. `AETHER_UPDATE_MANIFEST` points the check at another manifest for testing.
 - Apps: `desktopApp`, `androidApp`, `iosApp`, `webApp`. Tools: `tools` (offline render and analyze), `blescan` (Bluetooth scan check).
 
 The contracts `MeshEvent.kt`, `NoteEvent.kt` and `AudioSink.kt` change only on purpose, with every consumer updated.
@@ -63,6 +63,7 @@ Launch flags: `--demo`, `--replay`, `--tcp host[:port]`, `--serial PORT`, `--ask
 - Test names in `shared/test` take no commas or parentheses: Kotlin/Native rejects them, and only the iOS test compile shows it. Check with `grep -rn 'fun \`[^\`]*[,()][^\`]*\`' shared/test/`.
 - Compose UI tests live in `shared/test@jvm` (`androidx.compose.ui.test.v2.runComposeUiTest`), and no check may need them on wasm. A running session animates forever, so a test cannot wait for it to go idle: test the pieces (`HostCommands`, the chooser, the countdown) on their own.
 - Host menus and Back call `AppCommands` and the shared key path (`perform`), never their own copies of an action, so the two-press disconnect and the haptics apply everywhere.
+- Desktop installers: the Toolchain only builds the executable jar, so `scripts/package-desktop.sh` wraps it with `jpackage` into a deb, dmg or msi on the matching CI runner, jlinking the JBR the Toolchain downloaded. Icons are in `desktopApp/packaging` (`scripts/icons.sh` regenerates the icons). The deb's t64 dependency names are rewritten so it installs on Debian 12 and Raspberry Pi OS; the dmg gets the Bluetooth and local-network usage strings (macOS ends an app that uses BLE without them) and is signed ad hoc, not notarized.
 - The desktop app runs on JetBrains Runtime (`settings.jvm.jdk.distributions: [jetbrains]` in `desktopApp/module.yaml`); libraries, tests and Android use the Toolchain default.
 - The HUD is hidden while idle: it draws nothing until opened and closes itself after 15 s (60 s with Drivers open).
 

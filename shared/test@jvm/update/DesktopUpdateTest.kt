@@ -42,6 +42,13 @@ class DesktopUpdateTest {
         assertNull(replaceableJar(jar.path, ":") { false })
     }
 
+    // Regression: swapping the jar inside a deb, dmg or msi install breaks the package and, on macOS, its signature.
+    @Test
+    fun `an app installed from a package is never replaced in place`() {
+        val jar = File(dir, "aether.jar").apply { writeText("x") }
+        assertNull(replaceableJar(jar.path, ":", installed = true) { true })
+    }
+
     // Regression: the restarted app would read the pid after the flag as a launch argument.
     @Test
     fun `the restart flag and its pid are stripped and the rest kept in order`() {
