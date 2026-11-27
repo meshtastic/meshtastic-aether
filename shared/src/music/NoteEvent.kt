@@ -1,7 +1,13 @@
 package org.meshtastic.aether.music
 
-/** The timbres the synth builds; the first seven are the original set, the rest are the instrument palette of `Palette`. */
-enum class Voice { Bell, Mallet, Pluck, Breath, Pad, Drone, Shimmer, Marimba, Vibes, Kalimba, Glass, Harp, Gong, Bowed, Choir, Sub }
+/**
+ * The timbres the synth builds; the first seven are the original set, the rest are the instrument palette of
+ * `Palette`.
+ */
+enum class Voice {
+    Bell, Mallet, Pluck, Breath, Pad, Drone, Shimmer,
+    Marimba, Vibes, Kalimba, Glass, Harp, Gong, Bowed, Choir, Sub,
+}
 
 /** One sounding note. [atFrame] is in the audio sample counter, the app's single clock. */
 data class NoteEvent(
@@ -42,5 +48,8 @@ interface NoteSink {
     fun schedule(output: ComposerOutput)
 }
 
-/** Wall-clock view the composer needs; [dayOfWeek] is 1 = Monday .. 7 = Sunday. Built by the app from the platform UTC offset. */
+/**
+ * Wall-clock view the composer needs; [dayOfWeek] is 1 = Monday .. 7 = Sunday. Built by the app from the platform
+ * UTC offset.
+ */
 data class LocalMoment(val dayOfWeek: Int, val minuteOfDay: Int, val epochMillis: Long)

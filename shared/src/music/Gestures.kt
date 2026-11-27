@@ -8,12 +8,13 @@ internal class PressureWatch {
     fun sample(ms: Long, hpa: Float): Boolean {
         if (samples.isEmpty() || ms - samples.last().first >= SAMPLE_MS) samples.addLast(ms to hpa)
         while (samples.isNotEmpty() && ms - samples.first().first > KEEP_MS) samples.removeFirst()
-        val ref = samples.lastOrNull { ms - it.first >= WINDOW_MS && ms - it.first <= MAX_AGE_MS } ?: return false
-        if (ref.second - hpa < DROP_HPA) return false
-        if (lastFire != Long.MIN_VALUE && ms - lastFire < WINDOW_MS) return false
-        lastFire = ms
-        return true
+        val ref = samples.lastOrNull { ms - it.first >= WINDOW_MS && ms - it.first <= MAX_AGE_MS }
+        val fires = ref != null && ref.second - hpa >= DROP_HPA && rested(ms)
+        if (fires) lastFire = ms
+        return fires
     }
+
+    private fun rested(ms: Long): Boolean = lastFire == Long.MIN_VALUE || ms - lastFire >= WINDOW_MS
 
     companion object {
         const val DROP_HPA = 2.0f
@@ -24,7 +25,10 @@ internal class PressureWatch {
     }
 }
 
-/** Reports +1 when a 0..1 reading rises through [HIGH], -1 when it falls through [LOW]; the first reading only sets the side. */
+/**
+ * Reports +1 when a 0..1 reading rises through [HIGH], -1 when it falls through [LOW]; the first reading only sets
+ * the side.
+ */
 internal class Crossing {
     private var warm: Boolean? = null
 

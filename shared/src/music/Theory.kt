@@ -2,7 +2,10 @@ package org.meshtastic.aether.music
 
 import kotlin.math.pow
 
-/** The eight scales in use (six modes and two pentatonics); Locrian is deliberately absent. Semitones above the tonic, one octave. */
+/**
+ * The eight scales in use (six modes and two pentatonics); Locrian is deliberately absent. Semitones above the tonic,
+ * one octave.
+ */
 enum class Mode(val semitones: List<Int>) {
     Ionian(listOf(0, 2, 4, 5, 7, 9, 11)),
     Dorian(listOf(0, 2, 3, 5, 7, 9, 10)),
@@ -17,10 +20,13 @@ enum class Mode(val semitones: List<Int>) {
     val size: Int get() = semitones.size
 
     /** Semitones above the tonic of scale step [step]; steps run past the octave and below zero. */
-    fun semitoneOfStep(step: Int): Int = semitones[step.mod(size)] + 12 * step.floorDiv(size)
+    fun semitoneOfStep(step: Int): Int = semitones[step.mod(size)] + Theory.SEMITONES_PER_OCTAVE * step.floorDiv(size)
 }
 
 object Theory {
+    const val SEMITONES_PER_OCTAVE = 12
+    const val CENTS_PER_OCTAVE = 1200.0
+
     /** C3 in 12-TET at A4 = 440 Hz. */
     const val C3_HZ = 130.8127826502993
 
@@ -28,9 +34,9 @@ object Theory {
     val weekdayRootSemitones: List<Int> = listOf(0, 7, 2, 9, 4, 11, 5)
 
     /** [dayOfWeek] is 1 = Monday .. 7 = Sunday. */
-    fun keySemitones(dayOfWeek: Int): Int = weekdayRootSemitones[(dayOfWeek - 1).mod(7)]
+    fun keySemitones(dayOfWeek: Int): Int = weekdayRootSemitones[(dayOfWeek - 1).mod(weekdayRootSemitones.size)]
 
-    fun rootHz(semitonesAboveC3: Double): Double = C3_HZ * 2.0.pow(semitonesAboveC3 / 12.0)
+    fun rootHz(semitonesAboveC3: Double): Double = C3_HZ * 2.0.pow(semitonesAboveC3 / SEMITONES_PER_OCTAVE)
 
     private val JUST_RATIOS = doubleArrayOf(
         1.0, 16.0 / 15, 9.0 / 8, 6.0 / 5, 5.0 / 4, 4.0 / 3,
@@ -39,5 +45,5 @@ object Theory {
 
     /** 5-limit just ratio for [degree] semitones above the root; octaves fold in, negatives descend. */
     fun justRatio(degree: Int): Double =
-        JUST_RATIOS[degree.mod(12)] * 2.0.pow(degree.floorDiv(12))
+        JUST_RATIOS[degree.mod(SEMITONES_PER_OCTAVE)] * 2.0.pow(degree.floorDiv(SEMITONES_PER_OCTAVE))
 }

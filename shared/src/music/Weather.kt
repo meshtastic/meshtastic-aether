@@ -1,18 +1,21 @@
 package org.meshtastic.aether.music
 
+private const val MS_PER_MINUTE = 60_000
+private const val WEEK_MS = 7L * 24 * 3600 * 1000
+
 enum class Quantity(val defaultMin: Float, val defaultMax: Float, val minSpan: Float) {
-    Temperature(-10f, 35f, 2f),
-    Humidity(0f, 100f, 10f),
-    Pressure(980f, 1040f, 4f),
-    Wind(0f, 15f, 2f),
-    Lux(0f, 20000f, 100f),
+    Temperature(defaultMin = -10f, defaultMax = 35f, minSpan = 2f),
+    Humidity(defaultMin = 0f, defaultMax = 100f, minSpan = 10f),
+    Pressure(defaultMin = 980f, defaultMax = 1040f, minSpan = 4f),
+    Wind(defaultMin = 0f, defaultMax = 15f, minSpan = 2f),
+    Lux(defaultMin = 0f, defaultMax = 20000f, minSpan = 100f),
 }
 
 /**
  * Scales each quantity against its own rolling range so a cold season and a warm one use the same 0..1 span.
  * With fewer than two samples or a range narrower than the quantity's minimum span it uses absolute defaults.
  */
-class WeatherScaler(private val windowMillis: Long = 7L * 24 * 3600 * 1000) {
+class WeatherScaler(private val windowMillis: Long = WEEK_MS) {
     private class Bucket(val minute: Long, var lo: Float, var hi: Float)
 
     private val buckets = Quantity.entries.associateWith { ArrayDeque<Bucket>() }
@@ -23,7 +26,7 @@ class WeatherScaler(private val windowMillis: Long = 7L * 24 * 3600 * 1000) {
         if (!value.isFinite()) return
         latest = maxOf(latest, atMillis)
         val deque = buckets.getValue(q)
-        val minute = atMillis / 60_000
+        val minute = atMillis / MS_PER_MINUTE
         val last = deque.lastOrNull()
         if (last != null && last.minute == minute) {
             last.lo = minOf(last.lo, value)
@@ -32,7 +35,7 @@ class WeatherScaler(private val windowMillis: Long = 7L * 24 * 3600 * 1000) {
             deque.addLast(Bucket(minute, value, value))
         }
         counts[q] = counts.getValue(q) + 1
-        val cutoff = (latest - windowMillis) / 60_000
+        val cutoff = (latest - windowMillis) / MS_PER_MINUTE
         while (deque.isNotEmpty() && deque.first().minute < cutoff) deque.removeFirst()
     }
 
