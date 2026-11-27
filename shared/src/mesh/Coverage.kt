@@ -2,7 +2,8 @@ package org.meshtastic.aether.mesh
 
 /**
  * A tally of what the mesh actually reports: the distinct nodes per telemetry field, the role and hardware mix of the
- * nodes known, and whether our own node ever delivered LocalStats. Feed it every event; [describe] is the hourly log line.
+ * nodes known, and whether our own node ever delivered LocalStats. Feed it every event; [describe] is the hourly log
+ * line.
  */
 class Coverage {
     private val known = HashSet<Long>()
@@ -30,27 +31,32 @@ class Coverage {
                 roleOf -= e.node
                 hardwareOf -= e.node
             }
-            is MeshEvent.Environment -> {
-                if (e.temperatureC != null) temp += e.node
-                if (e.humidityPct != null) hum += e.node
-                if (e.pressureHpa != null) press += e.node
-                if (e.lux != null) lux += e.node
-                if (e.windMps != null || e.windGustMps != null || e.windLullMps != null || e.windDirectionDeg != null) wind += e.node
-            }
-            is MeshEvent.Health -> {
-                if (e.batteryPct != null) batt += e.node
-                if (e.voltage != null) volt += e.node
-                if (e.channelUtilPct != null) chutil += e.node
-            }
+            is MeshEvent.Environment -> addEnvironment(e)
+            is MeshEvent.Health -> addHealth(e)
             is MeshEvent.Stats -> stats = true
             else -> Unit
         }
     }
 
+    private fun addEnvironment(e: MeshEvent.Environment) {
+        if (e.temperatureC != null) temp += e.node
+        if (e.humidityPct != null) hum += e.node
+        if (e.pressureHpa != null) press += e.node
+        if (e.lux != null) lux += e.node
+        if ((e.windMps ?: e.windGustMps ?: e.windLullMps ?: e.windDirectionDeg) != null) wind += e.node
+    }
+
+    private fun addHealth(e: MeshEvent.Health) {
+        if (e.batteryPct != null) batt += e.node
+        if (e.voltage != null) volt += e.node
+        if (e.channelUtilPct != null) chutil += e.node
+    }
+
     /** One stable line: counts, then the five most common roles and hardware models (ties by name). */
     fun describe(): String =
         "coverage nodes=${known.size} temp=${temp.size} hum=${hum.size} press=${press.size} lux=${lux.size} " +
-            "wind=${wind.size} batt=${batt.size} volt=${volt.size} chutil=${chutil.size} stats=${if (stats) "yes" else "no"} " +
+            "wind=${wind.size} batt=${batt.size} volt=${volt.size} chutil=${chutil.size} " +
+            "stats=${if (stats) "yes" else "no"} " +
             "roles=${top(roleOf.values)} hw=${top(hardwareOf.values)}"
 
     fun reset() {

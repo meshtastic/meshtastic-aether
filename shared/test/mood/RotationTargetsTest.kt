@@ -39,19 +39,31 @@ class RotationTargetsTest {
 
     @Test
     fun `wobble spans 1 to 6 degrees with wind then senders and is 3 without data`() {
-        assertEquals(1.0, RotationTargets.wobbleDegrees(0.0, 1.0), 1e-9)
-        assertEquals(6.0, RotationTargets.wobbleDegrees(1.0, 1.0), 1e-9)
-        assertEquals(3.0, RotationTargets.wobbleDegrees(1.0, 0.0), 1e-9)
-        assertEquals(6.0, RotationTargets.wobbleDegrees(0.0, 0.0, 1.0, 1.0), 1e-9)
-        assertEquals(1.0 + 5.0 * 0.9, RotationTargets.wobbleDegrees(0.9, 1.0, 0.0, 1.0), 1e-9)
-        assertEquals(4.5, RotationTargets.wobbleDegrees(0.0, 0.0, 1.0, 0.5), 1e-9)
+        assertEquals(1.0, RotationTargets.wobbleDegrees(MoodSignal(0.0, 1.0)), 1e-9)
+        assertEquals(6.0, RotationTargets.wobbleDegrees(MoodSignal(1.0, 1.0)), 1e-9)
+        assertEquals(3.0, RotationTargets.wobbleDegrees(MoodSignal(1.0, 0.0)), 1e-9)
+        assertEquals(6.0, RotationTargets.wobbleDegrees(MoodSignal(0.0, 0.0), MoodSignal(1.0, 1.0)), 1e-9)
+        assertEquals(1.0 + 5.0 * 0.9, RotationTargets.wobbleDegrees(MoodSignal(0.9, 1.0), MoodSignal(0.0, 1.0)), 1e-9)
+        assertEquals(4.5, RotationTargets.wobbleDegrees(MoodSignal(0.0, 0.0), MoodSignal(1.0, 0.5)), 1e-9)
     }
 
     @Test
     fun `channel use drives the wobble over senders and wind still wins over both`() {
-        assertEquals(6.0, RotationTargets.wobbleDegrees(0.0, 0.0, 0.0, 1.0, 1.0, 1.0), 1e-9)
-        assertEquals(3.5, RotationTargets.wobbleDegrees(0.0, 0.0, 0.0, 1.0, 1.0, 0.5), 1e-9)
-        assertEquals(1.0, RotationTargets.wobbleDegrees(0.0, 1.0, 1.0, 1.0, 1.0, 1.0), 1e-9)
+        assertEquals(
+            6.0,
+            RotationTargets.wobbleDegrees(MoodSignal(0.0, 0.0), MoodSignal(0.0, 1.0), MoodSignal(1.0, 1.0)),
+            1e-9,
+        )
+        assertEquals(
+            3.5,
+            RotationTargets.wobbleDegrees(MoodSignal(0.0, 0.0), MoodSignal(0.0, 1.0), MoodSignal(1.0, 0.5)),
+            1e-9,
+        )
+        assertEquals(
+            1.0,
+            RotationTargets.wobbleDegrees(MoodSignal(0.0, 1.0), MoodSignal(1.0, 1.0), MoodSignal(1.0, 1.0)),
+            1e-9,
+        )
     }
 
     @Test
@@ -60,7 +72,7 @@ class RotationTargetsTest {
     }
 
     private fun choose(p: Double, pc: Double, t: Double, tc: Double, b: Double, bc: Double, a: Double, ac: Double) =
-        RotationTargets.chooseDirection(p, pc, t, tc, b, bc, a, ac)
+        RotationTargets.chooseDirection(MoodSignal(p, pc), MoodSignal(t, tc), MoodSignal(b, bc), MoodSignal(a, ac))
 
     @Test
     fun `direction follows pressure then temperature then battery then activity and is clockwise with no data`() {

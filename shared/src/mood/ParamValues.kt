@@ -15,10 +15,17 @@ data class ParamInfo(
 ) {
     /** What the driver column says: the driver with its value and note, or the holding sentence, or "no data". */
     val driverText: String
-        get() = if (driver != null) listOfNotNull(if (reading != null) "$driver $reading" else driver, note).joinToString(" - ") else hold ?: "no data"
+        get() = if (driver != null) {
+            listOfNotNull(if (reading != null) "$driver $reading" else driver, note).joinToString(" - ")
+        } else {
+            hold ?: "no data"
+        }
 }
 
-/** Which signal currently drives each parameter; null means no data. [readings] holds each driver's own value by row name. */
+/**
+ * Which signal currently drives each parameter; null means no data. [readings] holds each driver's own value by row
+ * name.
+ */
 data class ParamDrivers(
     val rotationSpeed: String? = null,
     val rotationDirection: String? = null,
@@ -58,34 +65,50 @@ data class ParamValues(
      */
     fun describe(turningDirection: Int? = null): List<ParamInfo> {
         fun row(name: String, value: String, unit: String, driver: String?, hold: String, note: String? = null) =
-            ParamInfo(name, value, unit, driver, drivers.readings[name], if (driver == null) "holding $hold" else null, note)
+            ParamInfo(
+                name, value, unit, driver, drivers.readings[name], if (driver == null) "holding $hold" else null, note,
+            )
         val turnTime = formatDecimal(rotationPeriodSeconds, 0)
         val tilt = formatDecimal(tiltDegrees, 1)
         val wobble = formatDecimal(wobbleDegrees, 1)
         val speed = formatDecimal(phraseSpeed, 2)
         val lean = formatDecimal(modeLean, 2)
         val bias = formatDecimal(scalePentatonicBias, 2)
+        val pull = formatDecimal(gravity, 2)
         val target = directionName(rotationDirection)
         val directionValue = if (turningDirection == null) "target $target" else directionName(turningDirection)
-        val directionNote = if (turningDirection != null && turningDirection != rotationDirection) "target $target" else null
+        val turningOtherWay = turningDirection != null && turningDirection != rotationDirection
+        val directionNote = if (turningOtherWay) "target $target" else null
         return listOf(
             row("turn time", turnTime, "s", drivers.rotationSpeed, "$turnTime s - no activity data"),
-            row("rotation direction", directionValue, "", drivers.rotationDirection, "$target - no trend data", directionNote),
+            row(
+                "rotation direction", directionValue, "", drivers.rotationDirection, "$target - no trend data",
+                directionNote,
+            ),
             row("tilt", tilt, "deg", drivers.tilt, "$tilt deg - no pressure or hop data"),
             row(
                 "wobble", wobble, "deg", drivers.wobble, "$wobble deg - no wind, channel or sender data",
                 if (drivers.wobble == "senders" || drivers.wobble == "channel use") "no wind reports" else null,
             ),
             row("phrase speed", speed, "x", drivers.phraseSpeed, "$speed x - no activity data"),
-            row("mode lean", lean, if (modeLean > 0.05) "bright" else if (modeLean < -0.05) "dark" else "neutral", drivers.modeLean, "$lean - no link or temperature data"),
+            row("mode lean", lean, leanName(modeLean), drivers.modeLean, "$lean - no link or temperature data"),
             row("pentatonic bias", bias, "", drivers.scalePentatonicBias, "$bias - no sender data"),
-            row("gravity", formatDecimal(gravity, 2), "", drivers.gravity, "${formatDecimal(gravity, 2)} - no link data"),
+            row("gravity", pull, "", drivers.gravity, "$pull - no link data"),
         )
     }
 
     private fun directionName(d: Int) = if (d >= 0) "clockwise" else "counter-clockwise"
 
+    private fun leanName(lean: Double) = when {
+        lean > LEAN_NAMED -> "bright"
+        lean < -LEAN_NAMED -> "dark"
+        else -> "neutral"
+    }
+
     companion object {
+        /** A mode lean past this either way is named bright or dark; inside it, neutral. */
+        private const val LEAN_NAMED = 0.05
+
         /** Half-bound: a mesh with no link data neither clumps nor scatters. */
         const val NEUTRAL_GRAVITY = 0.5
 

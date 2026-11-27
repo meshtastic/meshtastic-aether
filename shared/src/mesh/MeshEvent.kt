@@ -24,9 +24,14 @@ sealed interface MeshEvent {
         val hopsTaken: Int?,
         val viaMqtt: Boolean,
         override val atMillis: Long,
-        /** Destination node number; null when unknown. Firmware forwards only broadcasts and packets addressed to us. */
+        /**
+         * Destination node number; null when unknown. Firmware forwards only broadcasts and packets addressed to us.
+         */
         val to: Long? = null,
-        /** Low byte (0..255) of the node that relayed the packet last; null when the packet came straight from its origin. */
+        /**
+         * Low byte (0..255) of the node that relayed the packet last; null when the packet came straight from its
+         * origin.
+         */
         val relayByte: Int? = null,
         /** True for a unicast addressed to our own node. */
         val toUs: Boolean = false,
@@ -38,7 +43,10 @@ sealed interface MeshEvent {
         val channel: Int? = null,
     ) : MeshEvent
 
-    /** A node learned of, with its name and position when known; [firstThisSession] is true the first time since launch. */
+    /**
+     * A node learned of, with its name and position when known; [firstThisSession] is true the first time since
+     * launch.
+     */
     data class NodeSeen(
         val node: Long,
         val name: String?,
@@ -87,7 +95,10 @@ sealed interface MeshEvent {
         val airUtilTxPct: Float? = null,
     ) : MeshEvent
 
-    /** Our own node's LocalStats; counters are cumulative since boot, so consumers take deltas and watch [uptimeSeconds] for resets. */
+    /**
+     * Our own node's LocalStats; counters are cumulative since boot, so consumers take deltas and watch
+     * [uptimeSeconds] for resets.
+     */
     data class Stats(
         val numOnline: Int?,
         val numTotal: Int?,

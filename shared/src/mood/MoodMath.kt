@@ -8,6 +8,9 @@ internal fun clamp01(v: Double): Double = if (v.isNaN()) 0.0 else v.coerceIn(0.0
 
 internal fun lerp(a: Double, b: Double, t: Double): Double = a + (b - a) * t
 
+/** A 0..1 signal as -1..1 about its neutral middle. */
+internal fun centered(v: Double): Double = (v - MoodSignal.NEUTRAL.value) * 2.0
+
 /** 0 with no samples, 1 once [full] samples (or an equivalent decayed weight) exist. */
 internal fun ramp(n: Double, full: Double): Double = if (full <= 0.0) 1.0 else clamp01(n / full)
 
@@ -17,18 +20,24 @@ internal fun sign(v: Double): Int = if (v > 0.0) 1 else if (v < 0.0) -1 else 0
 internal fun median(values: DoubleArray, n: Int): Double {
     if (n <= 0) return 0.0
     values.sort(0, n)
-    return if (n % 2 == 1) values[n / 2] else 0.5 * (values[n / 2 - 1] + values[n / 2])
+    return if (n % 2 == 1) values[n / 2] else (values[n / 2 - 1] + values[n / 2]) / 2
 }
 
 /** [v] with [decimals] places and no String.format (not in common Kotlin). */
 internal fun formatDecimal(v: Double, decimals: Int): String {
     if (!v.isFinite()) return "-"
     var scale = 1L
-    repeat(decimals) { scale *= 10 }
+    repeat(decimals) { scale *= DECIMAL_BASE }
     val r = (abs(v) * scale).roundToLong()
-    val body = if (decimals == 0) (r / scale).toString() else (r / scale).toString() + "." + (r % scale).toString().padStart(decimals, '0')
+    val whole = (r / scale).toString()
+    val body = if (decimals == 0) whole else whole + "." + (r % scale).toString().padStart(decimals, '0')
     return if (v < 0 && r != 0L) "-$body" else body
 }
+
+private const val DECIMAL_BASE = 10
+private const val MS_PER_SECOND = 1000.0
+private const val MS_PER_MINUTE = 60_000L
+private const val MINUTES_PER_DAY = 24 * 60
 
 /** An accumulator that decays exponentially with [tauSeconds] against event time. */
 internal class Decay(private val tauSeconds: Double) {
@@ -41,7 +50,7 @@ internal class Decay(private val tauSeconds: Double) {
             last = ms
             return
         }
-        val dt = (ms - last) / 1000.0
+        val dt = (ms - last) / MS_PER_SECOND
         if (dt > 0) {
             value *= exp(-dt / tauSeconds)
             last = ms
@@ -61,7 +70,7 @@ internal class RollingRange(
     private val minSpan: Double,
     private val defaultLo: Double,
     private val defaultHi: Double,
-    private val windowMinutes: Int = 24 * 60,
+    private val windowMinutes: Int = MINUTES_PER_DAY,
     private val rampBuckets: Int = 120,
 ) {
     private val lo = DoubleArray(windowMinutes)
@@ -74,7 +83,7 @@ internal class RollingRange(
 
     fun observe(x: Double, atMillis: Long) {
         if (!x.isFinite()) return
-        val m = atMillis.floorDiv(60_000L)
+        val m = atMillis.floorDiv(MS_PER_MINUTE)
         if (latest == Long.MIN_VALUE || m > latest) latest = m
         if (m <= latest - windowMinutes) return
         val i = m.mod(windowMinutes)
@@ -108,18 +117,21 @@ internal class RollingRange(
     }
 
     fun normalize(x: Double): Double {
-        if (!x.isFinite()) return 0.5
+        if (!x.isFinite()) return MoodSignal.NEUTRAL.value
         val abs = clamp01((x - defaultLo) / (defaultHi - defaultLo))
-        if (cCount < 2) return abs
+        return if (cCount < 2) abs else lerp(abs, relative(x), clamp01((cCount - RAMP_START).toDouble() / rampBuckets))
+    }
+
+    /** [x] against the observed range, widened about its middle to at least [minSpan]. */
+    private fun relative(x: Double): Double {
         var l = cLo
         var h = cHi
         if (h - l < minSpan) {
-            val c = 0.5 * (h + l)
-            l = c - 0.5 * minSpan
-            h = c + 0.5 * minSpan
+            val c = (h + l) / 2
+            l = c - minSpan / 2
+            h = c + minSpan / 2
         }
-        val rel = clamp01((x - l) / (h - l))
-        return lerp(abs, rel, clamp01((cCount - RAMP_START).toDouble() / rampBuckets))
+        return clamp01((x - l) / (h - l))
     }
 
     private companion object {
