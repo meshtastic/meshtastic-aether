@@ -4,12 +4,8 @@ import org.meshtastic.aether.mesh.GeoPoint
 import org.meshtastic.aether.mesh.LinkState
 import org.meshtastic.aether.mesh.MeshEvent
 import org.meshtastic.aether.mesh.PacketKind
-import org.meshtastic.aether.mesh.resolveRelay
 import org.meshtastic.aether.mood.ParamValues
-import org.meshtastic.aether.mood.RotationIntegrator
 import org.meshtastic.aether.mood.RotationState
-import org.meshtastic.aether.mood.RotationTarget
-import org.meshtastic.aether.mood.RotationTargets
 import org.meshtastic.aether.music.NoteEvent
 import org.meshtastic.aether.music.Ornaments
 import org.meshtastic.aether.music.Rng
@@ -19,10 +15,12 @@ import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.exp
-import kotlin.math.hypot
 import kotlin.math.ln
 import kotlin.math.sin
 import kotlin.math.sqrt
+
+/** The weight of each new RSSI reading in an orb's smoothed one. */
+private const val RSSI_SMOOTHING = 0.3
 
 /** One node on screen. [x] and [y] are laid out in the unit disc around our node, x right, y down. */
 class Orb internal constructor(val node: Long, var name: String?, internal var position: GeoPoint?) {
@@ -35,7 +33,10 @@ class Orb internal constructor(val node: Long, var name: String?, internal var p
     var z = 0.0
         internal set
 
-    /** Where the orb is drawn: eased toward the laid-out [x], [y], [z] so a relayout glides; a new orb starts at its place. */
+    /**
+     * Where the orb is drawn: eased toward the laid-out [x], [y], [z] so a relayout glides; a new orb starts at its
+     * place.
+     */
     internal var shownX = 0.0
     internal var shownY = 0.0
     internal var shownZ = 0.0
@@ -57,6 +58,8 @@ class Orb internal constructor(val node: Long, var name: String?, internal var p
         phVx = 0.0
         phVy = 0.0
     }
+
+    internal fun physicsFinite(): Boolean = phOx.isFinite() && phOy.isFinite() && phVx.isFinite() && phVy.isFinite()
 
     /** The last projected screen offset, scale and depth, written by the scene each frame. */
     internal var projX = 0.0
@@ -102,7 +105,10 @@ class Orb internal constructor(val node: Long, var name: String?, internal var p
     var brightness = 1.0
         internal set
 
-    /** Brightness multiplier of the low-battery flicker now, 1.0 when not flickering; see [EventLook.flickerFactor]. */
+    /**
+     * Brightness multiplier of the low-battery flicker now, 1.0 when not flickering; see
+     * [BatteryFlicker.flickerFactor].
+     */
     var flicker = 1.0
         internal set
 
@@ -111,14 +117,74 @@ class Orb internal constructor(val node: Long, var name: String?, internal var p
         internal set
     internal var flickerPhase = 0.0
 
+    /** Takes the name, place, role and hardware a [MeshEvent.NodeSeen] carries. */
+    internal fun see(e: MeshEvent.NodeSeen) {
+        name = e.name
+        position = e.position
+        e.role?.let { r ->
+            role = r
+            coreSize = EventLook.coreSize(r)
+            coreAlpha = EventLook.coreAlpha(r)
+        }
+        e.hardware?.let { h ->
+            hardware = h
+            haloHueDegrees = EventLook.hardwareHueDegrees(h)
+        }
+    }
+
+    /** Takes the health a [MeshEvent.Health] reports; a field it leaves out keeps its last value. */
+    internal fun report(e: MeshEvent.Health) {
+        if (e.batteryPct != null) batteryPct = e.batteryPct
+        if (e.voltage != null) voltage = e.voltage
+        if (e.uptimeSeconds != null) uptimeSeconds = e.uptimeSeconds
+        brightness = EventLook.brightness(voltage, batteryPct)
+        haloScale = EventLook.haloScale(uptimeSeconds)
+    }
+
+    /** Folds a packet's RSSI into the smoothed [rssi]. */
+    internal fun hear(rssiDbm: Int) {
+        rssi = rssi?.let { prev -> prev + (rssiDbm - prev) * RSSI_SMOOTHING } ?: rssiDbm.toDouble()
+    }
+
+    /**
+     * Eases the drawn place toward the laid-out one by [glide], the depth offset toward signal and altitude by [ease],
+     * and runs the low-battery flicker over [dtSeconds]; [refAltitude] is our own altitude.
+     */
+    internal fun easeLook(dtSeconds: Double, ease: Double, glide: Double, refAltitude: Int?) {
+        shownX += (x - shownX) * glide
+        shownY += (y - shownY) * glide
+        shownZ += (z - shownZ) * glide
+        val target = EventLook.rssiDepthBias(rssi) + EventLook.altitudeLift(position?.altitudeM, refAltitude)
+        zOffset += (target - zOffset) * ease
+        val hz = BatteryFlicker.flickerHz(batteryPct)
+        if (hz > 0.0) {
+            flickerPhase = BatteryFlicker.advanceFlicker(flickerPhase, hz, dtSeconds)
+            flicker = BatteryFlicker.flickerFactor(batteryPct, flickerPhase)
+        } else {
+            flicker = 1.0
+        }
+    }
+
     companion object {
         internal const val NEVER = Long.MIN_VALUE
     }
 }
 
+/** The attributes of a heard packet that shape its ripple; each is neutral when absent. */
+internal data class PacketTraits(
+    val viaMqtt: Boolean = false,
+    val payloadBytes: Int? = null,
+    val textLength: Int? = null,
+    val channel: Int? = null,
+) {
+    companion object {
+        val NONE = PacketTraits()
+    }
+}
+
 /**
- * A ring from an orb. [echo] 0 is the packet itself, 1.. are the hop echoes, fainter and later. The rest are the
- * packet's own attributes, already reduced to bounded drawing values by [EventLook]; each is neutral when absent.
+ * A ring from an orb. [echo] 0 is the packet itself, 1.. are the hop echoes, fainter and later. The packet's own
+ * [traits] are already reduced to bounded drawing values by [RippleLook]; each is neutral when absent.
  */
 class Ripple internal constructor(
     val node: Long,
@@ -126,19 +192,20 @@ class Ripple internal constructor(
     val kind: PacketKind,
     val strength: Float,
     val echo: Int,
-    val viaMqtt: Boolean = false,
-    payloadBytes: Int? = null,
-    textLength: Int? = null,
-    channel: Int? = null,
+    traits: PacketTraits = PacketTraits.NONE,
 ) {
-    val widthTrim: Double = EventLook.payloadWidthTrim(payloadBytes)
-    val ringCount: Int = EventLook.ringCount(kind, textLength)
-    val hueDegrees: Int = EventLook.channelHueDegrees(channel)
-    val style: RingStyle = EventLook.ringStyle(kind)
-    val coolMix: Float = EventLook.mqttMix(viaMqtt)
+    val viaMqtt: Boolean = traits.viaMqtt
+    val widthTrim: Double = RippleLook.payloadWidthTrim(traits.payloadBytes)
+    val ringCount: Int = RippleLook.ringCount(kind, traits.textLength)
+    val hueDegrees: Int = RippleLook.channelHueDegrees(traits.channel)
+    val style: RingStyle = RippleLook.ringStyle(kind)
+    val coolMix: Float = RippleLook.mqttMix(viaMqtt)
 }
 
-/** A clock that advances by `dt / scale`: changing [scale] changes the rate and never moves the value, so no phase read from it jumps. */
+/**
+ * A clock that advances by `dt / scale`: changing [scale] changes the rate and never moves the value, so no phase read
+ * from it jumps.
+ */
 internal class PhaseClock {
     var scale = 1.0
         set(value) {
@@ -185,42 +252,48 @@ private class Pending(
     val kind: PacketKind,
     val strength: Float,
     val echo: Int,
-    val viaMqtt: Boolean = false,
-    val payloadBytes: Int? = null,
-    val textLength: Int? = null,
-    val channel: Int? = null,
+    val traits: PacketTraits = PacketTraits.NONE,
 )
 
 /**
  * The scene as pure state on the audio clock: nothing here reads a wall clock or a canvas. The caller feeds events
  * with the frame their note will sound at ([onEvent]) and calls [update] with the sink's playback frame; a ripple
- * exists only once that frame has been reached, so sight and sound agree.
+ * exists only once that frame has been reached, so sight and sound agree. What the scene looks like at that frame
+ * (glow, breath, drift, progress) is read through the functions in `SceneReadouts.kt`.
  */
-class SceneModel(private val sampleRate: Int) {
+class SceneModel(internal val sampleRate: Int) {
     /** Frame timing from the render loop; the engine reads and resets it once a minute. */
     val frameStats = FrameStats()
+
+    private val roster = OrbRoster()
+    internal val edgeSet = EdgeSet(sampleRate)
+    private val pulseQueue = PulseQueue(sampleRate)
+    private val turning = SceneRotation()
 
     /** Our own node's position when known; else the layout centres on the centroid of positioned nodes. */
     var origin: GeoPoint? = null
         set(value) {
             field = value
-            dirty = true
+            roster.dirty = true
         }
 
     /** Local minute of day, for the night dimming. */
-    var minuteOfDay: Int = 12 * 60
+    var minuteOfDay: Int = NOON_MINUTE
 
     /** Screen width over height; the layout fills an ellipse of this aspect and keeps orbs apart in screen terms. */
     var aspect: Double = 1.0
         set(value) {
-            val v = value.coerceIn(0.25, 4.0)
-            if (abs(v - field) > 0.01) {
+            val v = value.coerceIn(MIN_ASPECT, MAX_ASPECT)
+            if (abs(v - field) > ASPECT_RELAYOUT_STEP) {
                 field = v
-                dirty = true
+                roster.dirty = true
             }
         }
 
-    /** Whether the radio link is up; the engine sets it. While false the field desaturates and the anchor pulses slowly. */
+    /**
+     * Whether the radio link is up; the engine sets it. While false the field desaturates and the anchor pulses
+     * slowly.
+     */
     var linked: Boolean = true
 
     /** 1.0 fully colored, easing toward [UNLINKED_SATURATION] while not [linked]. */
@@ -243,22 +316,17 @@ class SceneModel(private val sampleRate: Int) {
     var params: ParamValues = ParamValues.NEUTRAL
         private set
 
-    private val integrator = RotationIntegrator()
-    private var easedGravity = ParamValues.NEUTRAL_GRAVITY
-    private var easedPeriod = RotationTargets.NEUTRAL_PERIOD_SECONDS
-    private var easedTilt = RotationTargets.NEUTRAL_TILT_DEGREES
-    private var easedWobble = RotationTargets.NEUTRAL_WOBBLE_DEGREES
-    private var impulse = 0.0
-
     /** The integrated rotation as of the last [update]: yaw is the unwrapped angle, pitch is tilt plus wobble. */
-    var rotation = RotationState(0.0, 2 * PI / RotationTargets.NEUTRAL_PERIOD_SECONDS, 0.0, 0.0, 1)
-        private set
+    val rotation: RotationState get() = turning.rotation
 
     private val cloudClock = PhaseClock()
-    private val driftClock = PhaseClock()
-    private val orbBreathClock = PhaseClock()
+    internal val driftClock = PhaseClock()
+    internal val orbBreathClock = PhaseClock()
 
-    /** Multipliers on the period of the cloud breathing, the orb drift and the orb breath; 1.0 is neutral. Changing one never jumps its phase. */
+    /**
+     * Multipliers on the period of the cloud breathing, the orb drift and the orb breath; 1.0 is neutral. Changing one
+     * never jumps its phase.
+     */
     var cloudBreathPeriodScale: Double
         get() = cloudClock.scale
         set(value) { cloudClock.scale = value }
@@ -275,26 +343,22 @@ class SceneModel(private val sampleRate: Int) {
             field = if (value.isFinite()) value.coerceIn(PhaseClock.MIN_SCALE, PhaseClock.MAX_SCALE) else 1.0
         }
 
-    private val orbMap = LinkedHashMap<Long, Orb>()
     private val pending = ArrayList<Pending>()
     private val active = ArrayList<Ripple>()
     private val pendingNotes = ArrayList<PendingNote>()
-    private val pendingPulses = ArrayList<Pulse>()
-    private val activePulses = ArrayList<Pulse>()
-    private val edgeMap = LinkedHashMap<Pair<Long, Long>, Edge>()
-    private var selfNode: Long? = null
-    private var dirty = false
     private var warming = false
-    private var lastFrame = 0L
-    private var placement = ArrayList<Orb>()
+
+    /** The playback frame of the last [update]. */
+    internal var lastFrame = 0L
+        private set
 
     /** Encrypted traffic as a faint haze, 0..1. */
     var haze = 0.0
         private set
 
-    val orbs: Collection<Orb> get() = orbMap.values
-    val pulses: List<Pulse> get() = activePulses
-    val edges: Collection<Edge> get() = edgeMap.values
+    val orbs: Collection<Orb> get() = roster.orbs
+    val pulses: List<Pulse> get() = pulseQueue.pulses
+    val edges: Collection<Edge> get() = edgeSet.values
 
     /** Our node's anchor at the scene centre; null until a [MeshEvent.Self] arrives. */
     var anchor: Anchor? = null
@@ -302,43 +366,31 @@ class SceneModel(private val sampleRate: Int) {
     val ripples: List<Ripple> get() = active
     val dim: Double get() = nightDim(minuteOfDay)
 
-    fun orb(node: Long): Orb? = orbMap[node]
+    fun orb(node: Long): Orb? = roster.orb(node)
 
     /** Queues [e]; for a packet, [dueFrame] is when its note sounds. Packets during warm-up are state, not sound. */
     fun onEvent(e: MeshEvent, dueFrame: Long) {
         when (e) {
             is MeshEvent.Link -> warming = e.state == LinkState.WarmingUp
-            is MeshEvent.NodeSeen -> if (e.node != selfNode) {
-                val orb = orbMap.getOrPut(e.node) { Orb(e.node, null, null).also { it.seenFrame = lastFrame } }
-                orb.name = e.name
-                orb.position = e.position
-                e.role?.let { r -> orb.role = r; orb.coreSize = EventLook.coreSize(r); orb.coreAlpha = EventLook.coreAlpha(r) }
-                e.hardware?.let { h -> orb.hardware = h; orb.haloHueDegrees = EventLook.hardwareHueDegrees(h) }
-                dirty = true
-            }
-            is MeshEvent.Health -> if (e.node != selfNode) {
-                val orb = orbMap.getOrPut(e.node) { Orb(e.node, null, null).also { it.seenFrame = lastFrame; dirty = true } }
-                if (e.batteryPct != null) orb.batteryPct = e.batteryPct
-                if (e.voltage != null) orb.voltage = e.voltage
-                if (e.uptimeSeconds != null) orb.uptimeSeconds = e.uptimeSeconds
-                orb.brightness = EventLook.brightness(orb.voltage, orb.batteryPct)
-                orb.haloScale = EventLook.haloScale(orb.uptimeSeconds)
-            }
-            is MeshEvent.NodeGone -> if (orbMap.remove(e.node) != null) dirty = true
+            is MeshEvent.NodeSeen -> roster.seen(e, lastFrame)
+            is MeshEvent.Health -> roster.health(e, lastFrame)
+            is MeshEvent.NodeGone -> roster.remove(e.node)
             is MeshEvent.PacketHeard -> if (!warming) enqueue(e, dueFrame)
             is MeshEvent.Environment, is MeshEvent.Vitals, is MeshEvent.Stats -> Unit
             is MeshEvent.Self -> {
-                selfNode = e.node
+                roster.self(e.node)
                 anchor = Anchor(e.node)
-                if (orbMap.remove(e.node) != null) dirty = true
                 e.position?.let { origin = it }
             }
-            is MeshEvent.Neighbors -> for (n in e.neighbors) addEdge(e.node, n)
-            is MeshEvent.Route -> routePulses(e, dueFrame)
+            is MeshEvent.Neighbors -> for (n in e.neighbors) edgeSet.add(e.node, n, lastFrame, roster)
+            is MeshEvent.Route -> pulseQueue.route(e, dueFrame, lastFrame, roster)
         }
     }
 
-    /** Queues a pulse on the orb of [note]'s node for when the note sounds at [dueFrame]; notes without a known node do nothing. */
+    /**
+     * Queues a pulse on the orb of [note]'s node for when the note sounds at [dueFrame]; notes without a known node do
+     * nothing.
+     */
     fun onNote(note: NoteEvent, dueFrame: Long) {
         val node = note.node ?: return
         pendingNotes += PendingNote(dueFrame, node, note.velocity.coerceIn(0f, 1f))
@@ -350,57 +402,16 @@ class SceneModel(private val sampleRate: Int) {
         params = p
     }
 
-    /** Shifts the background hue toward the texture's key and brightness and the field's breathing toward its pad level. */
+    /**
+     * Shifts the background hue toward the texture's key and brightness and the field's breathing toward its pad
+     * level.
+     */
     fun onTexture(texture: Texture) {
         val octaves = if (texture.rootHz > 0.0) ln(texture.rootHz / MIDDLE_C_HZ) / ln(2.0) else 0.0
-        val pitchClass = (octaves * 12.0).mod(12.0)
-        hueTarget = HUE_SPAN * sin(2 * PI * pitchClass / 12.0) + (texture.brightness - 0.5) * BRIGHTNESS_HUE
+        val pitchClass = (octaves * SEMITONES_PER_OCTAVE).mod(SEMITONES_PER_OCTAVE)
+        hueTarget = HUE_SPAN * sin(2 * PI * pitchClass / SEMITONES_PER_OCTAVE) +
+            (texture.brightness - NEUTRAL_BRIGHTNESS) * BRIGHTNESS_HUE
         padTarget = (texture.layerLevels[Voice.Pad] ?: 0f).toDouble().coerceIn(0.0, 1.0)
-    }
-
-    private fun isKnown(node: Long) = node == selfNode || orbMap.containsKey(node)
-
-    private fun addEdge(a: Long, b: Long) {
-        if (a == b || !isKnown(a) || !isKnown(b)) return
-        val key = Pair(minOf(a, b), maxOf(a, b))
-        val edge = edgeMap[key]
-        if (edge != null) {
-            edge.refreshedFrame = lastFrame
-            return
-        }
-        edgeMap[key] = Edge(key.first, key.second, lastFrame)
-        if (edgeMap.size > MAX_EDGES) edgeMap.remove(edgeMap.keys.first())
-    }
-
-    /** 1.0 when reported now, fading linearly to 0 over [EDGE_FADE_SECONDS]. */
-    fun edgeFade(edge: Edge): Double =
-        (1.0 - (lastFrame - edge.refreshedFrame).coerceAtLeast(0L).toDouble() / sampleRate / EDGE_FADE_SECONDS)
-            .coerceIn(0.0, 1.0)
-
-    private fun routePulses(e: MeshEvent.Route, dueFrame: Long) {
-        val hopFrames = (sampleRate * HOP_SECONDS).toLong()
-        val base = maxOf(dueFrame, lastFrame)
-        val known = e.nodes.filter { isKnown(it) }
-        for (i in 0 until known.size - 1) {
-            val a = known[i]
-            val b = known[i + 1]
-            if (a == b) continue
-            val start = base + i * hopFrames
-            addPulse(Pulse(a, if (b == selfNode) null else b, start, start + hopFrames, a, 0.6f))
-        }
-    }
-
-    private fun addPulse(p: Pulse) {
-        pendingPulses += p
-        if (pendingPulses.size > MAX_PENDING) pendingPulses.removeAt(0)
-    }
-
-    /** Direct pulse source to anchor ending at [dueFrame]; a resolved relay adds a second, started halfway through. */
-    private fun packetPulses(e: MeshEvent.PacketHeard, dueFrame: Long, strength: Float) {
-        val travel = (sampleRate * TRAVEL_SECONDS).toLong()
-        val relay = resolveRelay(orbMap.keys, e.relayByte, e.from, selfNode)
-        if (e.toUs) addPulse(Pulse(e.from, null, dueFrame - travel, dueFrame, e.from, strength))
-        if (relay != null) addPulse(Pulse(relay, null, dueFrame - travel / 2, dueFrame, relay, strength))
     }
 
     private fun enqueue(e: MeshEvent.PacketHeard, dueFrame: Long) {
@@ -409,18 +420,14 @@ class SceneModel(private val sampleRate: Int) {
             add(Pending(dueFrame, e.from, e.kind, strength, 0))
             return
         }
-        if (e.from != selfNode && !orbMap.containsKey(e.from)) {
-            orbMap[e.from] = Orb(e.from, null, null).also { it.seenFrame = lastFrame }
-            dirty = true
-        }
-        e.rssi?.let { r ->
-            orbMap[e.from]?.let { o -> o.rssi = o.rssi?.let { prev -> prev + (r - prev) * RSSI_SMOOTHING } ?: r.toDouble() }
-        }
-        add(Pending(dueFrame, e.from, e.kind, strength, 0, e.viaMqtt, e.payloadBytes, e.textLength, e.channel))
-        if (e.from != selfNode) packetPulses(e, dueFrame, strength)
+        roster.ensure(e.from, lastFrame)
+        e.rssi?.let { r -> roster.orb(e.from)?.hear(r) }
+        val traits = PacketTraits(e.viaMqtt, e.payloadBytes, e.textLength, e.channel)
+        add(Pending(dueFrame, e.from, e.kind, strength, 0, traits))
+        if (e.from != roster.selfNode) pulseQueue.packet(e, dueFrame, strength, roster)
         for (k in 1..Ornaments.echoesFor(e.hopsTaken, e.viaMqtt)) {
             val at = dueFrame + (Ornaments.ECHO_DELAY_SECONDS * k * sampleRate).toLong()
-            add(Pending(at, e.from, e.kind, strength * 0.5f, k, e.viaMqtt, e.payloadBytes, e.textLength, e.channel))
+            add(Pending(at, e.from, e.kind, strength * ECHO_STRENGTH, k, traits))
         }
     }
 
@@ -438,14 +445,22 @@ class SceneModel(private val sampleRate: Int) {
         padLevel += (padTarget - padLevel) * (1 - exp(-dtSeconds / PAD_TAU_SECONDS))
         val satTarget = if (linked) 1.0 else UNLINKED_SATURATION
         saturation += (satTarget - saturation) * (1 - exp(-dtSeconds / SATURATION_TAU_SECONDS))
-        anchorPhase = (anchorPhase + 2 * PI * dtSeconds /
-            ((if (linked) ANCHOR_PERIOD_SECONDS else UNLINKED_ANCHOR_PERIOD_SECONDS) * anchorPeriodScale)).mod(2 * PI)
+        val anchorPeriod = if (linked) ANCHOR_PERIOD_SECONDS else UNLINKED_ANCHOR_PERIOD_SECONDS
+        anchorPhase = (anchorPhase + 2 * PI * dtSeconds / (anchorPeriod * anchorPeriodScale)).mod(2 * PI)
         cloudClock.advance(dtSeconds)
         driftClock.advance(dtSeconds)
         orbBreathClock.advance(dtSeconds)
-        stepRotation(dtSeconds)
-        stepOrbLooks(dtSeconds)
-        stepOrbits(dtSeconds)
+        turning.step(dtSeconds, params)
+        val ease = 1 - exp(-dtSeconds / DEPTH_EASE_SECONDS)
+        val glide = 1 - exp(-dtSeconds / RELAYOUT_GLIDE_SECONDS)
+        val refAltitude = origin?.altitudeM
+        for (o in roster.orbs) o.easeLook(dtSeconds, ease, glide, refAltitude)
+        turning.easeGravity(dtSeconds, params.gravity)
+        if (OrbitalField.canStep(dtSeconds)) {
+            val g = turning.gravity
+            OrbitalField.pullAlongEdges(edgeSet.values, { edgeSet.fade(it, lastFrame) }, roster::orb, anchor?.node, g)
+            OrbitalField.advance(dtSeconds, roster.orbs, rotation.direction, g)
+        }
 
         var i = 0
         while (i < pending.size) {
@@ -462,7 +477,7 @@ class SceneModel(private val sampleRate: Int) {
             val pn = pendingNotes[n]
             if (pn.dueFrame <= playbackFrame) {
                 pendingNotes.removeAt(n)
-                orbMap[pn.node]?.let {
+                roster.orb(pn.node)?.let {
                     it.notePulseFrame = pn.dueFrame
                     it.notePulseStrength = pn.strength
                 }
@@ -471,61 +486,9 @@ class SceneModel(private val sampleRate: Int) {
             }
         }
         active.removeAll { (playbackFrame - it.startFrame).toDouble() / sampleRate > RIPPLE_LIFE_SECONDS }
-        val pi = pendingPulses.iterator()
-        while (pi.hasNext()) {
-            val p = pi.next()
-            if (p.startFrame <= playbackFrame) {
-                pi.remove()
-                activePulses += p
-                if (activePulses.size > MAX_PULSES) activePulses.removeAt(0)
-            }
-        }
-        activePulses.removeAll { (playbackFrame - it.endFrame).toDouble() / sampleRate > PULSE_LINGER_SECONDS }
-        edgeMap.values.removeAll { (playbackFrame - it.refreshedFrame).toDouble() / sampleRate >= EDGE_FADE_SECONDS }
-        if (dirty) layout()
-    }
-
-    private fun stepRotation(dtSeconds: Double) {
-        val p = params
-        val ease = 1 - exp(-dtSeconds / PARAM_EASE_SECONDS)
-        val period = if (p.rotationPeriodSeconds.isFinite()) p.rotationPeriodSeconds.coerceAtLeast(RotationTargets.MIN_PERIOD_SECONDS) else easedPeriod
-        easedPeriod = exp(ln(easedPeriod) + (ln(period) - ln(easedPeriod)) * ease)
-        if (p.tiltDegrees.isFinite()) easedTilt += (p.tiltDegrees - easedTilt) * ease
-        if (p.wobbleDegrees.isFinite()) easedWobble += (p.wobbleDegrees - easedWobble) * ease
-        impulse *= exp(-dtSeconds / IMPULSE_TAU_SECONDS)
-        val strength = p.directionStrength
-        rotation = integrator.step(
-            dtSeconds,
-            RotationTarget(easedPeriod, p.rotationDirection, easedTilt, easedWobble, impulse, strength),
-        )
-    }
-
-    private fun stepOrbits(dtSeconds: Double) {
-        val target = params.gravity
-        if (target.isFinite()) easedGravity += (target - easedGravity) * (1 - exp(-dtSeconds / PARAM_EASE_SECONDS))
-        OrbitalField.step(
-            dtSeconds, orbMap.values, edgeMap.values, ::edgeFade, orbMap::get, anchor?.node, rotation.direction, easedGravity,
-        )
-    }
-
-    private fun stepOrbLooks(dtSeconds: Double) {
-        val ease = 1 - exp(-dtSeconds / DEPTH_EASE_SECONDS)
-        val glide = 1 - exp(-dtSeconds / RELAYOUT_GLIDE_SECONDS)
-        val refAltitude = origin?.altitudeM
-        for (o in orbMap.values) {
-            o.shownX += (o.x - o.shownX) * glide
-            o.shownY += (o.y - o.shownY) * glide
-            o.shownZ += (o.z - o.shownZ) * glide
-            val target = EventLook.rssiDepthBias(o.rssi) + EventLook.altitudeLift(o.position?.altitudeM, refAltitude)
-            o.zOffset += (target - o.zOffset) * ease
-            val hz = EventLook.flickerHz(o.batteryPct)
-            if (hz > 0.0) {
-                o.flickerPhase = EventLook.advanceFlicker(o.flickerPhase, hz, dtSeconds)
-                o.flicker = EventLook.flickerFactor(o.batteryPct, o.flickerPhase)
-            } else {
-                o.flicker = 1.0
-            }
-        }
+        pulseQueue.advance(playbackFrame)
+        edgeSet.expire(playbackFrame)
+        if (roster.dirty) roster.relayout(origin, aspect)
     }
 
     private fun spawn(p: Pending) {
@@ -533,157 +496,23 @@ class SceneModel(private val sampleRate: Int) {
             haze = (haze + HAZE_STEP).coerceAtMost(1.0)
             return
         }
-        orbMap[p.node]?.let {
+        roster.orb(p.node)?.let {
             it.lastActiveFrame = p.dueFrame
             if (p.echo == 0) OrbitalField.kick(it, p.strength)
         }
-        if (p.echo == 0) impulse = (impulse + PACKET_IMPULSE).coerceAtMost(1.0)
-        active += Ripple(p.node, p.dueFrame, p.kind, p.strength, p.echo, p.viaMqtt, p.payloadBytes, p.textLength, p.channel)
+        if (p.echo == 0) turning.kick()
+        active += Ripple(p.node, p.dueFrame, p.kind, p.strength, p.echo, p.traits)
         if (active.size > MAX_RIPPLES) active.removeAt(0)
     }
 
     /**
-     * Glow 0..1 of [orb] now: an idle core that eases from [IDLE_CORE] toward [IDLE_FLOOR] and never below it, plus a
-     * flash at a packet decaying over seconds and a smaller pulse for each of its notes.
+     * Multiplier near 1.0 for every coordinate of the cloud: 3 percent over a minute, from its own phase accumulator.
      */
-    fun glow(orb: Orb): Double {
-        val reference = if (orb.lastActiveFrame == Orb.NEVER) orb.seenFrame else orb.lastActiveFrame
-        val since = (lastFrame - reference).coerceAtLeast(0L).toDouble() / sampleRate
-        val idle = IDLE_FLOOR + (IDLE_CORE - IDLE_FLOOR) * exp(-since / IDLE_FADE_SECONDS)
-        var g = idle
-        if (orb.lastActiveFrame != Orb.NEVER) g += (1.0 - idle) * exp(-since / FLASH_TAU_SECONDS)
-        if (orb.notePulseFrame != Orb.NEVER) {
-            val noteSince = (lastFrame - orb.notePulseFrame).coerceAtLeast(0L).toDouble() / sampleRate
-            g += NOTE_PULSE * orb.notePulseStrength * exp(-noteSince / NOTE_PULSE_TAU_SECONDS)
-        }
-        return g.coerceAtMost(1.0)
-    }
-
-    /** Slow breathing of an orb, 0.85..1.0, each at its own period and phase from the node number. */
-    fun breath(node: Long): Double {
-        val period = BREATH_MIN_PERIOD + BREATH_PERIOD_SPREAD * unit(Rng.mix(node + 3))
-        return 0.925 + 0.075 * sin(2 * PI * orbBreathClock.seconds / period + phase(node, 4))
-    }
-
-    /** Multiplier near 1.0 for every coordinate of the cloud: 3 percent over a minute, from its own phase accumulator. */
-    val cloudBreath: Double get() = CloudMotion.breathing(2 * PI * cloudClock.seconds / CloudMotion.BREATH_PERIOD_SECONDS)
+    val cloudBreath: Double
+        get() = CloudMotion.breathing(2 * PI * cloudClock.seconds / CloudMotion.BREATH_PERIOD_SECONDS)
 
     /** The anchor ring's breath 0..1: a calm 8 s cycle while linked, a slower, longer one while not. */
-    val anchorBreath: Double get() = 0.5 + 0.5 * sin(anchorPhase)
-
-    /** Multiplier near 1.0 that the pad level breathes the field with: swells and recedes over about 11 s. */
-    fun fieldBreath(tSeconds: Double): Double = 1.0 + FIELD_BREATH * padLevel * sin(2 * PI * tSeconds / FIELD_BREATH_PERIOD)
-
-    /** 0..1 progress of [r] through its life. */
-    fun progress(r: Ripple): Double =
-        ((lastFrame - r.startFrame).toDouble() / sampleRate / RIPPLE_LIFE_SECONDS).coerceIn(0.0, 1.0)
-
-    /** 0..1 progress of [p] along its leg; 1.0 is arrival. */
-    fun progress(p: Pulse): Double =
-        ((lastFrame - p.startFrame).toDouble() / (p.endFrame - p.startFrame).coerceAtLeast(1L)).coerceIn(0.0, 1.0)
-
-    /** Slow drift of an orb around its laid-out place, in unit-disc units; the whole field wanders against burn-in. */
-    fun driftX(node: Long): Double = DRIFT * sin(driftClock.seconds * 0.037 + phase(node, 1))
-
-    fun driftY(node: Long): Double = DRIFT * cos(driftClock.seconds * 0.029 + phase(node, 2))
-
-    fun driftZ(node: Long): Double = DRIFT * sin(driftClock.seconds * 0.033 + phase(node, 5))
-
-    private fun layout() {
-        dirty = false
-        val ref = origin ?: centroid()
-        val placed = ArrayList<Orb>()
-        val radii = ArrayList<Double>()
-        for (orb in orbMap.values) {
-            val pos = orb.position
-            if (pos == null || ref == null) {
-                val seeded = seededPosition(orb.node)
-                orb.x = seeded.first
-                orb.y = seeded.second
-            } else {
-                placed += orb
-                val east = (pos.lon - ref.lon) * cos(ref.lat * PI / 180.0) * METERS_PER_DEGREE
-                val north = (pos.lat - ref.lat) * METERS_PER_DEGREE
-                orb.x = east
-                orb.y = -north
-                radii += hypot(east, north)
-            }
-        }
-        if (placed.isEmpty()) {
-            separate()
-            return
-        }
-        val fit = fitRadius(radii)
-        for (orb in placed) {
-            val r = hypot(orb.x, orb.y)
-            if (r < 1e-9) {
-                orb.x = 0.0
-                orb.y = 0.0
-                continue
-            }
-            val s = screenRadius(r, fit) / r
-            orb.x *= s
-            orb.y *= s
-        }
-        separate()
-    }
-
-    /**
-     * Moves each orb that sits closer than [MIN_SEPARATION] (in screen terms at [aspect]) to an earlier one, in node
-     * order, along a golden-angle spiral to the nearest free place inside the unit ellipse; orbs that are apart stay put.
-     */
-    private fun separate() {
-        val list = placement
-        list.clear()
-        list.addAll(orbMap.values)
-        list.sortBy { it.node }
-        for (i in list.indices) {
-            val o = list[i]
-            if (isFree(list, i, o.x, o.y)) continue
-            for (k in 1..SPIRAL_STEPS) {
-                val r = MIN_SEPARATION * sqrt(k.toDouble()) * 0.9
-                val a = k * GOLDEN_ANGLE
-                val nx = o.x + r * cos(a) / aspect
-                val ny = o.y + r * sin(a)
-                if (nx * nx + ny * ny <= 1.0 && isFree(list, i, nx, ny)) {
-                    o.x = nx
-                    o.y = ny
-                    break
-                }
-            }
-        }
-        for (o in list) {
-            o.z = depthFor(o.node, o.x * o.x + o.y * o.y)
-            if (!o.placed) {
-                o.shownX = o.x
-                o.shownY = o.y
-                o.shownZ = o.z
-                o.placed = true
-            }
-        }
-    }
-
-    private fun isFree(list: List<Orb>, upTo: Int, x: Double, y: Double): Boolean {
-        for (j in 0 until upTo) {
-            val dx = (list[j].x - x) * aspect
-            val dy = list[j].y - y
-            if (dx * dx + dy * dy < MIN_SEPARATION * MIN_SEPARATION) return false
-        }
-        return true
-    }
-
-    private fun centroid(): GeoPoint? {
-        var lat = 0.0
-        var lon = 0.0
-        var n = 0
-        for (orb in orbMap.values) {
-            val p = orb.position ?: continue
-            lat += p.lat
-            lon += p.lon
-            n++
-        }
-        return if (n == 0) null else GeoPoint(lat / n, lon / n)
-    }
+    val anchorBreath: Double get() = (1 + sin(anchorPhase)) / 2
 
     companion object {
         const val RIPPLE_LIFE_SECONDS = 6.0
@@ -694,15 +523,9 @@ class SceneModel(private val sampleRate: Int) {
         const val EDGE_FADE_SECONDS = 60.0
         const val HOP_SECONDS = 0.4
         const val TRAVEL_SECONDS = 0.8
-        private const val PULSE_LINGER_SECONDS = 0.5
 
-        /** Time constant of the scene's easing toward the mesh-driven rotation parameters. */
-        private const val PARAM_EASE_SECONDS = 10.0
-
-        /** Each packet adds this much (of 1.0) to the rotation impulse, which decays with [IMPULSE_TAU_SECONDS]. */
+        /** Each packet adds this much (of 1.0) to the rotation impulse, which decays over ten seconds. */
         const val PACKET_IMPULSE = 0.2
-        private const val IMPULSE_TAU_SECONDS = 10.0
-        private const val RSSI_SMOOTHING = 0.3
         private const val DEPTH_EASE_SECONDS = 5.0
 
         /** Time constant of an orb gliding to a new laid-out place when another node joins or leaves. */
@@ -710,6 +533,10 @@ class SceneModel(private val sampleRate: Int) {
 
         private const val HAZE_TAU_SECONDS = 8.0
         private const val HAZE_STEP = 0.12
+
+        /** A hop echo's ripple is this fraction of the packet's strength. */
+        private const val ECHO_STRENGTH = 0.5f
+
         /** Glow of an orb just seen, fading toward [IDLE_FLOOR]: every known node stays visible on a sparse mesh. */
         const val IDLE_CORE = 0.35
 
@@ -722,14 +549,6 @@ class SceneModel(private val sampleRate: Int) {
         /** The least [nightDim] returns, from 00:00 to 05:00. */
         const val NIGHT_DIM_MIN = 0.65
 
-        private const val IDLE_FADE_SECONDS = 3600.0
-        private const val FLASH_TAU_SECONDS = 12.0
-        private const val NOTE_PULSE = 0.45
-        private const val NOTE_PULSE_TAU_SECONDS = 2.5
-        private const val BREATH_MIN_PERIOD = 7.0
-        private const val BREATH_PERIOD_SPREAD = 6.0
-        private const val FIELD_BREATH = 0.25
-        private const val FIELD_BREATH_PERIOD = 11.0
         private const val ANCHOR_PERIOD_SECONDS = 8.0
         private const val UNLINKED_ANCHOR_PERIOD_SECONDS = 16.0
         private const val UNLINKED_SATURATION = 0.2
@@ -738,11 +557,16 @@ class SceneModel(private val sampleRate: Int) {
         private const val PAD_TAU_SECONDS = 6.0
         private const val HUE_SPAN = 24.0
         private const val BRIGHTNESS_HUE = 20.0
+        private const val NEUTRAL_BRIGHTNESS = 0.5
         private const val MIDDLE_C_HZ = 261.6255653005986
-        private const val SPIRAL_STEPS = 600
-        private val GOLDEN_ANGLE = PI * (3.0 - sqrt(5.0))
-        private const val DRIFT = 0.012
-        private const val METERS_PER_DEGREE = 111_320.0
+        private const val SEMITONES_PER_OCTAVE = 12.0
+
+        private const val NOON_MINUTE = 12 * 60
+        private const val MIN_ASPECT = 0.25
+        private const val MAX_ASPECT = 4.0
+
+        /** An aspect change smaller than this does not relayout. */
+        private const val ASPECT_RELAYOUT_STEP = 0.01
 
         /** Fraction of the screen radius the percentile fit reaches; the band beyond it is for outliers. */
         private const val FIT_EDGE = 0.9
@@ -769,8 +593,21 @@ class SceneModel(private val sampleRate: Int) {
                 FIT_EDGE + (1.0 - FIT_EDGE) * (1.0 - exp(-(distance - fit) / fit))
             }
 
-        /** Fraction of the full depth reach an orb at the cloud's edge keeps, so the cloud is an ellipsoid with a lumpy rim. */
+        /**
+         * Fraction of the full depth reach an orb at the cloud's edge keeps, so the cloud is an ellipsoid with a lumpy
+         * rim.
+         */
         const val ELLIPSOID_EDGE_DEPTH = 0.15
+
+        // Salts that give each per-node hash its own independent stream.
+        private const val DEPTH_SALT_A = 0x2545F4914F6CDD1DL
+        private const val DEPTH_SALT_B = 0x6A09E667F3BCC909L
+        private const val SEED_ANGLE_SALT = 0x5bd1e995L
+        private const val SEED_RADIUS_SALT = 0x1b873593L
+
+        /** A node with no position sits between these fractions of the unit disc's radius. */
+        private const val SEED_RADIUS_MIN = 0.25
+        private const val SEED_RADIUS_SPREAD = 0.6
 
         /**
          * Depth -1..1 of [node] for an orb whose planar radius squared is [radiusSquared]: a stable hash of the node
@@ -778,7 +615,7 @@ class SceneModel(private val sampleRate: Int) {
          * to [ELLIPSOID_EDGE_DEPTH] at the edge of the unit disc.
          */
         fun depthFor(node: Long, radiusSquared: Double): Double {
-            val h = unit(Rng.mix(node xor 0x2545F4914F6CDD1DL)) + unit(Rng.mix(node xor 0x6A09E667F3BCC909L)) - 1.0
+            val h = unit(Rng.mix(node xor DEPTH_SALT_A)) + unit(Rng.mix(node xor DEPTH_SALT_B)) - 1.0
             val profile = ELLIPSOID_EDGE_DEPTH +
                 (1.0 - ELLIPSOID_EDGE_DEPTH) * sqrt((1.0 - radiusSquared).coerceIn(0.0, 1.0))
             return h * profile
@@ -786,33 +623,43 @@ class SceneModel(private val sampleRate: Int) {
 
         /** Where a node with no position sits: a pure function of the node number, so it never moves between runs. */
         fun seededPosition(node: Long): Pair<Double, Double> {
-            val angle = unit(Rng.mix(node xor 0x5bd1e995L)) * 2 * PI
-            val radius = 0.25 + 0.6 * unit(Rng.mix(node xor 0x1b873593L))
+            val angle = unit(Rng.mix(node xor SEED_ANGLE_SALT)) * 2 * PI
+            val radius = SEED_RADIUS_MIN + SEED_RADIUS_SPREAD * unit(Rng.mix(node xor SEED_RADIUS_SALT))
             return Pair(radius * cos(angle), radius * sin(angle))
         }
+
+        private const val MINUTES_PER_DAY = 24 * 60
+        private const val DUSK_START_MINUTE = 22 * 60
+        private const val NIGHT_END_MINUTE = 5 * 60
+        private const val DAWN_END_MINUTE = 7 * 60
+        private const val DIM_FADE_MINUTES = 120.0
 
         /**
          * 1.0 from 07:00 to 22:00, a smoothstep down to [NIGHT_DIM_MIN] by 00:00, held to 05:00, and a smoothstep back
          * up by 07:00, so OLED screens and dark rooms are not held at full light but an evening is not dim.
          */
         fun nightDim(minuteOfDay: Int): Double {
-            val m = minuteOfDay.coerceIn(0, 1439)
+            val m = minuteOfDay.coerceIn(0, MINUTES_PER_DAY - 1)
             val day = when {
-                m >= 22 * 60 -> 1.0 - smoothstep((m - 22 * 60) / 120.0)
-                m < 5 * 60 -> 0.0
-                m < 7 * 60 -> smoothstep((m - 5 * 60) / 120.0)
+                m >= DUSK_START_MINUTE -> 1.0 - smoothstep((m - DUSK_START_MINUTE) / DIM_FADE_MINUTES)
+                m < NIGHT_END_MINUTE -> 0.0
+                m < DAWN_END_MINUTE -> smoothstep((m - NIGHT_END_MINUTE) / DIM_FADE_MINUTES)
                 else -> 1.0
             }
             return NIGHT_DIM_MIN + (1.0 - NIGHT_DIM_MIN) * day
         }
 
+        /** The Hermite smoothstep `3t^2 - 2t^3` of [x] clamped to 0..1. */
         private fun smoothstep(x: Double): Double {
             val t = x.coerceIn(0.0, 1.0)
-            return t * t * (3 - 2 * t)
+            return t * t * (SMOOTHSTEP_SQUARE_COEFFICIENT - 2 * t)
         }
 
-        private fun unit(bits: Long): Double = (bits ushr 11) * (1.0 / (1L shl 53))
+        private const val SMOOTHSTEP_SQUARE_COEFFICIENT = 3
 
-        private fun phase(node: Long, salt: Int): Double = unit(Rng.mix(node + salt)) * 2 * PI
+        /** Bits of a uniform double in 0..1: the top 53 of a 64-bit hash, as `Rng.nextDouble` takes them. */
+        private const val UNIT_BITS = 53
+
+        internal fun unit(bits: Long): Double = (bits ushr (Long.SIZE_BITS - UNIT_BITS)) * (1.0 / (1L shl UNIT_BITS))
     }
 }

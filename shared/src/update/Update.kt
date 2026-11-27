@@ -43,24 +43,31 @@ data class PublishedBuild(
          * file name or digest is malformed is left out rather than failing the whole build.
          */
         fun parse(text: String): PublishedBuild? {
-            val values = text.lineSequence()
-                .map { it.trim() }
-                .filter { it.isNotEmpty() && !it.startsWith("#") }
-                .mapNotNull { line -> line.indexOf('=').takeIf { it > 0 }?.let { line.substring(0, it).trim() to line.substring(it + 1).trim() } }
-                .toMap()
-            val version = values["version"]?.takeIf { it.isNotEmpty() } ?: return null
-            val code = values["code"]?.toLongOrNull()?.takeIf { it > 0 } ?: return null
-            val tag = values["tag"]?.takeIf { SAFE_TAG.matches(it) } ?: return null
-            val assets = values.keys
-                .filter { !it.endsWith(".sha256") && it !in HEADER_KEYS }
-                .mapNotNull { key ->
-                    val name = values.getValue(key).takeIf { SAFE_NAME.matches(it) } ?: return@mapNotNull null
-                    val sha = values["$key.sha256"]?.lowercase()?.takeIf { SHA256.matches(it) } ?: return@mapNotNull null
-                    key to Asset(name, sha)
-                }
-                .toMap()
-            return PublishedBuild(version, code, tag, assets)
+            val values = keyValues(text)
+            val version = values["version"]?.takeIf { it.isNotEmpty() }
+            val code = values["code"]?.toLongOrNull()?.takeIf { it > 0 }
+            val tag = values["tag"]?.takeIf { SAFE_TAG.matches(it) }
+            if (version == null || code == null || tag == null) return null
+            return PublishedBuild(version, code, tag, assets(values))
         }
+
+        private fun keyValues(text: String): Map<String, String> = text.lineSequence()
+            .map { it.trim() }
+            .filter { it.isNotEmpty() && !it.startsWith("#") }
+            .mapNotNull { line ->
+                val eq = line.indexOf('=')
+                if (eq > 0) line.substring(0, eq).trim() to line.substring(eq + 1).trim() else null
+            }
+            .toMap()
+
+        private fun assets(values: Map<String, String>): Map<String, Asset> = values.keys
+            .filter { !it.endsWith(".sha256") && it !in HEADER_KEYS }
+            .mapNotNull { key ->
+                val name = values.getValue(key).takeIf { SAFE_NAME.matches(it) }
+                val sha = values["$key.sha256"]?.lowercase()?.takeIf { SHA256.matches(it) }
+                if (name != null && sha != null) key to Asset(name, sha) else null
+            }
+            .toMap()
 
         private val HEADER_KEYS = setOf("version", "code", "tag")
     }
@@ -83,7 +90,10 @@ sealed interface UpdateState {
     data object Failed : UpdateState
 }
 
-/** Where [runningCode] stands against [latest]; a release and the snapshot of one commit share a code, so only a higher one is newer. */
+/**
+ * Where [runningCode] stands against [latest]; a release and the snapshot of one commit share a code, so only a higher
+ * one is newer.
+ */
 fun compare(runningCode: Long, latest: PublishedBuild): UpdateState =
     if (latest.code > runningCode) UpdateState.Available(latest) else UpdateState.UpToDate(latest)
 
@@ -91,7 +101,13 @@ fun compare(runningCode: Long, latest: PublishedBuild): UpdateState =
  * Why a downloaded Android package must not go to the installer, or null when it may. [sameKey] is null when Android
  * could not read either side's signers, and the installer's own check then decides.
  */
-fun packageVerdict(packageName: String?, appPackage: String, versionCode: Long, installedVersionCode: Long, sameKey: Boolean?): InstallFailure? =
+fun packageVerdict(
+    packageName: String?,
+    appPackage: String,
+    versionCode: Long,
+    installedVersionCode: Long,
+    sameKey: Boolean?,
+): InstallFailure? =
     when {
         packageName != appPackage -> InstallFailure.NOT_THIS_APP
         sameKey == false -> InstallFailure.DIFFERENT_KEY

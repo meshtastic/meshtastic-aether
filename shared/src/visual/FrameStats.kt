@@ -3,14 +3,16 @@ package org.meshtastic.aether.visual
 import kotlin.math.ceil
 import kotlin.math.round
 
+private const val TENTHS_PER_UNIT = 10
+
 /** One window of frame timing: [frames] timestamps seen, [fps] over the window, [p95Ms] and [worstMs] frame times. */
 class FrameReport(val frames: Int, val fps: Double, val p95Ms: Double, val worstMs: Double) {
     /** The log fragment, for example `fps=58.9 p95ms=17.9 worst=41.2`. */
     fun format(): String = "fps=${tenths(fps)} p95ms=${tenths(p95Ms)} worst=${tenths(worstMs)}"
 
     private fun tenths(v: Double): String {
-        val t = round(v * 10).toLong()
-        return "${t / 10}.${t % 10}"
+        val t = round(v * TENTHS_PER_UNIT).toLong()
+        return "${t / TENTHS_PER_UNIT}.${t % TENTHS_PER_UNIT}"
     }
 }
 
@@ -18,9 +20,9 @@ class FrameReport(val frames: Int, val fps: Double, val p95Ms: Double, val worst
  * Frame timing for one window, recorded from the render loop without allocating. [record] takes a frame's timestamp
  * in nanoseconds; [takeReport] summarises the window and starts a new one.
  *
- * With n timestamps there are n-1 frame times. fps is (n-1) divided by the span from first to last timestamp. p95 is the
- * nearest-rank percentile: sort the frame times ascending and take the one at 1-based rank ceil(0.95 * count). Worst is
- * the largest frame time. At most [CAPACITY] frame times are kept; beyond that the oldest are overwritten.
+ * With n timestamps there are n-1 frame times. fps is (n-1) divided by the span from first to last timestamp. p95 is
+ * the nearest-rank percentile: sort the frame times ascending and take the one at 1-based rank ceil(0.95 * count).
+ * Worst is the largest frame time. At most [CAPACITY] frame times are kept; beyond that the oldest are overwritten.
  *
  * [record] runs on the render thread and [takeReport] on another; a report taken mid-frame can be off by one frame,
  * which is acceptable for a log line.

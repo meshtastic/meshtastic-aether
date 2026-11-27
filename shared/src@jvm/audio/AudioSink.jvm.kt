@@ -6,18 +6,21 @@ import javax.sound.sampled.DataLine
 import javax.sound.sampled.SourceDataLine
 
 private const val LOOKAHEAD_MS = 250
+private const val MILLIS_PER_SECOND = 1000
+private const val STOP_JOIN_MILLIS = 1000L
+private const val PCM_BITS = 16
 private val PREFERRED_RATES = intArrayOf(48_000, 44_100, 96_000, 32_000, 22_050)
 
 /** First candidate the device accepts, else [fallback]; the rate is asked of the mixer, never assumed. */
 internal fun negotiateSampleRate(candidates: IntArray, fallback: Int, supports: (Int) -> Boolean): Int =
     candidates.firstOrNull(supports) ?: fallback
 
-private fun format(rate: Int) = AudioFormat(rate.toFloat(), 16, 2, true, false)
+private fun format(rate: Int) = AudioFormat(rate.toFloat(), PCM_BITS, 2, true, false)
 
 actual fun createAudioSink(): AudioSink = JvmAudioSink()
 
 class JvmAudioSink : AudioSink {
-    override val sampleRate: Int = negotiateSampleRate(PREFERRED_RATES, 48_000) {
+    override val sampleRate: Int = negotiateSampleRate(PREFERRED_RATES, fallback = 48_000) {
         AudioSystem.isLineSupported(DataLine.Info(SourceDataLine::class.java, format(it)))
     }
 
@@ -30,7 +33,7 @@ class JvmAudioSink : AudioSink {
         if (running) return
         val fmt = format(sampleRate)
         val l = AudioSystem.getSourceDataLine(fmt)
-        l.open(fmt, sampleRate * LOOKAHEAD_MS / 1000 * fmt.frameSize)
+        l.open(fmt, sampleRate * LOOKAHEAD_MS / MILLIS_PER_SECOND * fmt.frameSize)
         l.start()
         line = l
         running = true
@@ -59,7 +62,7 @@ class JvmAudioSink : AudioSink {
         val l = line ?: return
         l.stop()
         l.flush()
-        thread?.join(1000)
+        thread?.join(STOP_JOIN_MILLIS)
         thread = null
         l.close()
         line = null

@@ -19,8 +19,10 @@ private fun defaultLogFile(): File {
     return File(dir, "aether.log")
 }
 
+private const val DEFAULT_MAX_LOG_BYTES = 5L * 1024 * 1024
+
 /** Appends lines to [file]; a file over [maxBytes] at startup is moved to `<name>.1` (one generation kept). */
-class FileLogSink(private val file: File, private val maxBytes: Long = 5L * 1024 * 1024) : LogSink {
+class FileLogSink(private val file: File, private val maxBytes: Long = DEFAULT_MAX_LOG_BYTES) : LogSink {
     private val lock = Any()
     private var failed = false
 

@@ -59,25 +59,25 @@ class EventLookTest {
     @Test
     fun `battery flicker never exceeds two hertz and never dims past twelve percent`() {
         for (pct in -50..150) {
-            val hz = EventLook.flickerHz(pct)
+            val hz = BatteryFlicker.flickerHz(pct)
             assertTrue(hz in 0.0..2.0, "pct $pct gave $hz")
             for (k in 0 until 16) {
-                val f = EventLook.flickerFactor(pct, k * PI / 8)
+                val f = BatteryFlicker.flickerFactor(pct, k * PI / 8)
                 assertTrue(f in 0.88..1.0, "pct $pct phase $k gave $f")
             }
         }
-        assertEquals(0.0, EventLook.flickerHz(null), eps)
-        assertEquals(0.0, EventLook.flickerHz(30), eps)
-        assertEquals(0.0, EventLook.flickerHz(101), eps)
-        assertEquals(1.0, EventLook.flickerHz(15), eps)
-        assertEquals(2.0, EventLook.flickerHz(0), eps)
-        assertEquals(1.0, EventLook.flickerFactor(null, PI), eps)
+        assertEquals(0.0, BatteryFlicker.flickerHz(null), eps)
+        assertEquals(0.0, BatteryFlicker.flickerHz(30), eps)
+        assertEquals(0.0, BatteryFlicker.flickerHz(101), eps)
+        assertEquals(1.0, BatteryFlicker.flickerHz(15), eps)
+        assertEquals(2.0, BatteryFlicker.flickerHz(0), eps)
+        assertEquals(1.0, BatteryFlicker.flickerFactor(null, PI), eps)
     }
 
     @Test
     fun `the flicker phase accumulator advances two pi per cycle and wraps`() {
-        assertEquals(PI, EventLook.advanceFlicker(0.0, 1.0, 0.5), eps)
-        assertEquals(0.5, EventLook.advanceFlicker(2 * PI - 0.5, 2.0, 0.5 + 0.25 / PI), 1e-6)
+        assertEquals(PI, BatteryFlicker.advanceFlicker(0.0, 1.0, 0.5), eps)
+        assertEquals(0.5, BatteryFlicker.advanceFlicker(2 * PI - 0.5, 2.0, 0.5 + 0.25 / PI), 1e-6)
     }
 
     // 3.3 V to 4.2 V maps across 0.85 to 1.15, so 3.75 V is the midpoint 1.0; external power is the top.
@@ -107,53 +107,53 @@ class EventLookTest {
     // Regression: the width of a ripple is 2.5 dp for text and 1.5 dp otherwise, plus 2 dp thinning to 0 over the life.
     @Test
     fun `an unannotated ripple is as wide as before`() {
-        assertEquals(4.5, EventLook.rippleWidthDp(PacketKind.Text, 1.0, 0.0), eps)
-        assertEquals(2.5, EventLook.rippleWidthDp(PacketKind.Text, 1.0, 1.0), eps)
-        assertEquals(3.5, EventLook.rippleWidthDp(PacketKind.Telemetry, 1.0, 0.0), eps)
-        assertEquals(1.5, EventLook.rippleWidthDp(PacketKind.Position, 1.0, 1.0), eps)
+        assertEquals(4.5, RippleLook.rippleWidthDp(PacketKind.Text, 1.0, 0.0), eps)
+        assertEquals(2.5, RippleLook.rippleWidthDp(PacketKind.Text, 1.0, 1.0), eps)
+        assertEquals(3.5, RippleLook.rippleWidthDp(PacketKind.Telemetry, 1.0, 0.0), eps)
+        assertEquals(1.5, RippleLook.rippleWidthDp(PacketKind.Position, 1.0, 1.0), eps)
     }
 
     @Test
     fun `payload size trims the ripple width between eighty five and a hundred twenty percent`() {
-        assertEquals(1.0, EventLook.payloadWidthTrim(null), eps)
-        assertEquals(0.85, EventLook.payloadWidthTrim(0), eps)
-        assertEquals(1.2, EventLook.payloadWidthTrim(233), eps)
-        assertEquals(1.2, EventLook.payloadWidthTrim(5000), eps)
-        assertEquals(0.85 + 0.35 * 0.5, EventLook.payloadWidthTrim(116) , 0.002)
+        assertEquals(1.0, RippleLook.payloadWidthTrim(null), eps)
+        assertEquals(0.85, RippleLook.payloadWidthTrim(0), eps)
+        assertEquals(1.2, RippleLook.payloadWidthTrim(233), eps)
+        assertEquals(1.2, RippleLook.payloadWidthTrim(5000), eps)
+        assertEquals(0.85 + 0.35 * 0.5, RippleLook.payloadWidthTrim(116) , 0.002)
     }
 
     @Test
     fun `only a long text earns more rings`() {
-        assertEquals(1, EventLook.ringCount(PacketKind.Text, null))
-        assertEquals(1, EventLook.ringCount(PacketKind.Text, 40))
-        assertEquals(2, EventLook.ringCount(PacketKind.Text, 41))
-        assertEquals(2, EventLook.ringCount(PacketKind.Text, 100))
-        assertEquals(3, EventLook.ringCount(PacketKind.Text, 101))
-        assertEquals(1, EventLook.ringCount(PacketKind.Telemetry, 200))
+        assertEquals(1, RippleLook.ringCount(PacketKind.Text, null))
+        assertEquals(1, RippleLook.ringCount(PacketKind.Text, 40))
+        assertEquals(2, RippleLook.ringCount(PacketKind.Text, 41))
+        assertEquals(2, RippleLook.ringCount(PacketKind.Text, 100))
+        assertEquals(3, RippleLook.ringCount(PacketKind.Text, 101))
+        assertEquals(1, RippleLook.ringCount(PacketKind.Telemetry, 200))
     }
 
     @Test
     fun `path packets draw a dashed ring and the rest a solid one`() {
-        for (k in listOf(PacketKind.Routing, PacketKind.Traceroute, PacketKind.NeighborInfo)) assertEquals(RingStyle.Dashed, EventLook.ringStyle(k))
+        for (k in listOf(PacketKind.Routing, PacketKind.Traceroute, PacketKind.NeighborInfo)) assertEquals(RingStyle.Dashed, RippleLook.ringStyle(k))
         for (k in listOf(PacketKind.Text, PacketKind.Position, PacketKind.Telemetry, PacketKind.NodeInfo, PacketKind.Other)) {
-            assertEquals(RingStyle.Solid, EventLook.ringStyle(k))
+            assertEquals(RingStyle.Solid, RippleLook.ringStyle(k))
         }
     }
 
     @Test
     fun `channel zero and unknown keep the hue and others shift by three degrees an index up to twenty one`() {
-        assertEquals(0, EventLook.channelHueDegrees(null))
-        assertEquals(0, EventLook.channelHueDegrees(0))
-        assertEquals(6, EventLook.channelHueDegrees(2))
-        assertEquals(21, EventLook.channelHueDegrees(7))
-        assertEquals(21, EventLook.channelHueDegrees(200))
-        assertEquals(0, EventLook.channelHueDegrees(-4))
+        assertEquals(0, RippleLook.channelHueDegrees(null))
+        assertEquals(0, RippleLook.channelHueDegrees(0))
+        assertEquals(6, RippleLook.channelHueDegrees(2))
+        assertEquals(21, RippleLook.channelHueDegrees(7))
+        assertEquals(21, RippleLook.channelHueDegrees(200))
+        assertEquals(0, RippleLook.channelHueDegrees(-4))
     }
 
     @Test
     fun `only an mqtt ripple takes the cool tint`() {
-        assertEquals(0f, EventLook.mqttMix(false))
-        assertTrue(EventLook.mqttMix(true) in 0.2f..0.5f)
-        assertTrue(abs(EventLook.mqttMix(true) - 0.35f) < 1e-6f)
+        assertEquals(0f, RippleLook.mqttMix(false))
+        assertTrue(RippleLook.mqttMix(true) in 0.2f..0.5f)
+        assertTrue(abs(RippleLook.mqttMix(true) - 0.35f) < 1e-6f)
     }
 }

@@ -1,6 +1,7 @@
 package org.meshtastic.aether
 
 import org.meshtastic.aether.log.Log
+import java.io.IOException
 import java.util.concurrent.TimeUnit
 
 private const val TAG = "keepawake"
@@ -30,7 +31,7 @@ internal object KeepAwake {
         }
         process = try {
             ProcessBuilder(command).redirectErrorStream(true).redirectOutput(ProcessBuilder.Redirect.DISCARD).start()
-        } catch (e: Exception) {
+        } catch (e: IOException) {
             Log.w(TAG, "${command.first()} did not start; the screen may blank", e)
             null
         }
