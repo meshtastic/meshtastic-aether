@@ -72,7 +72,7 @@ private class AndroidUpdater(private val app: Context, manifestUrl: String) :
                 return InstallState.Failed(failure)
             }
             // Before the commit, since the receiver can hear back before it returns.
-            _install.value = InstallState.Installing
+            installState.value = InstallState.Installing
             commit(file)
             return null
         } catch (e: IOException) {
@@ -177,7 +177,7 @@ private class AndroidUpdater(private val app: Context, manifestUrl: String) :
     }
 
     fun onStatus(state: InstallState) {
-        _install.value = state
+        installState.value = state
     }
 }
 

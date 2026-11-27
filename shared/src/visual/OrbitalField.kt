@@ -42,11 +42,14 @@ internal object OrbitalField {
     internal const val DAMPING = 1.4
 
     /**
-     * Pull per unit of edge length. The steady lean is `EDGE_PULL / SPRING * gravity * fade * min(d, EDGE_REACH)`, at most
-     * 0.1 at full gravity, so with the ring it stays under [MAX_OFFSET] and the orbit keeps turning.
+     * Pull per unit of edge length. The steady lean is `EDGE_PULL / SPRING * gravity * fade * min(d, EDGE_REACH)`, at
+     * most 0.1 at full gravity, so with the ring it stays under [MAX_OFFSET] and the orbit keeps turning.
      */
     internal const val EDGE_PULL = 0.16
     internal const val EDGE_REACH = 0.5
+
+    /** An edge shorter than this has no direction to pull along. */
+    internal const val MIN_EDGE_LENGTH = 1e-9
 
     /** Largest step integrated at once; a longer gap (the first frame, a stalled app) is cut to this. */
     const val MAX_STEP_SECONDS = 0.05
@@ -59,105 +62,134 @@ internal object OrbitalField {
     private const val RSSI_STRONG = -40.0
     private const val BINDING_UNKNOWN = 0.4
 
+    /** Kepler's third law: the period grows as `r^1.5`, so the angular speed falls as `r^-1.5`. */
+    private const val KEPLER_EXPONENT = 1.5
+
+    /** 1/phi and 1/rho (the plastic number): irrational steps that spread kick angles and ring starts evenly. */
+    private const val GOLDEN_FRACTION = 0.6180339887498949
+    private const val PLASTIC_FRACTION = 0.7548776662466927
+
     /** 0..1 how well this orb is heard: its smoothed RSSI mapped between [RSSI_WEAK] and [RSSI_STRONG]. */
     fun binding(rssi: Double?): Double =
         if (rssi == null) BINDING_UNKNOWN else ((rssi - RSSI_WEAK) / (RSSI_STRONG - RSSI_WEAK)).coerceIn(0.0, 1.0)
 
     /** Radius of the ring for an orb with [binding] under [gravity], both 0..1. */
-    fun ringRadius(binding: Double, gravity: Double): Double = ORBIT_RADIUS * (1.0 - ORBIT_TIGHTEN * gravity.coerceIn(0.0, 1.0) * binding.coerceIn(0.0, 1.0))
+    fun ringRadius(binding: Double, gravity: Double): Double =
+        ORBIT_RADIUS * (1.0 - ORBIT_TIGHTEN * gravity.coerceIn(0.0, 1.0) * binding.coerceIn(0.0, 1.0))
 
     /** Angular speed of an orb whose place is [distance] from the anchor: Kepler's `r^-1.5`, capped. */
-    fun angularRate(distance: Double): Double = min(MAX_RATE, ORBIT_RATE * (REFERENCE_RADIUS / max(distance, MIN_RADIUS)).pow(1.5))
+    fun angularRate(distance: Double): Double =
+        min(MAX_RATE, ORBIT_RATE * (REFERENCE_RADIUS / max(distance, MIN_RADIUS)).pow(KEPLER_EXPONENT))
 
-    /** Gives [orb] a speed of [strength] (0..1) of [KICK_SPEED] in a direction that is a fixed function of its node and kick count. */
+    /**
+     * Gives [orb] a speed of [strength] (0..1) of [KICK_SPEED] in a direction that is a fixed function of its node and
+     * kick count.
+     */
     fun kick(orb: Orb, strength: Float) {
         val s = strength.coerceIn(0f, 1f).toDouble()
         if (s <= 0.0) return
         orb.phKicks++
-        val angle = (orb.node * 0.6180339887498949 + orb.phKicks * GOLDEN_ANGLE).mod(2 * PI)
+        val angle = (orb.node * GOLDEN_FRACTION + orb.phKicks * GOLDEN_ANGLE).mod(2 * PI)
         orb.phVx += cos(angle) * KICK_SPEED * s
         orb.phVy += sin(angle) * KICK_SPEED * s
     }
 
+    /** Whether [dtSeconds] is a step to take: positive and finite. A step is [pullAlongEdges], then [advance]. */
+    fun canStep(dtSeconds: Double): Boolean = dtSeconds > 0.0 && dtSeconds.isFinite()
+
     /**
-     * Advances every orb in [orbs] by [dtSeconds]. [direction] is +1 or -1 for the way the rings turn, [gravity] 0..1 the
-     * pull of edges and the tightness of the rings. [edgeFade] is each edge's freshness 0..1; [orbOf] finds an edge's
-     * ends and [anchorNode] is the one end that is fixed at the origin.
+     * The first half of a step: adds to each orb's acceleration the pull of the fresh edges, which draw their two ends
+     * together under [gravity] 0..1. [edgeFade] is each edge's freshness 0..1; [orbOf] finds an edge's ends and
+     * [anchorNode] is the one end that is fixed at the origin. [advance] then integrates and clears it.
      */
-    inline fun step(
-        dtSeconds: Double,
-        orbs: Collection<Orb>,
+    inline fun pullAlongEdges(
         edges: Collection<Edge>,
         edgeFade: (Edge) -> Double,
         orbOf: (Long) -> Orb?,
         anchorNode: Long?,
-        direction: Int,
         gravity: Double,
     ) {
-        if (!(dtSeconds > 0.0) || !dtSeconds.isFinite()) return
-        val dt = min(dtSeconds, MAX_STEP_SECONDS)
-        val g = if (gravity.isFinite()) gravity.coerceIn(0.0, 1.0) else 0.0
-        val sign = if (direction >= 0) 1.0 else -1.0
-
-        for (o in orbs) {
-            o.phAx = 0.0
-            o.phAy = 0.0
-        }
-        if (g > 0.0) {
-            for (e in edges) {
-                val fade = edgeFade(e)
-                if (fade <= 0.0) continue
-                val a = orbOf(e.a)
-                val b = orbOf(e.b)
-                val aIsAnchor = a == null && e.a == anchorNode
-                val bIsAnchor = b == null && e.b == anchorNode
-                if ((a == null && !aIsAnchor) || (b == null && !bIsAnchor)) continue
-                val ax = a?.let { it.x + it.phOx } ?: 0.0
-                val ay = a?.let { it.y + it.phOy } ?: 0.0
-                val bx = b?.let { it.x + it.phOx } ?: 0.0
-                val by = b?.let { it.y + it.phOy } ?: 0.0
-                val dx = bx - ax
-                val dy = by - ay
-                val d = hypot(dx, dy)
-                if (d < 1e-9) continue
-                val pull = EDGE_PULL * g * fade * min(d, EDGE_REACH) / d
-                if (a != null) {
-                    a.phAx += dx * pull
-                    a.phAy += dy * pull
-                }
-                if (b != null) {
-                    b.phAx -= dx * pull
-                    b.phAy -= dy * pull
-                }
-            }
-        }
-
-        for (o in orbs) {
-            val home = hypot(o.x, o.y)
-            o.phPhase = (o.phPhase + sign * angularRate(home) * dt).mod(2 * PI)
-            val ring = ringRadius(binding(o.rssi), g)
-            val tx = ring * cos(o.phPhase + ringStart(o.node))
-            val ty = ring * sin(o.phPhase + ringStart(o.node))
-            val ax = SPRING * (tx - o.phOx) - DAMPING * o.phVx + o.phAx
-            val ay = SPRING * (ty - o.phOy) - DAMPING * o.phVy + o.phAy
-            o.phVx += ax * dt
-            o.phVy += ay * dt
-            o.phOx += o.phVx * dt
-            o.phOy += o.phVy * dt
-            val m = hypot(o.phOx, o.phOy)
-            if (m > MAX_OFFSET) {
-                val k = MAX_OFFSET / m
-                o.phOx *= k
-                o.phOy *= k
-                o.phVx *= k
-                o.phVy *= k
-            }
-            if (!o.phOx.isFinite() || !o.phOy.isFinite() || !o.phVx.isFinite() || !o.phVy.isFinite()) o.resetPhysics()
+        val g = clampGravity(gravity)
+        if (g <= 0.0) return
+        for (e in edges) {
+            val fade = edgeFade(e)
+            if (fade > 0.0) pullEdge(e, orbOf(e.a), orbOf(e.b), anchorNode, EDGE_PULL * g * fade)
         }
     }
 
-    /** Where on its ring an orb starts: a fixed function of the node number, so orbs do not move in lockstep. */
-    internal fun ringStart(node: Long): Double = (node * 0.7548776662466927).mod(1.0) * 2 * PI
+    /**
+     * Pulls the ends [a] and [b] of edge [e] toward each other with [strength] per unit of length up to [EDGE_REACH]. A
+     * missing end is the anchor at the origin when its node is [anchorNode]; any other missing end drops the edge.
+     */
+    internal fun pullEdge(e: Edge, a: Orb?, b: Orb?, anchorNode: Long?, strength: Double) {
+        val aDropped = a == null && e.a != anchorNode
+        val bDropped = b == null && e.b != anchorNode
+        if (aDropped || bDropped) return
+        val ax = a.shownAtX()
+        val ay = a.shownAtY()
+        val bx = b.shownAtX()
+        val by = b.shownAtY()
+        val dx = bx - ax
+        val dy = by - ay
+        val d = hypot(dx, dy)
+        if (d < MIN_EDGE_LENGTH) return
+        val pull = strength * min(d, EDGE_REACH) / d
+        if (a != null) {
+            a.phAx += dx * pull
+            a.phAy += dy * pull
+        }
+        if (b != null) {
+            b.phAx -= dx * pull
+            b.phAy -= dy * pull
+        }
+    }
+
+    internal fun clampGravity(gravity: Double): Double = if (gravity.isFinite()) gravity.coerceIn(0.0, 1.0) else 0.0
+
+    /**
+     * The second half of a step, after [pullAlongEdges]: advances every orb in [orbs] by [dtSeconds] and clears the
+     * accelerations it used. [direction] is +1 or -1 for the way the rings turn, [gravity] 0..1 the tightness of the
+     * rings.
+     */
+    fun advance(dtSeconds: Double, orbs: Collection<Orb>, direction: Int, gravity: Double) {
+        if (!canStep(dtSeconds)) return
+        val dt = min(dtSeconds, MAX_STEP_SECONDS)
+        val g = clampGravity(gravity)
+        val sign = if (direction >= 0) 1.0 else -1.0
+        for (o in orbs) advanceOrb(o, dt, g, sign)
+    }
+
+    private fun advanceOrb(o: Orb, dt: Double, g: Double, sign: Double) {
+        val home = hypot(o.x, o.y)
+        o.phPhase = (o.phPhase + sign * angularRate(home) * dt).mod(2 * PI)
+        val ring = ringRadius(binding(o.rssi), g)
+        // Where on its ring the orb starts: a fixed function of the node number, so orbs do not move in lockstep.
+        val start = (o.node * PLASTIC_FRACTION).mod(1.0) * 2 * PI
+        val tx = ring * cos(o.phPhase + start)
+        val ty = ring * sin(o.phPhase + start)
+        val ax = SPRING * (tx - o.phOx) - DAMPING * o.phVx + o.phAx
+        val ay = SPRING * (ty - o.phOy) - DAMPING * o.phVy + o.phAy
+        o.phAx = 0.0
+        o.phAy = 0.0
+        o.phVx += ax * dt
+        o.phVy += ay * dt
+        o.phOx += o.phVx * dt
+        o.phOy += o.phVy * dt
+        val m = hypot(o.phOx, o.phOy)
+        if (m > MAX_OFFSET) {
+            val k = MAX_OFFSET / m
+            o.phOx *= k
+            o.phOy *= k
+            o.phVx *= k
+            o.phVy *= k
+        }
+        if (!o.physicsFinite()) o.resetPhysics()
+    }
 
     private const val GOLDEN_ANGLE = 2.399963229728653
 }
+
+/** Where an edge end sits with its physics offset; a missing end is the anchor at the origin. */
+private fun Orb?.shownAtX(): Double = if (this == null) 0.0 else x + phOx
+
+private fun Orb?.shownAtY(): Double = if (this == null) 0.0 else y + phOy

@@ -35,7 +35,7 @@ class WindowAnalyzer(private val sampleRate: Int, private val windowFrames: Long
     private val results = ArrayList<WindowStats>()
     private val hopFrames = (HOP_SEC * sampleRate).toInt().coerceAtLeast(1)
     private val spectrumPeriod = (SPECTRUM_PERIOD_SEC * sampleRate).toLong()
-    private val hann = DoubleArray(FFT_SIZE) { 0.5 - 0.5 * cos(2 * PI * it / FFT_SIZE) }
+    private val hann = DoubleArray(FFT_SIZE) { (1 - cos(2 * PI * it / FFT_SIZE)) / 2 }
     private val re = DoubleArray(FFT_SIZE)
     private val im = DoubleArray(FFT_SIZE)
     private val power = DoubleArray(FFT_SIZE / 2 + 1)
@@ -186,7 +186,7 @@ internal fun fft(re: DoubleArray, im: DoubleArray) {
     }
     var len = 2
     while (len <= n) {
-        val ang = -2 * PI / len
+        val ang = -(2 * PI / len)
         val wr = cos(ang)
         val wi = sin(ang)
         var i = 0
@@ -217,11 +217,19 @@ fun formatStats(stats: List<WindowStats>): String = buildString {
     for (s in stats) {
         appendLine(
             "%9.1f  %9s  %8s  %6.4f  %3d  %7d  %11.0f  %6d  %15.2f".format(
-                s.startSec / 60.0, db(s.peak), db(s.rms), s.dc, s.nanCount, s.clippedCount, s.centroidHz, s.onsets,
-                s.longestQuietSec,
+                s.startSec / SECONDS_PER_MINUTE, db(s.peak), db(s.rms), s.dc, s.nanCount, s.clippedCount,
+                s.centroidHz, s.onsets, s.longestQuietSec,
             ),
         )
     }
 }
 
-private fun db(x: Double): String = if (x <= 1e-9) "-inf" else "%.1f".format(20 * kotlin.math.log10(x))
+private const val SECONDS_PER_MINUTE = 60.0
+
+/** Below this linear level the table prints `-inf` instead of a dB figure. */
+private const val DB_FLOOR = 1e-9
+
+/** An amplitude ratio is 20 dB per decade. */
+private const val DB_PER_DECADE = 20
+
+private fun db(x: Double): String = if (x <= DB_FLOOR) "-inf" else "%.1f".format(DB_PER_DECADE * kotlin.math.log10(x))

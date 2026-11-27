@@ -15,24 +15,27 @@ object Log {
     /** Replaced in tests; the platform's sinks by default. */
     var sinks: List<LogSink> = platformLogSinks()
 
-    fun d(tag: String, message: String) = log(Level.Debug, tag, message, null)
+    fun d(tag: String, message: String) = emit(Level.Debug, tag, message, null)
 
-    fun i(tag: String, message: String) = log(Level.Info, tag, message, null)
+    fun i(tag: String, message: String) = emit(Level.Info, tag, message, null)
 
-    fun w(tag: String, message: String, error: Throwable? = null) = log(Level.Warn, tag, message, error)
+    fun w(tag: String, message: String, error: Throwable? = null) = emit(Level.Warn, tag, message, error)
 
-    fun e(tag: String, message: String, error: Throwable? = null) = log(Level.Error, tag, message, error)
+    fun e(tag: String, message: String, error: Throwable? = null) = emit(Level.Error, tag, message, error)
 
-    private fun log(level: Level, tag: String, message: String, error: Throwable?) {
+    private fun emit(level: Level, tag: String, message: String, error: Throwable?) {
         if (level < minLevel) return
         val line = format(Clock.System.now().toString(), level, tag, message, error)
         for (sink in sinks) sink.write(level, line)
     }
 
     internal fun format(timestamp: String, level: Level, tag: String, message: String, error: Throwable?): String {
-        val base = "$timestamp ${level.name.uppercase().padEnd(5)} $tag: $message"
+        val base = "$timestamp ${level.name.uppercase().padEnd(LEVEL_WIDTH)} $tag: $message"
         return if (error == null) base else "$base (${error::class.simpleName}: ${error.message})"
     }
 }
+
+/** Levels pad to the longest name, so messages line up. */
+private val LEVEL_WIDTH = Level.entries.maxOf { it.name.length }
 
 expect fun platformLogSinks(): List<LogSink>

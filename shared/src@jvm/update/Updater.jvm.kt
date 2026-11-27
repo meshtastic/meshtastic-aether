@@ -11,10 +11,14 @@ import java.net.URI
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.TimeoutException
 
 private const val TAG = "update"
 
-/** Passed to the restarted app with this process's pid, so it waits for the old one to let go of the serial port and audio. */
+/**
+ * Passed to the restarted app with this process's pid, so it waits for the old one to let go of the serial port and
+ * audio.
+ */
 const val AFTER_UPDATE_FLAG = "--after-update"
 private const val AFTER_UPDATE_WAIT_SECONDS = 15L
 
@@ -35,11 +39,16 @@ internal fun desktopAssetKey(osName: String, osArch: String): String? {
  * Null for `./kotlin run`, whose class path is many entries, a read-only install, or an app installed from a deb, dmg
  * or msi ([installed]), whose jar belongs to the package; those get the download page.
  */
-internal fun replaceableJar(classPath: String, pathSeparator: String, installed: Boolean = false, canWrite: (File) -> Boolean): File? {
+internal fun replaceableJar(
+    classPath: String,
+    pathSeparator: String,
+    installed: Boolean = false,
+    canWrite: (File) -> Boolean,
+): File? {
     if (installed) return null
     val entries = classPath.split(pathSeparator).filter { it.isNotEmpty() }
-    val jar = entries.singleOrNull()?.takeIf { it.endsWith(".jar") }?.let { File(it).absoluteFile } ?: return null
-    return jar.takeIf { it.isFile && jar.parentFile?.let(canWrite) == true }
+    val jar = entries.singleOrNull()?.takeIf { it.endsWith(".jar") }?.let { File(it).absoluteFile }
+    return jar?.takeIf { it.isFile && it.parentFile?.let(canWrite) == true }
 }
 
 /** The arguments `main` got, so a restart after an update reopens the same way. */
@@ -57,7 +66,9 @@ object DesktopLaunch {
             ProcessHandle.of(pid).ifPresent { old ->
                 try {
                     old.onExit().get(AFTER_UPDATE_WAIT_SECONDS, TimeUnit.SECONDS)
-                } catch (e: Exception) {
+                } catch (e: TimeoutException) {
+                    Log.w(TAG, "the previous process $pid did not exit in time: ${e.message}")
+                } catch (e: InterruptedException) {
                     Log.w(TAG, "the previous process $pid did not exit in time: ${e.message}")
                 }
             }
@@ -82,7 +93,8 @@ internal actual fun createUpdater(): Updater? {
  */
 private class DesktopUpdater(manifestUrl: String) :
     HttpUpdater(manifestUrl, BuildInfo.CODE, assetsBesideManifest = manifestOverride() != null) {
-    private val assetKey = desktopAssetKey(System.getProperty("os.name").orEmpty(), System.getProperty("os.arch").orEmpty())
+    private val assetKey =
+        desktopAssetKey(System.getProperty("os.name").orEmpty(), System.getProperty("os.arch").orEmpty())
     private val jar: File? = replaceableJar(
         System.getProperty("java.class.path").orEmpty(),
         File.pathSeparator,
@@ -99,15 +111,16 @@ private class DesktopUpdater(manifestUrl: String) :
     override suspend fun installFile(file: File, latest: PublishedBuild): InstallState? = withContext(Dispatchers.IO) {
         val target = checkNotNull(jar)
         val backup = File(target.parentFile, "${target.name}.bak")
-        _install.value = InstallState.Installing
+        installState.value = InstallState.Installing
         try {
-            val java = ProcessHandle.current().info().command().orElse(null) ?: throw IOException("cannot find the running java")
+            val java = ProcessHandle.current().info().command().orElse(null)
+                ?: throw IOException("cannot find the running java")
             val jvmOptions = ManagementFactory.getRuntimeMXBean().inputArguments
             val command = listOf(java) + jvmOptions + listOf("-jar", target.absolutePath) +
                 DesktopLaunch.args + listOf(AFTER_UPDATE_FLAG, ProcessHandle.current().pid().toString())
             val restart = ProcessBuilder(command).inheritIO()
             Log.i(TAG, "installing ${latest.version}; restarting")
-            Files.move(target.toPath(), backup.toPath(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
+            replace(target, backup)
             try {
                 Files.move(file.toPath(), target.toPath(), StandardCopyOption.ATOMIC_MOVE)
             } catch (e: IOException) {
@@ -118,7 +131,7 @@ private class DesktopUpdater(manifestUrl: String) :
                 restart.start()
             } catch (e: IOException) {
                 // This process keeps running from the old jar, so put it back where it was.
-                Files.move(backup.toPath(), target.toPath(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
+                replace(backup, target)
                 throw e
             }
             Runtime.getRuntime().halt(0)
@@ -133,15 +146,34 @@ private class DesktopUpdater(manifestUrl: String) :
         }
     }
 
+    /** Atomically moves [from] over [to]. */
+    private fun replace(from: File, to: File) {
+        Files.move(from.toPath(), to.toPath(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
+    }
+
+    /**
+     * Opens [url] in the browser. `Desktop` refuses with `UnsupportedOperationException` (headless included) or
+     * `SecurityException`, a malformed URL is an `IllegalArgumentException`, and a failed launch an `IOException`.
+     */
     override fun browse(url: String) {
         try {
             if (Desktop.isDesktopSupported() && Desktop.getDesktop().isSupported(Desktop.Action.BROWSE)) {
-                Desktop.getDesktop().browse(URI(url))
+                Desktop.getDesktop().browse(URI.create(url))
             } else {
                 Log.i(TAG, "get the update at $url")
             }
-        } catch (e: Exception) {
-            Log.w(TAG, "could not open $url: ${e.message}")
+        } catch (e: IOException) {
+            cannotOpen(url, e)
+        } catch (e: IllegalArgumentException) {
+            cannotOpen(url, e)
+        } catch (e: UnsupportedOperationException) {
+            cannotOpen(url, e)
+        } catch (e: SecurityException) {
+            cannotOpen(url, e)
         }
+    }
+
+    private fun cannotOpen(url: String, e: Exception) {
+        Log.w(TAG, "could not open $url: ${e.message}")
     }
 }
