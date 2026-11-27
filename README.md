@@ -40,7 +40,7 @@ The HUD over the same mesh, with the Drivers panel listing what the mesh is doin
 ./kotlin test -m shared -p jvm                  # shared tests (wasmJs: -p wasmJs)
 ```
 
-[Releases](https://github.com/meshtastic/meshtastic-aether/releases) carry the Android APK and AAB, the desktop installers (a `.deb` for Linux x64, a `.dmg` for Apple silicon macOS, an `.msi` for Windows x64, each with its own runtime; the macOS app is unsigned, so open it once from the right-click menu) and, for Linux and macOS, the desktop jar (run it with Java 25: `java -jar aether-X.Y.Z-desktop-linux-x64.jar`; build any other desktop from source) and a zipped web build to serve from any static host. The `snapshot` prerelease carries the same files built from the latest `main` that passed CI. The `./kotlin` wrapper downloads the Kotlin Toolchain on first use. [`CONTRIBUTING.md`](CONTRIBUTING.md) lists the build and test commands.
+[Releases](https://github.com/meshtastic/meshtastic-aether/releases) carry the Android APK and AAB, the desktop installers (a `.deb` for Linux x64, a `.dmg` for Apple silicon macOS, an `.msi` for Windows x64, each with its own runtime; the macOS app is ad hoc signed, not notarized: try to open it, then allow it under System Settings > Privacy & Security > Open Anyway) and, for Linux and macOS, the desktop jar (run it with Java 25: `java -jar aether-X.Y.Z-desktop-linux-x64.jar`; build any other desktop from source) and a zipped web build to serve from any static host. The `snapshot` prerelease carries the same files built from the latest `main` that passed CI. The `./kotlin` wrapper downloads the Kotlin Toolchain on first use. [`CONTRIBUTING.md`](CONTRIBUTING.md) lists the build and test commands.
 
 ### Android TV and Google TV
 

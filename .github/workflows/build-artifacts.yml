@@ -130,6 +130,10 @@ jobs:
             id: windows-x64
             jar: false
     runs-on: ${{ matrix.os }}
+    # Windows defaults to PowerShell, which the Bash steps below do not run under.
+    defaults:
+      run:
+        shell: bash
     env:
       VERSION: ${{ inputs.label }}
       CODE: ${{ inputs.code }}
@@ -159,7 +163,6 @@ jobs:
 
       # The jar bundles the Compose native libraries for the OS it is built on, so each OS gets its own.
       - name: Package the executable jar
-        shell: bash
         run: |
           ./kotlin package -m desktopApp -f executable-jar
           mkdir -p out
@@ -169,7 +172,6 @@ jobs:
 
       # Wraps that jar and a jlinked JetBrains Runtime, which the step above made the Toolchain download.
       - name: Package the installer
-        shell: bash
         run: scripts/package-desktop.sh "$VERSION" "${{ matrix.id }}" "$JAR" out
 
       - name: Keep the desktop files
