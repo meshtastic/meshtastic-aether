@@ -131,7 +131,8 @@ The mesh perturbs the piece:
   - Velocity comes from SNR (range-limited), and pan from the sender's bearing relative to the connected node (center, slightly wide, if unknown).
   - Distance comes from hops taken: direct is dry and close, each hop adds reverb send and lowpass and every third hop an echo repeat, unknown is middle distance, and via MQTT is one step further.
   - Encrypted broadcasts are a pitchless filtered breath, so other channels read as weather, not melody.
-  - Variation operators from Generative.fm: small timing jitter, occasional octave shift, occasional delayed echo of a note, and a per-pitch repeat limit.
+  - Variation: small timing jitter, hop echoes, and a motif that develops. Each play may redraw one of its steps (after Marbles' deja vu), the opening note stays the node's role, and the original returns every eighth play. A node keeps its role and band, so there is no octave shift or per-pitch repeat limit.
+  - A text climbs through its sender's motif, an octave per pass, so each sender's messages have their own shape.
 - Density control: a fixed number of ornament slots (as in Listen to Wikipedia's 15 slots), each held for a short time. A note that can't get a slot within a short TTL is dropped, never queued indefinitely. Above an activity threshold, per-packet notes thin to a sample and the crowd parameters carry the rest.
 - Human events bend the piece. A text message triggers a phrase and, after a minimum gap, a chord change. A node seen for the first time this session gets a soft swell.
 - Quiet mesh: recently heard nodes return as soft memory notes on loop periods, and the autonomous piece carries the rest.
@@ -198,6 +199,9 @@ A standalone repository with these modules:
 - Mutable Instruments (MIT, `pichenettes/eurorack`, `stmlib`) and Faust `reverbs.lib` (MIT parts): reverb, chorus, shimmer, modal, string and filters.
 - kc-audio-bridge (Apache-2.0): reference reading for the platform sinks.
 - Peep, the network auralizer: continuous background following network state.
+- Mutable Instruments Marbles (MIT, idea only): deja vu for developing motifs.
+- Tenney's harmonic distance and adaptive just intonation (Stange, Wick and Hinrichsen 2018): per-chord tuning.
+- ITU-R BS.1770 and EBU Tech 3341: the analyzer's loudness and its test signals.
 - The full survey with sources is in [`prior-art.md`](prior-art.md).
 
 ## Tuned in code
