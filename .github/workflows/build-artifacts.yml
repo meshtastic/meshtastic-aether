@@ -203,9 +203,34 @@ jobs:
           restore-keys: |
             kotlin-${{ runner.os }}-
 
-      - name: Build and zip the static site
+      - name: Build the static site
+        run: ./kotlin build -m webApp -v release
+
+      # The Toolchain does not run Binaryen, which cuts the app's wasm module from 17 MB to 8.3 MB. skiko.wasm is the
+      # library's own build and is shipped as is.
+      - name: Optimize the wasm module
+        env:
+          BINARYEN_URL: https://github.com/WebAssembly/binaryen/releases/download/version_133/binaryen-version_133-x86_64-linux.tar.gz
+          BINARYEN_SHA256: 2dc9c7813f5375db93d96ead4b78222fcc3e2677bbb832297af4797782a37489
         run: |
-          ./kotlin build -m webApp -v release
+          curl -fsSL "$BINARYEN_URL" -o "$RUNNER_TEMP/binaryen.tar.gz"
+          echo "$BINARYEN_SHA256  $RUNNER_TEMP/binaryen.tar.gz" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/binaryen.tar.gz" -C "$RUNNER_TEMP"
+          site=build/tasks/_webApp_buildWasmJsAppWasmJsRelease
+          before=$(stat -c%s "$site/webApp.wasm")
+          # -all would enable the proposals this Binaryen knows and Chrome does not yet read (custom descriptors
+          # and compact imports fail to compile there), so the newer ones stay off.
+          newer=(--disable-custom-descriptors --disable-compact-imports --disable-custom-page-sizes
+            --disable-acquire-release-atomics --disable-relaxed-atomics --disable-shared-everything
+            --disable-stack-switching --disable-wide-arithmetic --disable-multimemory --disable-strings
+            --disable-call-indirect-overlong)
+          "$RUNNER_TEMP/binaryen-version_133/bin/wasm-opt" -all "${newer[@]}" --closed-world --traps-never-happen -O3 \
+            "$site/webApp.wasm" -o "$RUNNER_TEMP/webApp.opt.wasm"
+          mv "$RUNNER_TEMP/webApp.opt.wasm" "$site/webApp.wasm"
+          echo "webApp.wasm: $before -> $(stat -c%s "$site/webApp.wasm") bytes" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Zip the static site
+        run: |
           mkdir -p out
           (cd build/tasks/_webApp_buildWasmJsAppWasmJsRelease && zip -qr "$GITHUB_WORKSPACE/out/aether-$VERSION-web.zip" .)
 

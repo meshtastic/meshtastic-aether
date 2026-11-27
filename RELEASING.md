@@ -12,6 +12,10 @@ One version, `X.Y.Z`, lives in every platform manifest: `versionName` in `androi
 
 Every CI build carries its label (`X.Y.Z` or `X.Y.Z-SNAPSHOT-<sha>`), its build code and its update channel: `plugins/build-info` writes them into `BuildInfo` from the `AETHER_BUILD_*` variables, and [`scripts/stamp-build.sh`](scripts/stamp-build.sh) stamps the label and code into the Android manifest. The build code is the commit count of the built commit: it is the Android `versionCode`, so every snapshot and release installs over the one before, and the update check compares it. A release and the snapshot of the same commit share a code. A dry run is stamped with the `dev` channel, so its files never offer updates. The workflow creates the annotated `vX.Y.Z` tag, so nobody tags by hand.
 
+## Web deploys
+
+Every snapshot deploys its web build to aether-snapshot.meshtastic.org (`deploy-web` in `snapshot.yml`), and a release dispatches `web-stable.yml`, which deploys the release's web zip to aether.meshtastic.org. Both go through [`.github/actions/vercel-deploy`](.github/actions/vercel-deploy/action.yml) as prebuilt static output. Each job runs in a GitHub environment (`aether-snapshot`, `aether-stable`) that holds the `VERCEL_TOKEN` secret and the `VERCEL_ORG_ID` and `VERCEL_PROJECT_ID` variables for its Vercel project. The web build runs a pinned Binaryen `wasm-opt -O3` over `webApp.wasm` before it is zipped (17 MB to 8.3 MB), with the newest wasm proposals disabled so current Chrome can compile it. To retry or roll back the stable site, run `gh workflow run web-stable.yml --repo meshtastic/meshtastic-aether -f tag=vX.Y.Z`.
+
 ## Changelog
 
 Changes add fragments to [`changelog.d/`](changelog.d/README.md); `CHANGELOG.md` is only edited by the cut.

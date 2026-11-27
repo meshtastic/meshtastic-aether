@@ -117,6 +117,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      actions: write # gh workflow run web-stable.yml
     env:
       VERSION: ${{ needs.prepare.outputs.version }}
       CODE: ${{ needs.prepare.outputs.code }}
@@ -150,3 +151,11 @@ jobs:
           gh release create "v$VERSION" --verify-tag --title "Aether $VERSION" \
             --notes-file artifacts/release-notes/release-notes.md \
             artifacts/android/* artifacts/desktop-*/* artifacts/web/* update.properties
+
+      # web-stable.yml deploys the release's web zip to aether.meshtastic.org. It runs on main.
+      - name: Dispatch web deploy
+        run: |
+          if ! gh workflow run web-stable.yml --ref main -f "tag=v$VERSION"; then
+            echo "::warning::The web deploy was not dispatched; run web-stable.yml with tag v$VERSION."
+            echo "The web deploy to aether.meshtastic.org was **not dispatched**: run \`gh workflow run web-stable.yml -f tag=v$VERSION\`." >> "$GITHUB_STEP_SUMMARY"
+          fi
