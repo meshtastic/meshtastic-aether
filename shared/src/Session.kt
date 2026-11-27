@@ -85,15 +85,18 @@ internal class AppSession(
             failure = null
             pending = null
             settings.link = choice
+        } catch (e: IllegalArgumentException) {
+            failStart(e) // an address the endpoint parsers reject (sessionFor's and the SDK's require())
         } catch (e: IllegalStateException) {
-            // A transport this target lacks (sessionFor's error()).
-            Log.e("app", "could not start session", e)
-            failure = startFailureText(e)
+            failStart(e) // a transport this target lacks (sessionFor's error())
         } catch (e: MeshtasticException) {
-            // A serial port the SDK cannot open (permission not granted, device detached).
-            Log.e("app", "could not start session", e)
-            failure = startFailureText(e)
+            failStart(e) // a serial port that cannot be opened: not granted, detached or gone
         }
+    }
+
+    private fun failStart(e: Exception) {
+        Log.e("app", "could not start session", e)
+        failure = startFailureText(e)
     }
 
     /** Back to the connect screen, with no reconnect pending. */

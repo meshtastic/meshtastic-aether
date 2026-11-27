@@ -42,6 +42,7 @@ import org.meshtastic.aether.ble.bleChooser
 import org.meshtastic.aether.ble.bleScan
 import org.meshtastic.aether.ble.ensureBlePermissions
 import org.meshtastic.aether.log.Log
+import kotlinx.io.IOException
 import org.meshtastic.sdk.MeshtasticException
 
 /**
@@ -100,14 +101,22 @@ private suspend fun BleScan.scanUntilStopped() {
     try {
         openScan()?.let { collectRadios(it) }
     } catch (e: MeshtasticException) {
-        Log.e("ble", "scan failed", e)
-        stop(e.message ?: e::class.simpleName)
+        failScan(e) // the SDK's scan flow failing
+    } catch (e: IOException) {
+        failScan(e) // Kable's UnmetRequirementException as the scanner is built: Bluetooth off or not permitted
+    } catch (e: IllegalStateException) {
+        failScan(e) // Kable's scanner state errors, raised before the SDK's flow wraps them
     } finally {
         Log.i("ble", "scan stopped")
     }
 }
 
 /** The platform's scan once permission is granted, or null with the scan stopped and the reason set. */
+private fun BleScan.failScan(e: Exception) {
+    Log.e("ble", "scan failed", e)
+    stop(e.message ?: e::class.simpleName)
+}
+
 private suspend fun BleScan.openScan(): Flow<BleRadio>? {
     if (!ensureBlePermissions()) {
         Log.w("ble", "scan not started: permission not granted")
