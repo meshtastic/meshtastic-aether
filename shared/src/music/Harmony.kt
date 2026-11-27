@@ -22,15 +22,16 @@ class Chord(val mode: Mode, val rootStep: Int, val voicing: List<Int>) {
         (mode.semitoneOfStep(rootStep + 2 * NINTH) - rootSemitone).mod(Theory.SEMITONES_PER_OCTAVE) == 1
 
     /**
-     * Distinct pitch classes of the voices, which the bed sustains for minutes, so they are what the tuning makes pure.
-     * Ornaments on other pitch classes (a ninth) take the key frame.
+     * Ratio factor per pitch class 0..11: a comma shift for this chord's tones (see [Tuning]), 1 elsewhere. The voices,
+     * which the bed sustains for minutes, are tuned first; the ninth role's tone, an ornament, is tuned against them
+     * at a quarter weight so it never out-votes the bed.
      */
-    private val tones: List<Int> by lazy { voiceSemitones.map { it.mod(Theory.SEMITONES_PER_OCTAVE) }.distinct() }
-
-    /** Ratio factor per pitch class 0..11: a comma shift for this chord's tones (see [Tuning]), 1 elsewhere. */
     private val factors: DoubleArray by lazy {
+        val voices = voiceSemitones.map { it.mod(Theory.SEMITONES_PER_OCTAVE) }.distinct()
+        val ninth = roleSemitone(NINTH)
+        val tones = if (ninth in voices) voices else voices + ninth
         val f = DoubleArray(Theory.SEMITONES_PER_OCTAVE) { 1.0 }
-        Tuning.shifts(tones).forEachIndexed { i, shift -> f[tones[i]] = Tuning.factor(shift) }
+        Tuning.shifts(tones, lightFrom = voices.size).forEachIndexed { i, shift -> f[tones[i]] = Tuning.factor(shift) }
         f
     }
 

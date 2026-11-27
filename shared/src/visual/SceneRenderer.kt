@@ -25,8 +25,8 @@ private const val DITHER_SEED = 77L
 
 /**
  * The dither's strength, baked into the tile: a per-draw alpha on the shader brush costs a full-screen offscreen pass
- * on a weak GPU. Two of 255 over a dark gradient moves a pixel by about one code value either way, enough to break a
- * band and no more.
+ * on a weak GPU. White at two of 255 lifts a dark pixel by up to two code values and black leaves it, enough to break
+ * a band and no more.
  */
 private const val DITHER_ALPHA_CODE = 2
 private const val ALPHA_SHIFT = 24
@@ -78,8 +78,7 @@ private val COOL_TINT = Color(0.55f, 0.70f, 1.0f)
 
 /** Draws one frame of the scene. Holds every buffer a frame needs, so a steady frame allocates nothing new. */
 internal class SceneRenderer {
-    private val ditherBrush = ditherBrush(darkOnly = false)
-    private val darkDitherBrush = ditherBrush(darkOnly = true)
+    private val ditherBrush = ShaderBrush(ImageShader(ditherTile(), TileMode.Repeated, TileMode.Repeated))
     private val screen = ScreenProjector()
     private val pa = Projected()
     private val pb = Projected()
@@ -102,7 +101,7 @@ internal class SceneRenderer {
             scene.aspect = size.width.toDouble() / size.height.coerceAtLeast(1f)
             sat = scene.saturation
             drawBackground(scene, palette, t)
-            drawRect(if (palette.trueBlack) darkDitherBrush else ditherBrush)
+            if (!palette.trueBlack) drawRect(ditherBrush)
             screen.begin(scene, size.width, size.height)
             dp1 = 1.dp.toPx()
             drawHaze(scene, palette)
@@ -252,28 +251,25 @@ internal class SceneRenderer {
     }
 }
 
-/**
- * The dither tile's pixels as ARGB: half white and half black at a faint alpha, so the gradient moves about one code
- * value up or down and does not band. [darkOnly] makes every pixel black, so a pixel that is off stays off.
- */
-internal fun ditherPixels(darkOnly: Boolean): IntArray {
+/** The dither tile's pixels as ARGB: half white and half black at a faint alpha, so the gradient does not band. */
+internal fun ditherPixels(): IntArray {
     val rng = Rng(DITHER_SEED)
     val alpha = DITHER_ALPHA_CODE shl ALPHA_SHIFT
     return IntArray(DITHER_SIZE * DITHER_SIZE) {
-        val white = rng.nextDouble() < WHITE_SHARE && !darkOnly
+        val white = rng.nextDouble() < WHITE_SHARE
         alpha or if (white) WHITE_RGB else 0
     }
 }
 
-private fun ditherBrush(darkOnly: Boolean) =
-    ShaderBrush(ImageShader(ditherTile(darkOnly), TileMode.Repeated, TileMode.Repeated))
-
-/** The dither tile; laid over the gradient so projectors and OLEDs do not band. */
-private fun ditherTile(darkOnly: Boolean): ImageBitmap {
+/**
+ * The dither tile; laid over the gradient so projectors and LCDs do not band. A [AmbientPalette.trueBlack] look
+ * draws none: any white dither lights a black pixel, and black dither cannot move one so dark.
+ */
+private fun ditherTile(): ImageBitmap {
     val bmp = ImageBitmap(DITHER_SIZE, DITHER_SIZE)
     val canvas = Canvas(bmp)
     val paint = Paint()
-    ditherPixels(darkOnly).forEachIndexed { i, argb ->
+    ditherPixels().forEachIndexed { i, argb ->
         val x = i % DITHER_SIZE
         val y = i / DITHER_SIZE
         paint.color = Color(argb)

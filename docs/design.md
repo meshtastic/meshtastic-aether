@@ -165,7 +165,7 @@ The `tools` module renders the synth offline to WAV for listening tests, from an
 
 The scene is full screen, dark and on the shared clock.
 
-- Background: a slow gradient whose hue follows time of day and whose sway follows the texture (an integrated phase, so a change bends it and never jumps it), dithered about one code value so projectors don't band. The OLED look's dither only darkens, so its black stays off.
+- Background: a slow gradient whose hue follows time of day and whose sway follows the texture (an integrated phase, so a change bends it and never jumps it), dithered by at most two code values so projectors don't band. The OLED look draws no dither, so its black stays off.
 - Nodes: soft glowing orbs placed by position relative to the connected node, with robust auto-fit (percentile bounds; far outliers such as MQTT nodes pinned to the edge), or at a position seeded from the node number when there is no position. Glow follows activity, and orbs fade when a node goes quiet. A relayout glides each orb to its new place, and the gravity layer moves each orb a little around it (`OrbitalField`).
 - Packets: a ripple from the sender's orb when its note sounds, colored by articulation and sized by SNR; hop echoes as fainter rings; encrypted traffic as a faint haze.
 - Renderer: plain Compose Canvas on every target. Skia runtime shaders (Skiko `RuntimeEffect` on desktop, iOS and web; `RuntimeShader` on Android 33 and later) are an optional enhancement for the background.

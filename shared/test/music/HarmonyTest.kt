@@ -58,6 +58,22 @@ class HarmonyTest {
     }
 
     @Test
+    fun `a ninth role ornament sits a simple interval from every voice in the diatonic modes`() {
+        // About one node in five plays role 4; tuned only by the key frame it rang 40/27 against V9's fifth.
+        val wolves = listOf(40.0 / 27, 27.0 / 20, 32.0 / 27, 27.0 / 16)
+        for (mode in diatonic) for (seed in 1L..3L) run(mode, seed, 200).forEach { chord ->
+            val ninth = chord.ratio(chord.roleSemitone(4))
+            for (v in chord.voiceSemitones.map { chord.ratio(it) }) {
+                val interval = fold(maxOf(v, ninth) / minOf(v, ninth))
+                assertTrue(
+                    wolves.none { abs(interval - it) < 1e-6 },
+                    "${mode.name} root step ${chord.rootStep} ninth role rings $interval",
+                )
+            }
+        }
+    }
+
+    @Test
     fun `the tonic and fifth of the key never leave the key frame`() {
         // The hour chime and dawn swells sound the key's tonic and fifth on the key frame, so the bed must keep them.
         for (mode in Mode.entries) run(mode, 4L, 200).forEach { chord ->

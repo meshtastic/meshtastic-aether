@@ -87,7 +87,7 @@ fun ambientColorScheme(): ColorScheme = darkColorScheme(
 
 /**
  * Every color the ambient scene and its overlay draw. [dimFloor] is the dimmest the scene gets at the deepest night
- * (1.0 is never dimmed). [trueBlack] marks a look whose black must stay off, so its dither only darkens.
+ * (1.0 is never dimmed). [trueBlack] marks a look whose black must stay off, so it is drawn without dither.
  */
 data class AmbientPalette(
     val backgroundTop: Color,

@@ -43,11 +43,15 @@ internal object Tuning {
     /** A cost must beat the best so far by this much to win, so ties keep the earlier (key frame) choice. */
     private const val TIE = 1e-9
 
+    /** A pair with a light tone (an ornament's, not the sustained bed's) weighs this much, so the bed wins. */
+    private const val LIGHT = 0.25
+
     /**
      * Comma shifts (-1, 0 or +1) for the distinct pitch classes in [pitchClasses] (0..11 above the key), in the order
-     * given. Ties keep the key frame.
+     * given. Tones from [lightFrom] on are light: their pairs count a quarter, so they are tuned against the bed but
+     * never out-vote it. Ties keep the key frame.
      */
-    fun shifts(pitchClasses: List<Int>): IntArray {
+    fun shifts(pitchClasses: List<Int>, lightFrom: Int = pitchClasses.size): IntArray {
         val pcs = pitchClasses.map { it.mod(Theory.SEMITONES_PER_OCTAVE) }
         val n = pcs.size
         val best = IntArray(n)
@@ -61,7 +65,7 @@ internal object Tuning {
                 trial[i] = c % SHIFTS - 1
                 c /= SHIFTS
             }
-            val cost = cost(pcs, trial)
+            val cost = cost(pcs, trial, lightFrom)
             if (cost < bestCost - TIE) {
                 bestCost = cost
                 trial.copyInto(best)
@@ -70,15 +74,15 @@ internal object Tuning {
         return best
     }
 
-    private fun cost(pcs: List<Int>, shift: IntArray): Double {
+    private fun cost(pcs: List<Int>, shift: IntArray, lightFrom: Int): Double {
         var total = 0.0
         for (i in pcs.indices) {
             if (shift[i] != 0) total += if (pcs[i] in ANCHORS) ANCHOR_COST else MOVE_COST
             for (j in i + 1 until pcs.size) {
                 val threes = THREE[pcs[j]] - THREE[pcs[i]] + COMMA_THREES * (shift[j] - shift[i])
                 val fives = FIVE[pcs[j]] - FIVE[pcs[i]] + COMMA_FIVES * (shift[j] - shift[i])
-                total += abs(threes) * LOG2_3 + abs(fives) * LOG2_5
-                if (wolf(threes, fives)) total += WOLF_COST
+                val pair = abs(threes) * LOG2_3 + abs(fives) * LOG2_5 + if (wolf(threes, fives)) WOLF_COST else 0.0
+                total += if (j >= lightFrom) LIGHT * pair else pair
             }
         }
         return total
