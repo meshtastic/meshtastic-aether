@@ -17,9 +17,10 @@ object Tempo {
     fun phraseSeconds(seconds: Double, speed: Double): Double = seconds / clampSpeed(speed)
 
     /**
-     * Seconds between firings of a loop with prime [baseSeconds]: the base stretched up to 30% by a quiet day (density 0),
-     * kept within 17..60 s, then divided by [speed].
+     * Seconds between firings of a loop with prime [baseSeconds]: the base stretched up to 30% by a quiet day
+     * (density 0), kept within 17..60 s, then divided by [speed].
      */
     fun loopPeriodSeconds(baseSeconds: Double, dayDensity: Double, speed: Double): Double =
-        (baseSeconds * (1.0 + LOOP_SLOWING * (1 - dayDensity))).coerceIn(MIN_LOOP_PERIOD_SECONDS, MAX_LOOP_PERIOD_SECONDS) / clampSpeed(speed)
+        (baseSeconds * (1.0 + LOOP_SLOWING * (1 - dayDensity)))
+            .coerceIn(MIN_LOOP_PERIOD_SECONDS, MAX_LOOP_PERIOD_SECONDS) / clampSpeed(speed)
 }

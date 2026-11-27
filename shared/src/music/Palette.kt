@@ -18,7 +18,14 @@ enum class Family(val voices: List<Voice>) {
     Client(listOf(Voice.Marimba, Voice.Bell, Voice.Mallet, Voice.Bowed)),
 }
 
-/** Which timbre a node plays: role (as the proto spells it) picks the [Family], the hardware model hash picks the voice. */
+/** FNV-1a 64-bit parameters: the offset basis is 0xCBF29CE484222325 as a signed Long. */
+private const val FNV_OFFSET_BASIS = -0x340d631b7bdddcdbL
+private const val FNV_PRIME = 0x100000001B3L
+
+/**
+ * Which timbre a node plays: role (as the proto spells it) picks the [Family], the hardware model hash picks the
+ * voice.
+ */
 object Palette {
     fun family(role: String?): Family = when (role?.trim()?.uppercase()) {
         "ROUTER", "ROUTER_LATE" -> Family.Low
@@ -41,8 +48,8 @@ object Palette {
 
     /** FNV-1a over the upper-cased name, then mixed, so case does not matter and neighbors spread. */
     private fun hashOf(name: String): Long {
-        var h = -0x340d631b7bdddcdbL // FNV offset basis 0xCBF29CE484222325
-        for (c in name.uppercase()) h = (h xor c.code.toLong()) * 0x100000001B3L
+        var h = FNV_OFFSET_BASIS
+        for (c in name.uppercase()) h = (h xor c.code.toLong()) * FNV_PRIME
         return Rng.mix(h)
     }
 }
