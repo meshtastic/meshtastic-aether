@@ -5,6 +5,9 @@ product:
 apply:
   - //common.module-template.yaml
 
+plugins:
+  build-info: enabled
+
 aliases:
   - ble: [jvm, android, iosArm64, iosSimulatorArm64]
   - updatable: [jvm, android]
