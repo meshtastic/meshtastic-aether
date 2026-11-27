@@ -36,12 +36,13 @@ internal class Adsr(private val sampleRate: Int) {
 
     /**
      * Holds again from the current level, as [gate] does from silence: a continued bed note rises back to full level
-     * over what is left of [attackSec] instead of restarting at zero, so a re-struck tone never dips.
+     * over what is left of [attackSec] instead of restarting at zero, so a re-struck tone never dips. The release
+     * keeps the longer of the two, so a short note carrying a long one never cuts its tail.
      */
     fun regate(attackSec: Float, releaseSec: Float) {
         attackInc = 1.0f / (maxOf(attackSec, MIN_STAGE_SECONDS) * sampleRate)
         decayCoef = coefFor(HELD_DECAY_SECONDS)
-        releaseCoef = coefFor(releaseSec)
+        releaseCoef = maxOf(releaseCoef, coefFor(releaseSec))
         sustain = 1f
         stage = ATTACK
     }
