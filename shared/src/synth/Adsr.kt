@@ -18,15 +18,20 @@ internal class Adsr(private val sampleRate: Int) {
     val isAttacking: Boolean get() = stage == ATTACK
 
     private fun coefFor(seconds: Float): Float =
-        exp(ln(0.001) / (maxOf(seconds, 0.001f) * sampleRate)).toFloat()
+        exp(ln(MINUS_60_DB) / (maxOf(seconds, MIN_STAGE_SECONDS) * sampleRate)).toFloat()
 
     fun trigger(attackSec: Float, decaySec: Float, sustainLevel: Float, releaseSec: Float) {
-        attackInc = 1.0f / (maxOf(attackSec, 0.001f) * sampleRate)
+        attackInc = 1.0f / (maxOf(attackSec, MIN_STAGE_SECONDS) * sampleRate)
         decayCoef = coefFor(decaySec)
         releaseCoef = coefFor(releaseSec)
         sustain = sustainLevel
         level = 0f
         stage = ATTACK
+    }
+
+    /** A held envelope: attack to full level, stay there until [release]. */
+    fun gate(attackSec: Float, releaseSec: Float) {
+        trigger(attackSec, HELD_DECAY_SECONDS, 1f, releaseSec)
     }
 
     fun release() {
@@ -44,14 +49,14 @@ internal class Adsr(private val sampleRate: Int) {
             }
             DECAY -> {
                 level = sustain + (level - sustain) * decayCoef
-                if (level - sustain < 1.0e-4f) {
+                if (level - sustain < SETTLED) {
                     level = sustain
-                    stage = if (sustain < 1.0e-4f) IDLE else SUSTAIN
+                    stage = if (sustain < SETTLED) IDLE else SUSTAIN
                 }
             }
             RELEASE -> {
                 level *= releaseCoef
-                if (level < 1.0e-5f) {
+                if (level < SILENT) {
                     level = 0f
                     stage = IDLE
                 }
@@ -67,5 +72,18 @@ internal class Adsr(private val sampleRate: Int) {
         const val DECAY = 2
         const val SUSTAIN = 3
         const val RELEASE = 4
+
+        /** -60 dB as an amplitude ratio: the decay and release times are measured to it. */
+        const val MINUS_60_DB = 0.001
+        const val MIN_STAGE_SECONDS = 0.001f
+
+        /** Unheard at full sustain, where the decay has nothing to fall to. */
+        const val HELD_DECAY_SECONDS = 0.1f
+
+        /** Distance from the sustain level at which the decay snaps to it. */
+        const val SETTLED = 1.0e-4f
+
+        /** Level at which the release ends and the voice goes idle. */
+        const val SILENT = 1.0e-5f
     }
 }

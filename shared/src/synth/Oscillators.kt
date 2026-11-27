@@ -2,14 +2,18 @@ package org.meshtastic.aether.synth
 
 import kotlin.math.sin
 
-private fun thisBlepSample(t: Double): Double = 0.5 * t * t
+// The two halves of the polynomial step residual, t^2 / 2 either side of the discontinuity.
+private fun thisBlepSample(t: Double): Double = t / 2 * t
 
 private fun nextBlepSample(t0: Double): Double {
     val t = 1.0 - t0
-    return -0.5 * t * t
+    return -(t / 2 * t)
 }
 
-/** PolyBLEP saw and square after Plaits `Oscillator` and stmlib `polyblep.h`. Phase is a Double; frequencies are normalized. */
+/**
+ * PolyBLEP saw and square after Plaits `Oscillator` and stmlib `polyblep.h`. Phase is a Double; frequencies are
+ * normalized.
+ */
 internal class PolyBlepOsc {
     private var phase = 0.0
     private var nextSample = 0.0

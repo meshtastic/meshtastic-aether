@@ -5,7 +5,6 @@ import org.meshtastic.aether.music.ComposerOutput
 import org.meshtastic.aether.music.ControlEvent
 import org.meshtastic.aether.music.NoteEvent
 import org.meshtastic.aether.music.NoteSink
-import org.meshtastic.aether.music.Texture
 import org.meshtastic.aether.music.Voice
 import kotlin.concurrent.atomics.AtomicInt
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
@@ -19,49 +18,28 @@ import kotlin.math.exp
  */
 @OptIn(ExperimentalAtomicApi::class)
 class Synth(val sampleRate: Int) : NoteSink, BlockRenderer {
-    private val voices = Array(VOICE_COUNT) { SynthVoice(sampleRate, 0x1234567 + it * 7919) }
-    private val voiceKinds = Voice.entries.toTypedArray()
+    private val voices = Array(VOICE_COUNT) { SynthVoice(sampleRate, VOICE_SEED + it * VOICE_SEED_STRIDE) }
 
-    private val noteRing = arrayOfNulls<NoteEvent>(NOTE_RING)
-    private val noteHead = AtomicInt(0)
-    private val noteTail = AtomicInt(0)
-    private val controlRing = arrayOfNulls<ControlEvent.SetTexture>(CONTROL_RING)
-    private val controlHead = AtomicInt(0)
-    private val controlTail = AtomicInt(0)
-
-    private val pendingNotes = arrayOfNulls<NoteEvent>(PENDING_NOTES)
-    private var pendingNoteCount = 0
-    private val pendingControls = arrayOfNulls<ControlEvent.SetTexture>(PENDING_CONTROLS)
-    private var pendingControlCount = 0
+    private val notes = NoteQueue(NOTE_RING, PENDING_NOTES)
+    private val controls = TextureQueue(CONTROL_RING, PENDING_CONTROLS)
 
     private var nowFrame = 0L
 
     private val dropped = AtomicInt(0)
 
-    /** Notes dropped because a ring was full or no voice could be taken; counted from both the producer and render threads. */
+    /**
+     * Notes dropped because a ring was full or no voice could be taken; counted from both the producer and render
+     * threads.
+     */
     val droppedNotes: Int get() = dropped.load()
 
-    // Smoothed texture and its targets.
-    private var brightness = 0.5f
-    private var reverbSize = 0.5f
-    private var reverbWet = 0.35f
-    private var detune = 0.2f
-    private var shimmer = 0f
-    private var noise = 0f
-    private val layer = FloatArray(voiceKinds.size) { 1f }
-    private var tBrightness = brightness
-    private var tReverbSize = reverbSize
-    private var tReverbWet = reverbWet
-    private var tDetune = detune
-    private var tShimmer = shimmer
-    private var tNoise = noise
-    private val tLayer = FloatArray(voiceKinds.size) { 1f }
+    private val texture = SmoothedTexture(sampleRate)
 
     private val limiter = PeakLimiter(sampleRate)
     private val reverb = Reverb(sampleRate)
     private val ensemble = Ensemble(sampleRate)
     private val shifter = PitchShifter(sampleRate)
-    private val noiseRng = Rng(0x5eed1234)
+    private val noiseRng = Rng(NOISE_SEED)
     private val noiseFilter = Svf()
 
     private val mono = FloatArray(MAX_CHUNK)
@@ -77,7 +55,10 @@ class Synth(val sampleRate: Int) : NoteSink, BlockRenderer {
     private val earL = FloatArray(MAX_CHUNK)
     private val earR = FloatArray(MAX_CHUNK)
 
-    /** Headphones place dry voices to the side of the head instead of panning them; set from any thread, eased in over the next chunks. */
+    /**
+     * Headphones place dry voices to the side of the head instead of panning them; set from any thread, eased in over
+     * the next chunks.
+     */
     @kotlin.concurrent.Volatile
     var headphones = false
     private var binauralMix = 0f
@@ -88,143 +69,40 @@ class Synth(val sampleRate: Int) : NoteSink, BlockRenderer {
     internal val activeVoices: Int get() = voices.count { it.active }
 
     /** Notes accepted from the rings that are still waiting for their frame. */
-    internal val pendingNoteTotal: Int get() = pendingNoteCount
+    internal val pendingNoteTotal: Int get() = notes.size
 
     /** Pitch of every sounding voice that is not on its way out, in voice order. */
-    internal fun soundingPitches(): DoubleArray = voices.filter { it.active && !it.isFading }.map { it.pitchHz }.toDoubleArray()
+    internal fun soundingPitches(): DoubleArray =
+        voices.filter { it.active && !it.isFading }.map { it.pitchHz }.toDoubleArray()
 
     init {
-        noiseFilter.setFq((3000.0 / sampleRate).toFloat(), 0.7f)
-        reverb.setInputGain(INPUT_GAIN)
-        applyTextureNow()
+        noiseFilter.setFq((NOISE_CUTOFF_HZ / sampleRate).toFloat(), NOISE_Q)
+        reverb.inputGain = INPUT_GAIN
+        texture.applyNow()
     }
 
     override fun schedule(output: ComposerOutput) {
         for (n in output.notes) {
-            val tail = noteTail.load()
-            if (tail - noteHead.load() >= NOTE_RING) {
-                countDrop()
-                continue
-            }
-            noteRing[tail and (NOTE_RING - 1)] = n
-            noteTail.store(tail + 1)
+            if (!notes.offer(n)) dropped.addAndFetch(1)
         }
         for (c in output.controls) {
-            if (c !is ControlEvent.SetTexture) continue
-            val tail = controlTail.load()
-            if (tail - controlHead.load() >= CONTROL_RING) continue
-            controlRing[tail and (CONTROL_RING - 1)] = c
-            controlTail.store(tail + 1)
+            if (c is ControlEvent.SetTexture) controls.offer(c)
         }
     }
 
     override fun render(out: FloatArray, frames: Int) {
-        drainRings()
+        dropped.addAndFetch(notes.drain())
+        controls.drain()
         var done = 0
         while (done < frames) {
-            while (pendingNoteCount > 0 && pendingNotes[0]!!.atFrame <= nowFrame) {
-                trigger(popNote())
-            }
-            while (pendingControlCount > 0 && pendingControls[0]!!.atFrame <= nowFrame) {
-                setTargets(popControl().texture)
-            }
+            while (notes.isDue(nowFrame)) trigger(notes.pop())
+            while (controls.isDue(nowFrame)) texture.setTargets(controls.pop().texture)
             var chunk = minOf(frames - done, MAX_CHUNK)
-            if (pendingNoteCount > 0) chunk = minOf(chunk.toLong(), pendingNotes[0]!!.atFrame - nowFrame).toInt()
-            if (pendingControlCount > 0) chunk = minOf(chunk.toLong(), pendingControls[0]!!.atFrame - nowFrame).toInt()
+            chunk = notes.clampChunk(chunk, nowFrame)
+            chunk = controls.clampChunk(chunk, nowFrame)
             renderChunk(chunk, out, done)
             nowFrame += chunk
             done += chunk
-        }
-    }
-
-    private fun drainRings() {
-        var head = noteHead.load()
-        val tail = noteTail.load()
-        while (head != tail) {
-            val n = noteRing[head and (NOTE_RING - 1)]!!
-            noteRing[head and (NOTE_RING - 1)] = null
-            head++
-            insertNote(n)
-        }
-        noteHead.store(head)
-        var ch = controlHead.load()
-        val ct = controlTail.load()
-        while (ch != ct) {
-            val c = controlRing[ch and (CONTROL_RING - 1)]!!
-            controlRing[ch and (CONTROL_RING - 1)] = null
-            ch++
-            insertControl(c)
-        }
-        controlHead.store(ch)
-    }
-
-    private fun insertNote(n: NoteEvent) {
-        if (pendingNoteCount == PENDING_NOTES) {
-            countDrop()
-            return
-        }
-        var i = pendingNoteCount
-        while (i > 0 && pendingNotes[i - 1]!!.atFrame > n.atFrame) {
-            pendingNotes[i] = pendingNotes[i - 1]
-            i--
-        }
-        pendingNotes[i] = n
-        pendingNoteCount++
-    }
-
-    private fun insertControl(c: ControlEvent.SetTexture) {
-        if (pendingControlCount == PENDING_CONTROLS) return
-        var i = pendingControlCount
-        while (i > 0 && pendingControls[i - 1]!!.atFrame > c.atFrame) {
-            pendingControls[i] = pendingControls[i - 1]
-            i--
-        }
-        pendingControls[i] = c
-        pendingControlCount++
-    }
-
-    private fun popNote(): NoteEvent {
-        val n = pendingNotes[0]!!
-        for (i in 1 until pendingNoteCount) pendingNotes[i - 1] = pendingNotes[i]
-        pendingNoteCount--
-        pendingNotes[pendingNoteCount] = null
-        return n
-    }
-
-    private fun popControl(): ControlEvent.SetTexture {
-        val c = pendingControls[0]!!
-        for (i in 1 until pendingControlCount) pendingControls[i - 1] = pendingControls[i]
-        pendingControlCount--
-        pendingControls[pendingControlCount] = null
-        return c
-    }
-
-    private fun setTargets(t: Texture) {
-        tBrightness = unit(t.brightness)
-        tReverbSize = unit(t.reverbSize)
-        tReverbWet = unit(t.reverbWet)
-        tDetune = unit(t.detune)
-        tShimmer = unit(t.shimmer)
-        tNoise = unit(t.noise)
-        for (i in voiceKinds.indices) tLayer[i] = unit(t.layerLevels[voiceKinds[i]] ?: 1f)
-    }
-
-    private fun unit(x: Float): Float = if (x != x) 0f else clamp(x, 0f, 1f)
-
-    private fun applyTextureNow() {
-        brightness = tBrightness
-        reverbSize = tReverbSize
-        reverbWet = tReverbWet
-        detune = tDetune
-        shimmer = tShimmer
-        noise = tNoise
-        for (i in layer.indices) layer[i] = tLayer[i]
-    }
-
-    private fun countDrop() {
-        while (true) {
-            val v = dropped.load()
-            if (dropped.compareAndSet(v, v + 1)) return
         }
     }
 
@@ -237,13 +115,13 @@ class Synth(val sampleRate: Int) : NoteSink, BlockRenderer {
             }
         }
         if (pick < 0) pick = pickVictim()
-        if (pick < 0 || !voices[pick].begin(note)) countDrop()
+        if (pick < 0 || !voices[pick].begin(note)) dropped.addAndFetch(1)
     }
 
     /**
-     * Picks the voice to steal, or -1. Never a voice that is attacking or already fading. In order: the oldest releasing
-     * ornament, the quietest other ornament, then (only if no ornament qualifies) the same two choices among the Drone
-     * and Pad bed.
+     * Picks the voice to steal, or -1. Never a voice that is attacking or already fading. In order: the oldest
+     * releasing ornament, the quietest other ornament, then (only if no ornament qualifies) the same two choices among
+     * the Drone and Pad bed.
      */
     private fun pickVictim(): Int {
         var best = -1
@@ -252,8 +130,7 @@ class Synth(val sampleRate: Int) : NoteSink, BlockRenderer {
             val v = voices[i]
             if (v.isFading || v.isAttacking) continue
             val tier = (if (v.isBed) 2 else 0) + (if (v.isReleasing) 0 else 1)
-            if (tier > bestTier) continue
-            if (tier < bestTier || (if (v.isReleasing) v.age > voices[best].age else v.loudness < voices[best].loudness)) {
+            if (tier < bestTier || (tier == bestTier && v.isBetterVictimThan(voices[best]))) {
                 best = i
                 bestTier = tier
             }
@@ -262,16 +139,8 @@ class Synth(val sampleRate: Int) : NoteSink, BlockRenderer {
     }
 
     private fun renderChunk(n: Int, out: FloatArray, offset: Int) {
-        val smooth = 1f - exp(-n.toFloat() / (sampleRate * SMOOTH_SECONDS))
-        brightness += (tBrightness - brightness) * smooth
-        reverbSize += (tReverbSize - reverbSize) * smooth
-        reverbWet += (tReverbWet - reverbWet) * smooth
-        detune += (tDetune - detune) * smooth
-        shimmer += (tShimmer - shimmer) * smooth
-        noise += (tNoise - noise) * smooth
-        for (i in layer.indices) layer[i] += (tLayer[i] - layer[i]) * smooth
-        binauralMix += ((if (headphones) 1f else 0f) - binauralMix) * (1f - exp(-n.toFloat() / (sampleRate * OUTPUT_MODE_SECONDS)))
-        if (binauralMix < 1.0e-4f) binauralMix = 0f else if (binauralMix > 1f - 1.0e-4f) binauralMix = 1f
+        texture.ease(n)
+        easeOutputMode(n)
 
         dryL.fill(0f, 0, n)
         dryR.fill(0f, 0, n)
@@ -280,56 +149,73 @@ class Synth(val sampleRate: Int) : NoteSink, BlockRenderer {
         sendBus.fill(0f, 0, n)
 
         for (v in voices) {
-            if (!v.active) continue
-            v.render(n, mono, brightness, detune)
-            val meshBed = v.fromNode && (v.kind == Voice.Drone || v.kind == Voice.Shimmer)
-            val g = if (meshBed) 1f else layer[v.kind.ordinal]
-            val pad = v.kind == Voice.Pad || v.kind == Voice.Drone || v.kind == Voice.Shimmer || v.kind == Voice.Choir
-            val gl = v.panLeft * g
-            val gr = v.panRight * g
-            val sg = v.send * g
-            if (pad) {
-                for (i in 0 until n) {
-                    padL[i] += mono[i] * gl
-                    padR[i] += mono[i] * gr
-                    sendBus[i] += mono[i] * sg
-                }
-            } else if (binauralMix > 0f) {
-                v.binaural.process(mono, n, v.lateral, earL, earR)
-                val m = binauralMix
-                for (i in 0 until n) {
-                    dryL[i] += mono[i] * gl * (1f - m) + earL[i] * g * m
-                    dryR[i] += mono[i] * gr * (1f - m) + earR[i] * g * m
-                    sendBus[i] += mono[i] * sg
-                }
-            } else {
-                for (i in 0 until n) {
-                    dryL[i] += mono[i] * gl
-                    dryR[i] += mono[i] * gr
-                    sendBus[i] += mono[i] * sg
-                }
-            }
+            if (v.active) mixVoice(v, n)
         }
+        if (texture.noise > NOISE_GATE) addNoise(n)
+        mixMaster(n, out, offset)
+    }
 
-        if (noise > 1.0e-4f) {
-            val level = noise * NOISE_LEVEL
+    /** Glides [binauralMix] toward the current output mode, snapping to the end once it is inaudibly close. */
+    private fun easeOutputMode(n: Int) {
+        val target = if (headphones) 1f else 0f
+        binauralMix += (target - binauralMix) * (1f - exp(-n.toFloat() / (sampleRate * OUTPUT_MODE_SECONDS)))
+        if (binauralMix < MIX_SNAP) binauralMix = 0f else if (binauralMix > 1f - MIX_SNAP) binauralMix = 1f
+    }
+
+    /** Renders [v] and adds it to the pad bus, or to the dry bus panned or placed for headphones, and to the send. */
+    private fun mixVoice(v: SynthVoice, n: Int) {
+        v.render(n, mono, texture.brightness, texture.detune)
+        val meshBed = v.fromNode && (v.kind == Voice.Drone || v.kind == Voice.Shimmer)
+        val g = if (meshBed) 1f else texture.layer(v.kind)
+        val pad = v.kind == Voice.Pad || v.kind == Voice.Drone || v.kind == Voice.Shimmer || v.kind == Voice.Choir
+        val gl = v.panLeft * g
+        val gr = v.panRight * g
+        val sg = v.send * g
+        if (pad) {
             for (i in 0 until n) {
-                val s = noiseFilter.lowPass(noiseRng.nextSigned()) * level
-                dryL[i] += s
-                dryR[i] += s
-                sendBus[i] += s * 0.5f
+                padL[i] += mono[i] * gl
+                padR[i] += mono[i] * gr
+                sendBus[i] += mono[i] * sg
+            }
+        } else if (binauralMix > 0f) {
+            v.binaural.process(mono, n, v.lateral, earL, earR)
+            val m = binauralMix
+            for (i in 0 until n) {
+                dryL[i] += mono[i] * gl * (1f - m) + earL[i] * g * m
+                dryR[i] += mono[i] * gr * (1f - m) + earR[i] * g * m
+                sendBus[i] += mono[i] * sg
+            }
+        } else {
+            for (i in 0 until n) {
+                dryL[i] += mono[i] * gl
+                dryR[i] += mono[i] * gr
+                sendBus[i] += mono[i] * sg
             }
         }
+    }
 
-        ensemble.amount = detune * 0.6f
-        ensemble.depth = 0.25f + 0.6f * detune
+    private fun addNoise(n: Int) {
+        val level = texture.noise * NOISE_LEVEL
+        for (i in 0 until n) {
+            val s = noiseFilter.lowPass(noiseRng.nextSigned()) * level
+            dryL[i] += s
+            dryR[i] += s
+            sendBus[i] += s * NOISE_SEND
+        }
+    }
+
+    /** Chorus on the pads, reverb and shimmer on the send, then the sum through the limiter into [out]. */
+    private fun mixMaster(n: Int, out: FloatArray, offset: Int) {
+        val detune = texture.detune
+        ensemble.amount = detune * ENSEMBLE_AMOUNT
+        ensemble.depth = ENSEMBLE_DEPTH_FLOOR + ENSEMBLE_DEPTH_RANGE * detune
         ensemble.process(padL, padR, n)
 
-        reverb.setRt60(rt60ForSize(reverbSize))
+        reverb.setRt60(rt60ForSize(texture.reverbSize))
         reverb.process(sendBus, wetL, wetR, n)
 
-        val wet = reverbWet * WET_GAIN
-        val sh = shimmer * wet
+        val wet = texture.reverbWet * WET_GAIN
+        val sh = texture.shimmer * wet
         for (i in 0 until n) {
             shifter.process(wetL[i], wetR[i], shifted)
             val l = dryL[i] + padL[i] + wetL[i] * wet + shifted[0] * sh
@@ -348,17 +234,40 @@ class Synth(val sampleRate: Int) : NoteSink, BlockRenderer {
         private const val CONTROL_RING = 256
         private const val PENDING_NOTES = 2048
         private const val PENDING_CONTROLS = 128
-        private const val SMOOTH_SECONDS = 2.0f
+
+        /** Each voice's noise seed; the stride is prime so no two voices share a sequence. */
+        private const val VOICE_SEED = 0x1234567
+        private const val VOICE_SEED_STRIDE = 7919
+        private const val NOISE_SEED = 0x5eed1234
 
         /** Time constant of the crossfade between stereo and headphones, so switching never clicks. */
         private const val OUTPUT_MODE_SECONDS = 0.3f
+
+        /** Distance from either output mode at which the crossfade snaps to it. */
+        private const val MIX_SNAP = 1.0e-4f
         private const val INPUT_GAIN = 0.3f
         private const val WET_GAIN = 1.0f
+
         /** 0.25 plus about 8 dB of makeup, applied ahead of the limiter whose ceiling is unchanged. */
         private const val MASTER_GAIN = 0.63f
+
+        // The noise texture: a low-passed hiss, skipped while its level is inaudible, half as loud into the reverb.
         private const val NOISE_LEVEL = 0.08f
+        private const val NOISE_CUTOFF_HZ = 3000.0
+        private const val NOISE_Q = 0.7f
+        private const val NOISE_GATE = 1.0e-4f
+        private const val NOISE_SEND = 0.5f
+
+        // The pad chorus follows the detune: wetter and deeper as it rises.
+        private const val ENSEMBLE_AMOUNT = 0.6f
+        private const val ENSEMBLE_DEPTH_FLOOR = 0.25f
+        private const val ENSEMBLE_DEPTH_RANGE = 0.6f
     }
 }
+
+/** The voice to steal between two in the same tier: the older if releasing, otherwise the quieter. */
+private fun SynthVoice.isBetterVictimThan(other: SynthVoice): Boolean =
+    if (isReleasing) age > other.age else loudness < other.loudness
 
 private const val MIN_RT60 = 10.0
 private const val MAX_RT60 = 26.0
