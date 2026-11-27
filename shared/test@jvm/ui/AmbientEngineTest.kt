@@ -23,6 +23,7 @@ import org.meshtastic.aether.mesh.LinkState
 import org.meshtastic.aether.mesh.MeshEvent
 import org.meshtastic.aether.mesh.MeshSource
 import org.meshtastic.aether.mesh.PacketKind
+import org.meshtastic.sdk.MeshtasticException
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -149,7 +150,7 @@ class AmbientEngineTest {
         val job = launch {
             e.run {
                 attempts++
-                if (attempts < 3) throw IllegalStateException("boom")
+                if (attempts < 3) throw MeshtasticException.Transport("boom")
             }
         }
         runCurrent()
@@ -175,7 +176,8 @@ class AmbientEngineTest {
             EngineTiming(400, now = { base + currentTime }, composerContext = StandardTestDispatcher(testScheduler)),
             failureText = { unreachableText("node.local:4403") },
         )
-        val job = launch { e.run { throw java.net.ConnectException("Connection refused: no route") } }
+        val refused = java.net.ConnectException("Connection refused: no route")
+        val job = launch { e.run { throw MeshtasticException.Transport("TCP connect failed: ${refused.message}", refused) } }
         runCurrent()
         assertEquals("Can't reach node.local:4403 - retrying", e.status.error)
         job.cancel()

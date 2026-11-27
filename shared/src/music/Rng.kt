@@ -32,12 +32,17 @@ class Rng(seed: Long) {
         fun unitDouble(bits: Long): Double =
             (bits ushr (Long.SIZE_BITS - SIGNIFICAND_BITS)) * (1.0 / (1L shl SIGNIFICAND_BITS))
 
+        /** SplitMix64's finalizer (Steele, Lea and Flood 2014). */
         fun mix(x: Long): Long {
             var z = x
-            z = (z xor (z ushr 30)) * M1
-            z = (z xor (z ushr 27)) * M2
-            return z xor (z ushr 31)
+            z = (z xor (z ushr MIX_SHIFT_1)) * M1
+            z = (z xor (z ushr MIX_SHIFT_2)) * M2
+            return z xor (z ushr MIX_SHIFT_3)
         }
+
+        private const val MIX_SHIFT_1 = 30
+        private const val MIX_SHIFT_2 = 27
+        private const val MIX_SHIFT_3 = 31
 
         /** An independent stream derived from [seed] and a stream number. */
         fun stream(seed: Long, n: Int): Rng = Rng(mix(seed + GOLDEN * (n + 1)))

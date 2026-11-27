@@ -11,6 +11,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.v2.runComposeUiTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import org.meshtastic.aether.ble.BleChooserException
 import org.meshtastic.aether.ble.BleRadio
 import org.meshtastic.aether.theme.AmbientTheme
 
@@ -50,7 +51,7 @@ class BluetoothSectionUiTest {
     // Regression: a chooser that throws, as on a page without Bluetooth access, left the pane silent and its button dead.
     @Test
     fun `a chooser that fails says why and can be opened again`() = runComposeUiTest {
-        show { error("Bluetooth adapter not available") }
+        show { throw BleChooserException("Bluetooth adapter not available", IllegalStateException()) }
         onNodeWithText("Choose a Bluetooth radio").performClick()
         waitForIdle()
         assertEquals(emptyList(), picked)

@@ -32,6 +32,6 @@ private external fun keepAwake()
 fun main() {
     keepAwake()
     ComposeViewport {
-        App(onToggleFullscreen = ::toggleBrowserFullscreen)
+        App(host = HostWindow(onToggleFullscreen = ::toggleBrowserFullscreen))
     }
 }

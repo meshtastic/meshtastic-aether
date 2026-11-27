@@ -11,9 +11,13 @@ expect fun bleScan(): Flow<BleRadio>?
 
 /**
  * Opens the platform's own radio chooser and returns the pick, or null when it was dismissed. Null where radios are
- * found by [bleScan] instead. A browser only opens its chooser from a user gesture.
+ * found by [bleScan] instead. A browser only opens its chooser from a user gesture. The chooser throws
+ * [BleChooserException] when it cannot open or grant a radio.
  */
 internal expect fun bleChooser(): (suspend () -> BleRadio?)?
+
+/** The platform radio chooser failed: no Web Bluetooth, an insecure page, or no user gesture. */
+internal class BleChooserException(message: String?, cause: Throwable) : Exception(message, cause)
 
 /** The link to a scanned or chosen radio, or null where [bleSupported] is false. */
 internal expect fun createBleTransport(radio: BleRadio): RadioTransport?

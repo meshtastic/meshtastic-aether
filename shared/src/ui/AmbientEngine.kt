@@ -31,6 +31,7 @@ import org.meshtastic.aether.music.Texture
 import org.meshtastic.aether.mood.ParamValues
 import org.meshtastic.aether.synth.Synth
 import org.meshtastic.aether.visual.SceneModel
+import org.meshtastic.sdk.MeshtasticException
 import kotlin.concurrent.atomics.AtomicInt
 import kotlin.concurrent.atomics.AtomicLong
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
@@ -182,6 +183,8 @@ class AmbientEngine(
         try {
             launch { for (r in outbound) apply(r) }
             launch {
+                // Five sources and the packet mapping feed this; any failure stops input with a banner, not the audio.
+                @Suppress("TooGenericExceptionCaught")
                 try {
                     source.events.collect { onEvent(it) }
                 } catch (e: CancellationException) {
@@ -206,9 +209,7 @@ class AmbientEngine(
                 open()
                 status = status.copy(error = null)
                 break
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Throwable) {
+            } catch (e: MeshtasticException) {
                 Log.e(TAG, "link open failed", e)
                 status = status.copy(error = failureText(e))
                 delay(backoff.next())
@@ -222,9 +223,7 @@ class AmbientEngine(
                     Log.i(TAG, "link lost, reopening")
                     try {
                         open()
-                    } catch (e: CancellationException) {
-                        throw e
-                    } catch (e: Throwable) {
+                    } catch (e: MeshtasticException) {
                         Log.w(TAG, "reopen failed", e)
                     }
                 }

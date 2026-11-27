@@ -16,6 +16,7 @@ import org.meshtastic.aether.ui.Settings
 import org.meshtastic.aether.ui.nowMillis
 import org.meshtastic.aether.ui.startFailureText
 import org.meshtastic.aether.ui.unreachableText
+import org.meshtastic.sdk.MeshtasticException
 
 /** One running session: where events come from, how to open the link, and how to close it. */
 internal class Session(
@@ -84,7 +85,12 @@ internal class AppSession(
             failure = null
             pending = null
             settings.link = choice
-        } catch (e: Exception) {
+        } catch (e: IllegalStateException) {
+            // A transport this target lacks (sessionFor's error()).
+            Log.e("app", "could not start session", e)
+            failure = startFailureText(e)
+        } catch (e: MeshtasticException) {
+            // A serial port the SDK cannot open (permission not granted, device detached).
             Log.e("app", "could not start session", e)
             failure = startFailureText(e)
         }
