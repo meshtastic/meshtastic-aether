@@ -111,10 +111,10 @@ The composer is pure and deterministic given (events, clock, seed). This is wher
 
 The autonomous piece sounds complete with zero packets:
 
-- Harmonic field: a slow progression in the day's key, one chord every 2-8 minutes, voice-led (common tones held, others move by step). Chords are built from the current mode.
+- Harmonic field: a slow progression in the day's key, one chord every 2-8 minutes, voice-led (common tones held, others move by step). Chords are built from the current mode. A session opens on the tonic chord, and a pull toward it grows with each change away, so the key is confirmed every few chords rather than only implied.
 - Long form: sections of 20-60 minutes on a roughly 110-minute energy arc. Layers enter and leave: sub drone, pad, slow loop voices, a high shimmer. Some passages thin to near silence.
-- Loop voices: each chord tone repeats on its own period of 17-60 s, with periods unrelated to each other (Music for Airports, Generative.fm's Eno Machine), so the texture never exactly repeats.
-- Just intonation for the bed and loop voices relative to the chord root.
+- Loop voices: each chord tone repeats on its own prime period of 17-59 s, scaled by the phrase speed (about 11-120 s), with periods unrelated to each other (Music for Airports, Generative.fm's Eno Machine), so the texture never exactly repeats.
+- Just intonation: every pitch starts on a 5-limit frame on the key, and each chord moves its voices a syntonic comma (81/80) either way where that makes its intervals purest (least summed Tenney harmonic distance, with a cost on comma-off pairs such as 40/27). ii, v and bVII get pure fifths and thirds instead of the fixed frame's wolves, and the key's tonic and fifth never move, so the hour chime stays in tune. Ornaments, loops and the drone take the same tuning through `Chord.ratio`.
 
 Time and weather change the rules, following *Sonorous Reception* and Eno's Reflection:
 
@@ -129,7 +129,7 @@ The mesh perturbs the piece:
   - Pitch: the node number hashes to a chord-tone role (root, third, fifth, seventh, ninth) and a fixed register band, so a node keeps its place in the harmony as chords move and its notes form phrases, not leaps.
   - Timing: soft quantization to a slow grid, keeping each node's broadcast rhythm.
   - Velocity comes from SNR (range-limited), and pan from the sender's bearing relative to the connected node (center, slightly wide, if unknown).
-  - Distance comes from hops taken: direct is dry and close, each hop adds reverb send, lowpass and an echo repeat, unknown is middle distance, and via MQTT is one step further.
+  - Distance comes from hops taken: direct is dry and close, each hop adds reverb send and lowpass and every third hop an echo repeat, unknown is middle distance, and via MQTT is one step further.
   - Encrypted broadcasts are a pitchless filtered breath, so other channels read as weather, not melody.
   - Variation operators from Generative.fm: small timing jitter, occasional octave shift, occasional delayed echo of a note, and a per-pitch repeat limit.
 - Density control: a fixed number of ornament slots (as in Listen to Wikipedia's 15 slots), each held for a short time. A note that can't get a slot within a short TTL is dropped, never queued indefinitely. Above an activity threshold, per-packet notes thin to a sample and the crowd parameters carry the rest.
@@ -165,7 +165,7 @@ The `tools` module renders the synth offline to WAV for listening tests, from an
 
 The scene is full screen, dark and on the shared clock.
 
-- Background: a slow gradient whose hue follows time of day and whose movement follows weather texture, dithered so projectors don't band.
+- Background: a slow gradient whose hue follows time of day and whose sway follows the texture (an integrated phase, so a change bends it and never jumps it), dithered about one code value so projectors don't band. The OLED look's dither only darkens, so its black stays off.
 - Nodes: soft glowing orbs placed by position relative to the connected node, with robust auto-fit (percentile bounds; far outliers such as MQTT nodes pinned to the edge), or at a position seeded from the node number when there is no position. Glow follows activity, and orbs fade when a node goes quiet. A relayout glides each orb to its new place, and the gravity layer moves each orb a little around it (`OrbitalField`).
 - Packets: a ripple from the sender's orb when its note sounds, colored by articulation and sized by SNR; hop echoes as fainter rings; encrypted traffic as a faint haze.
 - Renderer: plain Compose Canvas on every target. Skia runtime shaders (Skiko `RuntimeEffect` on desktop, iOS and web; `RuntimeShader` on Android 33 and later) are an optional enhancement for the background.

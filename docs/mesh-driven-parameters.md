@@ -62,7 +62,7 @@ Every `PacketHeard` carries these, and each drives note and visual parameters di
 
 ## Palettes
 
-Instruments, about 15, are built from the synth blocks (modal, Karplus-Strong, FM, ensemble, polyBLEP, noise): Bell, Marimba, Vibes, Kalimba, Glass chime, Harp, Pluck, Mallet, Gong, Bowed string, Choir pad, Pad, Drone, Sub, Shimmer, plus the pitchless Breath. A node's role picks the family and the hardware model hash picks the voice within the family:
+Instruments, about 15, are built from the synth blocks (modal, Karplus-Strong, FM, ensemble, polyBLEP, noise): Bell, Marimba, Vibes, Kalimba, Glass chime, Harp, Pluck, Mallet, Gong, Bowed string, Choir pad (built, in no family yet), Pad, Drone, Sub, Shimmer, plus the pitchless Breath. A node's role picks the family and the hardware model hash picks the voice within the family:
 
 - Router and router-late: Sub, Drone, Gong.
 - Repeater: Vibes, Glass.
@@ -72,7 +72,7 @@ Instruments, about 15, are built from the synth blocks (modal, Karplus-Strong, F
 
 Packet kind stays as articulation.
 
-Scales, 8: Ionian, Dorian, Mixolydian, Lydian, Aeolian, Phrygian, major pentatonic and minor pentatonic (no Locrian). The clock skeleton picks a base and the mesh moves it: valence (link quality and weather warmth) leans bright or dark by at most one step, a spread-out mesh opens toward pentatonic, and a dense busy mesh stays modal. Changes happen at chord boundaries with hysteresis.
+Scales, 8: Ionian, Dorian, Mixolydian, Lydian, Aeolian, Phrygian, major pentatonic and minor pentatonic (no Locrian). The clock skeleton picks a base and the mesh moves it: valence (link quality and weather warmth) leans bright or dark by at most one step, many senders on a calm mesh (senders times one minus activity) open toward pentatonic, and a busy mesh stays modal. Changes happen at chord boundaries with hysteresis.
 
 Tempo bands, 4: phrase speed (motif step length, answer gap, loop stretch) follows relative activity at 0.5x, 0.75x, 1x and 1.5x. The grid stays at 0.25 s, which is inaudible at this density.
 
@@ -93,7 +93,7 @@ Each signal is self-normalized to its own rolling 24 h range, with a stated smoo
 | weather | per-node deltas then median, so a changing reporting set does not shift it | temperature, humidity, pressure, lux, wind; trends over 3 h need 3 h of data, else neutral |
 | windGust | wind_gust and wind_lull from the proto | tau 2 min |
 | congestion | the connected node's channel utilization only | tau 2 min |
-| interference | noise floor and bad-receive delta from LocalStats, using uptime for reset detection | only when the connected node reports LocalStats |
+| interference | noise floor and bad-receive delta from LocalStats, using uptime for reset detection | only when the connected node reports LocalStats; not built, `MeshMood` does not read LocalStats yet |
 
 Landscape mappings: the chord interval runs 480 to 120 s from activity; loop periods stretch from silence (long when quiet); reverb size comes from humidity, reach and silence (renormalized, not additive past 1); reverb wet from silence and humidity; brightness from temperature, link quality and lux; detune from pressure and interference; ensemble depth from wind; echo delay and the visual echo-ring spacing from congestion (one driver for both); echo decay from reach; ornament slot TTL from congestion; pad level from senders; idle floor from silence; flash decay and ripple life from reach; stereo width from the spread of positioned senders; haze from the encrypted share; and background hue from temperature and saturation from humidity within the brand palette.
 
