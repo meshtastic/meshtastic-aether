@@ -15,15 +15,19 @@ The score and the instruments are synthesized in pure Kotlin on every target, wi
 
 ## Screenshots
 
-https://github.com/user-attachments/assets/1b64e4fc-3ec5-411e-a212-d27ff67afc4b
+https://github.com/user-attachments/assets/e00ab211-8c55-48bb-9fc0-3cbc8f34ab88
 
-The 90 second demo above has sound. Below, the scene while it listens to a generated DEF CON mesh (150 simulated nodes, from the `defcon` preset of `meshtastic-mcp replay`): each orb is a node, each ring a packet, and the cloud rotates slowly in 3D.
+The 90 second demo above has sound. Below, the scene while it listens to a generated DEF CON mesh (150 simulated nodes, from the `defcon` preset of `meshtastic-mcp replay`): each orb is a node, each ring a packet, each faint line a neighbor link, and the cloud rotates slowly in 3D.
 
 ![Orbs and rings under the simulated mesh](docs/screenshots/scene-1.jpg)
 
-![The same mesh a few seconds on](docs/screenshots/scene-2.jpg)
+![A node pulsing with its neighbor links](docs/screenshots/scene-2.jpg)
 
-![Rings overlapping around the dense center](docs/screenshots/scene-3.jpg)
+![A packet ring and links to a busy node](docs/screenshots/scene-3.jpg)
+
+The HUD over the same mesh, with the Drivers panel listing what the mesh is doing to each parameter:
+
+![The HUD with the status card, toolbar and Drivers panel](docs/screenshots/hud.jpg)
 
 ## Run
 
