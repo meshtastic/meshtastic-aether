@@ -21,6 +21,12 @@ import java.net.URISyntaxException
 import java.security.MessageDigest
 
 private const val TAG = "update"
+
+/** A failed check keeps an update already offered; otherwise it reports the failure. */
+private fun checkFailed(previous: UpdateState, e: Exception): UpdateState {
+    Log.w(TAG, "check failed: ${e.message}")
+    return if (previous is UpdateState.Available) previous else UpdateState.Failed
+}
 private const val CONNECT_TIMEOUT_MS = 15_000
 private const val READ_TIMEOUT_MS = 30_000
 private const val MAX_MANIFEST_BYTES = 64 * 1024
@@ -71,7 +77,7 @@ internal abstract class HttpUpdater(
         // An offered update stays offered while the next check runs, so the Update button does not blink.
         if (previous !is UpdateState.Available) _update.value = UpdateState.Checking
         val answer = try {
-            fetchLatest(manifest)?.let { latest ->
+            fetchLatest(manifest, assetsBesideManifest)?.let { latest ->
                 Log.i(TAG, "running $runningCode, published ${latest.version} (${latest.code})")
                 compare(runningCode, latest)
             } ?: UpdateState.Failed
@@ -145,10 +151,6 @@ internal abstract class HttpUpdater(
         installState.value = InstallState.Failed(InstallFailure.DOWNLOAD, e.message)
     }
 
-    private suspend fun fetchLatest(manifest: String): PublishedBuild? =
-        PublishedBuild.parse(fetchText(manifest))
-            ?.let { if (assetsBesideManifest) it.copy(downloadBase = manifest.substringBeforeLast('/')) else it }
-
     /** The asset this platform installs, or null when the build carries none for it. */
     protected abstract fun assetFor(latest: PublishedBuild): Asset?
 
@@ -166,10 +168,10 @@ internal abstract class HttpUpdater(
     protected abstract fun browse(url: String)
 
     companion object {
-        private fun checkFailed(previous: UpdateState, e: Exception): UpdateState {
-            Log.w(TAG, "check failed: ${e.message}")
-            return if (previous is UpdateState.Available) previous else UpdateState.Failed
-        }
+        /** The build [manifest] publishes; with [assetsBesideManifest] its files are fetched from beside it. */
+        private suspend fun fetchLatest(manifest: String, assetsBesideManifest: Boolean): PublishedBuild? =
+            PublishedBuild.parse(fetchText(manifest))
+                ?.let { if (assetsBesideManifest) it.copy(downloadBase = manifest.substringBeforeLast('/')) else it }
 
         private suspend fun fetchText(url: String): String = withContext(Dispatchers.IO) {
             open(url).useResponse { connection ->

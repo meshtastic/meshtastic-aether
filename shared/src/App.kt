@@ -52,6 +52,7 @@ import org.meshtastic.aether.ui.MinTouch
 import org.meshtastic.aether.ui.PendingConnect
 import org.meshtastic.aether.ui.Settings
 import org.meshtastic.aether.ui.SettingsScreen
+import org.meshtastic.aether.ui.TrackedUpdates
 import org.meshtastic.aether.ui.UpdateChecks
 import org.meshtastic.aether.ui.appUpdater
 import org.meshtastic.aether.ui.autoConnectLink
@@ -124,12 +125,8 @@ internal fun AppRoot(
     host: HostWindow = HostWindow(),
 ) {
     val initialLink = if (launch.ask) null else launch.link
-    var track by remember { mutableStateOf(settings.updateTrack ?: UpdateTrack.of(BuildInfo.CHANNEL)) }
-    UpdateChecks(appUpdater, track)
-    var settingsOpen by remember { mutableStateOf(false) }
+    val settingsNav = rememberSettingsNav(settings)
     val saveable = rememberSaveableStateHolder()
-    val settingsBack = rememberNavigationEventState(NavigationEventInfo.None)
-    NavigationBackHandler(settingsBack, isBackEnabled = settingsOpen, onBackCompleted = { settingsOpen = false })
     val look = remember {
         LookState(resolveLook(launch.look, settings.savedPalette, launch.launchedFullscreen), settings)
     }
@@ -147,7 +144,7 @@ internal fun AppRoot(
         }
 
         LaunchedEffect(Unit) { if (startup?.isSuccess == true && initialLink != null) settings.link = initialLink }
-        LaunchedEffect(app.session) { if (app.session != null) settingsOpen = false }
+        LaunchedEffect(app.session) { if (app.session != null) settingsNav.open = false }
         AutoConnect(app, started, saved)
 
         Box(Modifier.fillMaxSize().background(LocalAmbientPalette.current.backgroundBottom)) {
@@ -157,27 +154,55 @@ internal fun AppRoot(
                     platform.resumeAudio()
                     started = true
                 }
-                current == null && settingsOpen -> SettingsScreen(
-                    updater = appUpdater,
-                    track = track,
-                    onTrack = {
-                        track = it
-                        settings.updateTrack = it
-                    },
-                    onBack = { settingsOpen = false },
-                    modifier = Modifier.windowInsetsPadding(WindowInsets.safeDrawing),
-                    focusBack = platform.isTelevision || platform.hasKeyboard,
-                )
+                current == null && settingsNav.open -> SettingsPane(settingsNav, platform)
                 current == null -> saveable.SaveableStateProvider("connect") {
-                    ConnectPane(app, settings, platform) {
-                        app.pending?.countdown?.cancel()
-                        settingsOpen = true
-                    }
+                    ConnectPane(app, settings, platform) { settingsNav.openFrom(app) }
                 }
                 else -> Running(current, remember { AppEnvironment(settings, platform) }, look, host, app::stop)
             }
         }
     }
+}
+
+/** The settings screen over the connect screen: whether it is open, and the update track it edits. */
+@Stable
+private class SettingsNav(private val settings: Settings) {
+    var open by mutableStateOf(false)
+    var track by mutableStateOf(settings.updateTrack ?: UpdateTrack.of(BuildInfo.CHANNEL))
+        private set
+
+    fun choose(next: UpdateTrack) {
+        track = next
+        settings.updateTrack = next
+    }
+
+    /** Opens settings from the connect screen, which stops a pending reconnect's countdown. */
+    fun openFrom(app: AppSession) {
+        app.pending?.countdown?.cancel()
+        open = true
+    }
+}
+
+/** The settings state, the update checks on its track, and Back closing the screen while it is open. */
+@Composable
+private fun rememberSettingsNav(settings: Settings): SettingsNav {
+    val nav = remember { SettingsNav(settings) }
+    UpdateChecks(appUpdater, nav.track)
+    val back = rememberNavigationEventState(NavigationEventInfo.None)
+    NavigationBackHandler(back, isBackEnabled = nav.open, onBackCompleted = { nav.open = false })
+    return nav
+}
+
+@Composable
+private fun SettingsPane(nav: SettingsNav, platform: Platform) {
+    val updater = appUpdater
+    val track = nav.track
+    SettingsScreen(
+        updates = if (updater != null && track != null) TrackedUpdates(updater, track, nav::choose) else null,
+        onBack = { nav.open = false },
+        modifier = Modifier.windowInsetsPadding(WindowInsets.safeDrawing),
+        focusBack = platform.isTelevision || platform.hasKeyboard,
+    )
 }
 
 /** Counts a saved link down once the app has started, then starts it, unless the countdown was cancelled. */
