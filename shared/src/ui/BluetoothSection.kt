@@ -93,6 +93,11 @@ private class BleScan {
         error = reason
         scanning = false
     }
+
+    fun fail(e: Exception) {
+        Log.e("ble", "scan failed", e)
+        stop(e.message ?: e::class.simpleName)
+    }
 }
 
 /** Scans until cancelled; a missing permission, missing Bluetooth or a failure stops it with the reason shown. */
@@ -101,22 +106,17 @@ private suspend fun BleScan.scanUntilStopped() {
     try {
         openScan()?.let { collectRadios(it) }
     } catch (e: MeshtasticException) {
-        failScan(e) // the SDK's scan flow failing
+        fail(e) // the SDK's scan flow failing
     } catch (e: IOException) {
-        failScan(e) // Kable's UnmetRequirementException as the scanner is built: Bluetooth off or not permitted
+        fail(e) // Kable's UnmetRequirementException as the scanner is built: Bluetooth off or not permitted
     } catch (e: IllegalStateException) {
-        failScan(e) // Kable's scanner state errors, raised before the SDK's flow wraps them
+        fail(e) // Kable's scanner state errors, raised before the SDK's flow wraps them
     } finally {
         Log.i("ble", "scan stopped")
     }
 }
 
 /** The platform's scan once permission is granted, or null with the scan stopped and the reason set. */
-private fun BleScan.failScan(e: Exception) {
-    Log.e("ble", "scan failed", e)
-    stop(e.message ?: e::class.simpleName)
-}
-
 private suspend fun BleScan.openScan(): Flow<BleRadio>? {
     if (!ensureBlePermissions()) {
         Log.w("ble", "scan not started: permission not granted")
