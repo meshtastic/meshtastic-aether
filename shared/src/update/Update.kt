@@ -13,6 +13,18 @@ fun manifestUrl(channel: Channel): String? = when (channel) {
 
 const val MANIFEST_NAME = "update.properties"
 
+/** Which published builds the person asked to follow; it starts as the running build's own channel. */
+enum class UpdateTrack(val channel: Channel) {
+    Release(Channel.RELEASE),
+    Snapshot(Channel.SNAPSHOT),
+    ;
+
+    companion object {
+        /** The track a build of [channel] follows until the person picks another; null for a local build, which never checks. */
+        fun of(channel: Channel): UpdateTrack? = entries.firstOrNull { it.channel == channel }
+    }
+}
+
 /** One downloadable file of a published build. */
 data class Asset(val name: String, val sha256: String)
 
@@ -144,13 +156,16 @@ enum class InstallFailure {
 /** How the platform gets an update in: installs it itself, or only points at the download page. */
 enum class InstallMode { INSTALL, INSTALL_AND_RESTART, OPEN_PAGE }
 
-/** Checks this build's channel for a newer build and installs it when asked. */
+/** Checks the followed track (the build's own channel until [follow] says otherwise) for a newer build and installs it when asked. */
 interface Updater {
     val update: StateFlow<UpdateState>
     val install: StateFlow<InstallState>
 
     /** What [install] does for [latest] on this platform. */
     fun modeFor(latest: PublishedBuild): InstallMode
+
+    /** Follows [track] from now on: forgets the answer for the old one, and the next [check] reads the new one. */
+    fun follow(track: UpdateTrack)
 
     /** Fetches the manifest and returns the answer, which also lands in [update]; checks never overlap. */
     suspend fun check(): UpdateState

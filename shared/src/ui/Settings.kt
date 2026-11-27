@@ -5,6 +5,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import org.meshtastic.aether.theme.PaletteChoice
+import org.meshtastic.aether.update.UpdateTrack
 
 /** A small persistent string store; the platform supplies the real one. Implementations must not throw. */
 internal interface KeyValueStore {
@@ -70,7 +71,13 @@ internal class Settings(private val store: KeyValueStore) {
         get() = store.get(KEY_HEADPHONES) == "1"
         set(value) = store.put(KEY_HEADPHONES, if (value) "1" else "0")
 
+    /** The update track the person picked, or null while the build's own channel decides. */
+    var updateTrack: UpdateTrack?
+        get() = UpdateTrack.entries.firstOrNull { it.name == store.get(KEY_UPDATE_TRACK) }
+        set(value) = if (value == null) store.remove(KEY_UPDATE_TRACK) else store.put(KEY_UPDATE_TRACK, value.name)
+
     private companion object {
+        const val KEY_UPDATE_TRACK = "update_track"
         const val KEY_HEADPHONES = "headphones"
         const val KEY_LINK = "link"
         const val KEY_LINK_KIND = "link_kind"

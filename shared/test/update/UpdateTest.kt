@@ -77,4 +77,12 @@ class UpdateTest {
         assertNull(packageVerdict(app, app, 58, 57, sameKey = true))
         assertNull(packageVerdict(app, app, 58, 57, sameKey = null))
     }
+
+    // Regression: a local build given a track would start checking GitHub on every launch; a release or snapshot follows its own.
+    @Test
+    fun `a build starts on its own channel's track and a local build on none`() {
+        assertEquals(UpdateTrack.Release, UpdateTrack.of(Channel.RELEASE))
+        assertEquals(UpdateTrack.Snapshot, UpdateTrack.of(Channel.SNAPSHOT))
+        assertNull(UpdateTrack.of(Channel.DEV))
+    }
 }

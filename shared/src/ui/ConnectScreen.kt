@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
@@ -23,6 +24,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
@@ -34,10 +36,12 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -143,6 +147,7 @@ internal fun ConnectScreen(
     focusChooser: Boolean = false,
     lastKind: LinkKind? = null,
     onKind: (LinkKind) -> Unit = {},
+    onSettings: (() -> Unit)? = null,
 ) {
     val chooserFocus = remember { FocusRequester() }
     LaunchedEffect(Unit) {
@@ -151,9 +156,9 @@ internal fun ConnectScreen(
     }
     val kinds = availableKinds(supportsTcp, bluetooth, serial)
     val pendingLink = pending?.link
-    var host by remember { mutableStateOf(lastTcp?.host ?: DEFAULT_HOST) }
-    var port by remember { mutableStateOf((lastTcp?.port ?: LinkChoice.DEFAULT_TCP_PORT).toString()) }
-    var ws by remember { mutableStateOf((pendingLink as? LinkChoice.WebSocket)?.url ?: defaultWebSocketUrl(secureWebSocket)) }
+    var host by rememberSaveable { mutableStateOf(lastTcp?.host ?: DEFAULT_HOST) }
+    var port by rememberSaveable { mutableStateOf((lastTcp?.port ?: LinkChoice.DEFAULT_TCP_PORT).toString()) }
+    var ws by rememberSaveable { mutableStateOf((pendingLink as? LinkChoice.WebSocket)?.url ?: defaultWebSocketUrl(secureWebSocket)) }
     var kind by remember { mutableStateOf(initialKind(kinds, pendingLink?.kind(), lastKind)) }
     var chosen by remember { mutableStateOf<LinkKind?>(null) }
     val selected = if (kind in kinds) kind else kinds.first()
@@ -294,7 +299,13 @@ internal fun ConnectScreen(
         }
     }
 
-    BoxWithConstraints(modifier.fillMaxSize()) {
+    Column(modifier.fillMaxSize()) {
+    if (onSettings != null) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+            IconButton(onSettings, Modifier.size(MinTouch).semantics { contentDescription = "Settings" }) { HudIcon(HudIcons.Settings) }
+        }
+    }
+    BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
         val twoPanes = widthClass(maxWidth) == WidthClass.Expanded || maxHeight < ShortHeight
         if (twoPanes) {
             Row(
@@ -346,6 +357,7 @@ internal fun ConnectScreen(
                 if (primary != null) Column(column.fillMaxWidth().padding(top = 12.dp)) { primary() }
             }
         }
+    }
     }
 }
 

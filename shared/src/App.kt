@@ -27,6 +27,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -76,6 +77,9 @@ import org.meshtastic.aether.ui.LiveLink
 import org.meshtastic.aether.ui.LoopingReplaySource
 import org.meshtastic.aether.ui.PendingConnect
 import org.meshtastic.aether.ui.ScreenGutter
+import org.meshtastic.aether.ui.SettingsScreen
+import org.meshtastic.aether.update.BuildInfo
+import org.meshtastic.aether.update.UpdateTrack
 import org.meshtastic.aether.ui.Settings
 import org.meshtastic.aether.ui.StatusOverlay
 import org.meshtastic.aether.ui.controlsHint
@@ -173,7 +177,6 @@ fun App(
 ) {
     val platform = remember { getPlatform() }
     val settings = remember { Settings(createKeyValueStore()) }
-    UpdateChecks(appUpdater)
     AppRoot(
         settings, platform, onToggleFullscreen, initialLink, startupError, isFullscreen, hiddenCursor, look, launchedFullscreen,
         ask, screenReaderActive, commands,
@@ -197,6 +200,12 @@ internal fun AppRoot(
     commands: AppCommands? = null,
 ) {
     val initialLink = if (ask) null else launchLink
+    var track by remember { mutableStateOf(settings.updateTrack ?: UpdateTrack.of(BuildInfo.CHANNEL)) }
+    UpdateChecks(appUpdater, track)
+    var settingsOpen by remember { mutableStateOf(false) }
+    val saveable = rememberSaveableStateHolder()
+    val settingsBack = rememberNavigationEventState(NavigationEventInfo.None)
+    NavigationBackHandler(settingsBack, isBackEnabled = settingsOpen, onBackCompleted = { settingsOpen = false })
     var palette by remember { mutableStateOf(resolveLook(look, settings.savedPalette, launchedFullscreen)) }
     AmbientTheme(palette) {
         val startup = remember { initialLink?.let { runCatching { sessionFor(it) } } }
@@ -211,6 +220,7 @@ internal fun AppRoot(
                 session = sessionFor(choice)
                 failure = null
                 pending = null
+                settingsOpen = false
                 settings.link = choice
             } catch (e: Exception) {
                 Log.e("app", "could not start session", e)
@@ -245,7 +255,23 @@ internal fun AppRoot(
                     contentAlignment = Alignment.Center,
                 ) { Text("Tap to start", style = MaterialTheme.typography.headlineSmall, color = colors.text) }
 
-                current == null -> ConnectScreen(
+                current == null && settingsOpen -> SettingsScreen(
+                    updater = appUpdater,
+                    track = track,
+                    onTrack = {
+                        track = it
+                        settings.updateTrack = it
+                    },
+                    onBack = { settingsOpen = false },
+                    modifier = Modifier.windowInsetsPadding(WindowInsets.safeDrawing),
+                    focusBack = platform.isTelevision || platform.hasKeyboard,
+                )
+
+                current == null -> saveable.SaveableStateProvider("connect") { ConnectScreen(
+                    onSettings = {
+                        pending?.countdown?.cancel()
+                        settingsOpen = true
+                    },
                     onChoose = ::start,
                     pending = pending,
                     failure = failure,
@@ -255,7 +281,7 @@ internal fun AppRoot(
                     focusChooser = platform.isTelevision || platform.hasKeyboard,
                     lastKind = LinkKind.entries.firstOrNull { it.name == settings.linkKind },
                     onKind = { settings.linkKind = it.name },
-                )
+                ) }
 
                 else -> Running(
                     session = current,
