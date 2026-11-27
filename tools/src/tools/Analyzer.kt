@@ -18,6 +18,10 @@ data class WindowStats(
     val centroidHz: Double,
     val onsets: Int,
     val longestQuietSec: Double,
+    val lufs: Double = Double.NEGATIVE_INFINITY,
+    val lowBandRatio: Double = 0.0,
+    val pulse20: Double = 0.0,
+    val longestRestSec: Double = 0.0,
 )
 
 const val CLIP_LEVEL = 0.999f
@@ -40,6 +44,8 @@ class WindowAnalyzer(private val sampleRate: Int, private val windowFrames: Long
     private val im = DoubleArray(FFT_SIZE)
     private val power = DoubleArray(FFT_SIZE / 2 + 1)
     private val mono = DoubleArray(FFT_SIZE)
+    private val kWeighting = KWeighting(sampleRate)
+    private val envelope = Envelope(sampleRate)
 
     private var frameIndex = 0L
     private var winStart = 0L
@@ -86,6 +92,8 @@ class WindowAnalyzer(private val sampleRate: Int, private val windowFrames: Long
             samples += finite
             hopCount += finite
             if (finite > 0) m /= finite
+            if (finite == 2) kWeighting.push(l.toDouble(), r.toDouble())
+            envelope.push(m)
             feedSpectrum(m)
             frameIndex++
             if ((frameIndex % hopFrames) == 0L) endHop()
@@ -143,10 +151,13 @@ class WindowAnalyzer(private val sampleRate: Int, private val windowFrames: Long
     private fun closeWindow() {
         var num = 0.0
         var den = 0.0
+        var low = 0.0
         if (spectra > 0) {
             for (k in 0..FFT_SIZE / 2) {
-                num += k.toDouble() * sampleRate / FFT_SIZE * power[k]
+                val hz = k.toDouble() * sampleRate / FFT_SIZE
+                num += hz * power[k]
                 den += power[k]
+                if (hz <= LOW_BAND_HZ) low += power[k]
             }
         }
         val frames = frameIndex - winStart
@@ -161,7 +172,13 @@ class WindowAnalyzer(private val sampleRate: Int, private val windowFrames: Long
             centroidHz = if (den > 1e-12) num / den else 0.0,
             onsets = onsets,
             longestQuietSec = longestQuietHops * HOP_SEC,
+            lufs = integratedLoudness(kWeighting.subBlocks),
+            lowBandRatio = if (den > 1e-12) low / den else 0.0,
+            pulse20 = pulse20(envelope.steps),
+            longestRestSec = longestRestSec(envelope.steps),
         )
+        kWeighting.reset()
+        envelope.reset()
         winStart = frameIndex
         peak = 0.0; sumSq = 0.0; sum = 0.0; samples = 0; nan = 0; clipped = 0
         power.fill(0.0); spectra = 0; monoFill = -1
@@ -213,12 +230,17 @@ internal fun fft(re: DoubleArray, im: DoubleArray) {
 }
 
 fun formatStats(stats: List<WindowStats>): String = buildString {
-    appendLine("start_min  peak_dBFS  rms_dBFS      dc  nan  clipped  centroid_Hz  onsets  longest_quiet_s")
+    appendLine(
+        "start_min  peak_dBFS  rms_dBFS      dc  nan  clipped  centroid_Hz  onsets  longest_quiet_s" +
+            "    LUFS  low_band  pulse20  longest_rest_s",
+    )
     for (s in stats) {
         appendLine(
-            "%9.1f  %9s  %8s  %6.4f  %3d  %7d  %11.0f  %6d  %15.2f".format(
+            "%9.1f  %9s  %8s  %6.4f  %3d  %7d  %11.0f  %6d  %15.2f  %6s  %8.3f  %7.2f  %14.1f".format(
                 s.startSec / SECONDS_PER_MINUTE, db(s.peak), db(s.rms), s.dc, s.nanCount, s.clippedCount,
                 s.centroidHz, s.onsets, s.longestQuietSec,
+                if (s.lufs.isFinite()) "%.1f".format(s.lufs) else "-inf", s.lowBandRatio, s.pulse20,
+                s.longestRestSec,
             ),
         )
     }
