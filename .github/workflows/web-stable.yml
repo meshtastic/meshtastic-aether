@@ -1,0 +1,69 @@
+name: Web Stable
+
+# Deploys a release's web build to aether.meshtastic.org. release.yml dispatches it with the
+# release tag; a manual dispatch is the retry path, and a dispatch with an older tag is the
+# rollback. Nothing is built here: the site is the aether-<version>-web.zip the release carries.
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag whose web build to deploy (e.g., v0.1.0)'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+# Serialized, never cancelled: an interrupted deploy must not race the one after it.
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: github.repository == 'meshtastic/meshtastic-aether'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # The environment holds the Vercel token and ids, and admits only main.
+    environment:
+      name: web-stable
+      url: https://aether.meshtastic.org
+    steps:
+      - name: Checkout the deploy action
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: .github/actions/vercel-deploy
+
+      - name: Download the release's web build
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/web"
+          if ! gh release download "$TAG" --repo "$REPO" --pattern 'aether-*-web.zip' --dir "$RUNNER_TEMP/web"; then
+            echo "::error::Could not download aether-<version>-web.zip from release $TAG: the tag, the release or the asset is missing."
+            exit 1
+          fi
+          mapfile -t zips < <(find "$RUNNER_TEMP/web" -name 'aether-*-web.zip')
+          if [[ ${#zips[@]} -ne 1 ]]; then
+            echo "::error::Expected one web build on $TAG, found ${#zips[@]}."
+            exit 1
+          fi
+          unzip -q "${zips[0]}" -d "$RUNNER_TEMP/web/dist"
+          echo "ASSET=$(basename "${zips[0]}")" >> "$GITHUB_ENV"
+
+      - name: Deploy to aether.meshtastic.org
+        uses: ./.github/actions/vercel-deploy
+        with:
+          dist: ${{ runner.temp }}/web/dist
+          vercel_token: ${{ secrets.VERCEL_TOKEN }}
+          vercel_org_id: ${{ vars.VERCEL_ORG_ID }}
+          vercel_project_id: ${{ vars.VERCEL_PROJECT_ID }}
+
+      - name: Summarize
+        env:
+          TAG: ${{ inputs.tag }}
+        run: echo "Deployed ${ASSET} from ${TAG} to https://aether.meshtastic.org" >> "$GITHUB_STEP_SUMMARY"
