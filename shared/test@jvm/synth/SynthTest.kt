@@ -125,6 +125,21 @@ class SynthTest {
     }
 
     @Test
+    fun `a quieter or shorter pad at the same pitch and pan leaves the sounding one as it was`() {
+        // Carrying a voice on must not step its level to a quieter note's or cut a longer note short.
+        for (second in listOf(note(Voice.Pad, 10L * rate, 220.0, 0.1f, 5.0), note(Voice.Pad, 10L * rate, 220.0, 0.5f, 5.0))) {
+            val synth = Synth(rate)
+            synth.schedule(controls(0, texture()))
+            synth.schedule(notes(note(Voice.Pad, 0, 220.0, 0.5f, 40.0), second))
+            val out = synth.renderAll(32 * rate)
+            val before = out.rms(5 * rate, 9 * rate)
+            val after = out.rms(26 * rate, 30 * rate)
+            val db = 20 * kotlin.math.log10(after / before)
+            assertTrue(db > -1.5, "velocity ${second.velocity}: the 40 s pad fell $db dB after a 5 s note")
+        }
+    }
+
+    @Test
     fun `a pad at a new pitch starts its own voice and the old tone releases`() {
         val synth = Synth(rate)
         synth.schedule(controls(0, texture()))

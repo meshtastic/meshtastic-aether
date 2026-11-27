@@ -285,9 +285,11 @@ private const val SAME_PITCH = 1e-9
 
 /**
  * Whether [note] is [v]'s sounding bed tone struck again: the same Pad, Drone or Shimmer, not a node's, at the same
- * pitch and pan. The voice then carries on instead of another starting, so the bed's tick never dips.
+ * pitch, pan and velocity. The voice then carries on instead of another starting, so the bed's tick never dips; a
+ * note that differs in level starts its own voice rather than step this one.
  */
 private fun continues(v: SynthVoice, note: NoteEvent): Boolean =
     v.active && !v.isFading && !v.fromNode && note.node == null && note.voice == v.kind &&
         (v.kind == Voice.Pad || v.kind == Voice.Drone || v.kind == Voice.Shimmer) &&
-        abs(note.pitchHz - v.pitchHz) <= v.pitchHz * SAME_PITCH && note.pan.coerceIn(-1f, 1f) == v.pan
+        abs(note.pitchHz - v.pitchHz) <= v.pitchHz * SAME_PITCH && note.pan.coerceIn(-1f, 1f) == v.pan &&
+        note.velocity.coerceIn(0f, 1f) == v.velocity

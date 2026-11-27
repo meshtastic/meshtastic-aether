@@ -218,7 +218,7 @@ internal class SynthVoice(private val sampleRate: Int, seed: Int) {
             amp = clamp(note.velocity, 0f, 1f)
             bright = clamp(note.brightness, 0f, 1f)
             send = clamp(note.reverbSend, 0f, 1f)
-            framesLeft = max(note.durationFrames, 1L)
+            framesLeft = max(framesLeft, max(note.durationFrames, 1L))
             startPadBed((framesLeft / sr).toFloat(), fromLevel = true)
         } else if (active) {
             pending = note
@@ -361,9 +361,11 @@ internal class SynthVoice(private val sampleRate: Int, seed: Int) {
         }
     }
 
-    /** The voices on the chorused pad bus, whose attack and release grow with the note. */
     /** The pan the current note asked for, -1..1. */
     val pan: Float get() = notePan
+
+    /** The current note's velocity, 0..1. */
+    val velocity: Float get() = amp
 
     /**
      * The bed envelopes: a held gate whose attack and release are shares of the note. From silence the oscillators

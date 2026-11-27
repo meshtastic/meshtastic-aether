@@ -7,8 +7,6 @@ import kotlin.math.min
 /** A node's reading counts toward the weather for this long. */
 private const val WEATHER_MS = 3600L * 1000
 
-/** A weather quantity with no recent reading scales to the middle of its range. */
-
 private const val GESTURE_SAMPLE_MS = 60_000L
 private const val LOW_SWELL_WAIT_MS = 10L * 60 * 1000
 private const val LOW_SWELL_SECONDS = 14.0
