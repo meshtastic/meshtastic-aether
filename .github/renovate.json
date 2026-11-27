@@ -22,11 +22,6 @@
   ],
   "packageRules": [
     {
-      "description": "No required check gates merges yet. Nothing automerges until CI is a required check on main; remove this rule then.",
-      "matchPackageNames": ["*"],
-      "automerge": false
-    },
-    {
       "description": "HOLD: Kotlin in the toolchain template moves with the preset's kotlin-toolchain group, which only matches the Gradle manager. It must stay on the meshtastic-sdk's compiler, so a human checks the SDK first.",
       "matchManagers": ["custom.regex"],
       "matchPackageNames": ["org.jetbrains.kotlin:kotlin-stdlib"],
