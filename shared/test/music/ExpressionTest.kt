@@ -49,9 +49,10 @@ class ExpressionTest {
     }
 
     /** True when [hz] sits a whole number of octaves from the just ratio of [semitone] above [keyHz]. */
-    private fun isJust(hz: Double, keyHz: Double, semitone: Int): Boolean {
-        val d = log2(hz / keyHz) - log2(Theory.justRatio(semitone))
-        return abs(d - d.roundToInt()) < 1e-9
+    /** [hz] is [semitone]'s just ratio over the key, or a syntonic comma either side (a chord's tuning), in some octave. */
+    private fun isJust(hz: Double, keyHz: Double, semitone: Int): Boolean = listOf(80.0 / 81, 1.0, 81.0 / 80).any { comma ->
+        val d = log2(hz / keyHz) - log2(Theory.justRatio(semitone) * comma)
+        abs(d - d.roundToInt()) < 1e-9
     }
 
     private fun tones(chord: Chord) = chord.voiceSemitones.map { it.mod(12) }
@@ -327,14 +328,32 @@ class ExpressionTest {
     }
 
     @Test
-    fun `a temperature crossing strikes the lydian color rising and the aeolian color falling`() {
+    fun `a temperature crossing in the lydian morning strikes the raised fourth rising and the tonic falling`() {
+        // 10:00 is Lydian, which holds no dark color, so a cooling crossing falls back to the tonic rather than leave
+        // the scale. Pitches are compared within a syntonic comma because the chord may tune a tone by one.
         val minute = 60_000L
         val temps = listOf(5f, 5f, 20f, 20f, 5f, 5f)
         val notes = weatherRun(11L, temps.size, minute) { c, i, ms -> c.onEvent(env(3L, ms, temp = temps[i])) }
         val colors = notes.filter { it.voice == Voice.Bell && it.node == null }.sortedBy { it.atFrame }
         assertEquals(2, colors.size)
-        assertEquals(key() * Theory.justRatio(6) * 2, colors[0].pitchHz, 1e-9)
-        assertEquals(key() * Theory.justRatio(8) * 2, colors[1].pitchHz, 1e-9)
+        val comma = 81.0 / 80.0
+        val rising = colors[0].pitchHz / (key() * 2 * 45.0 / 32.0)
+        val falling = colors[1].pitchHz / (key() * 2)
+        assertTrue(rising in 1 / comma - 1e-9..comma + 1e-9, "rising ratio off the raised fourth: $rising")
+        assertTrue(falling in 1 / comma - 1e-9..comma + 1e-9, "falling ratio off the tonic: $falling")
+    }
+
+    @Test
+    fun `a color tone is always in the scale and the two directions never match`() {
+        // The color bell used to play the raised fourth or minor sixth in any mode, an out-of-scale note in most.
+        for (mode in Mode.entries) {
+            val up = colorSemitone(mode, rising = true)
+            val down = colorSemitone(mode, rising = false)
+            assertTrue(up in mode.semitones && down in mode.semitones, "${mode.name} color $up $down out of scale")
+            assertTrue(up != down && up != 1 && down != 1, "${mode.name} colors $up $down")
+        }
+        assertEquals(6, colorSemitone(Mode.Lydian, rising = true))
+        assertEquals(8, colorSemitone(Mode.Aeolian, rising = false))
     }
 
     @Test

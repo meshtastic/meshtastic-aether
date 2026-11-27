@@ -51,7 +51,7 @@ internal class SessionVoices(private val score: Score, private val mood: MeshMoo
         val length = score.clip(nowFrame, score.sec(NEW_NODE_SWELL_SECONDS))
         if (level > Score.AUDIBLE_LEVEL && length > 0) {
             score.notes += NoteEvent(
-                nowFrame, Voice.Pad, score.keyHz * Theory.justRatio(score.chord.rootSemitone) * 2,
+                nowFrame, Voice.Pad, score.keyHz * score.chord.ratio(score.chord.rootSemitone) * 2,
                 NEW_NODE_SWELL_VELOCITY, 0f, NEW_NODE_SWELL_SEND, length, NEW_NODE_SWELL_BRIGHTNESS,
             )
         }
