@@ -1,6 +1,6 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "description": "Extends the org policy for Kotlin Multiplatform repos (3-day soak, kotlin-toolchain and first-party holds; see meshtastic/.github:kmp-library.json). Aether is an app built with the Kotlin Toolchain, not Gradle, so two versions live outside the catalog: Kotlin and Compose in common.module-template.yaml, read here by regex managers. The toolchain itself (kotlin_cli_version and its sha256 in the ./kotlin wrapper) is updated with `./kotlin update`, never by Renovate, because a regex cannot recompute the checksum. packageRules apply in order and the last match wins.",
+  "description": "Extends the org policy for Kotlin Multiplatform repos (3-day soak, kotlin-toolchain and first-party holds; see meshtastic/.github:kmp-library.json). Aether is an app built with the Kotlin Toolchain, not Gradle, so two versions live outside the catalog: Kotlin and Compose in common.module-template.yaml, read here by regex managers. The toolchain itself (kotlin_cli_version and its sha256 in the ./kotlin wrapper) is updated by `./kotlin update` in the nightly toolchain-update workflow, never by Renovate, because a regex cannot recompute the checksum. packageRules apply in order and the last match wins.",
   "extends": ["local>meshtastic/.github:kmp-library"],
   "customManagers": [
     {
