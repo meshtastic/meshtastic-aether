@@ -50,7 +50,7 @@ Every `PacketHeard` carries these, and each drives note and visual parameters di
 | via MQTT | shimmer layer on the note | cool tint on the ripple |
 | position, bearing, distance | pan, width, lowpass with distance | placement |
 | altitude | register offset within the band (high ground rings higher) | z lift |
-| battery level | vibrato depth and detune (a low battery wavers) | orb flicker rate |
+| battery level | vibrato depth and detune (a low battery wavers, beating at most 2 Hz) | orb flicker rate |
 | voltage, powered externally | brightness | orb brightness |
 | uptime | note length (an old node rings longer) | halo size |
 | payload size | velocity trim | ripple width |
