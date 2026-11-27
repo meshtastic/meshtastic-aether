@@ -51,7 +51,7 @@ internal class Bed(
         val levels = score.levels(at)
         if (levels.getValue(Voice.Drone) > Score.AUDIBLE_LEVEL) playDrone(at)
         if (levels.getValue(Voice.Pad) > Score.AUDIBLE_LEVEL) {
-            playPads(at, day)
+            playPads(at, day, staggered = chordDue)
             sessionVoices.play(at)
         }
     }
@@ -101,9 +101,13 @@ internal class Bed(
         )
     }
 
-    private fun playPads(at: Long, day: DayState) {
+    /**
+     * The pad's chord tones. A new chord enters [staggered], one voice after another; a plain tick strikes every tone
+     * at the tick, where its predecessor ends, so the synth carries each one on without a dip.
+     */
+    private fun playPads(at: Long, day: DayState, staggered: Boolean) {
         score.chord.voiceSemitones.forEachIndexed { i, s ->
-            val start = at + score.sec(PAD_STAGGER_SECONDS * i)
+            val start = at + if (staggered) score.sec(PAD_STAGGER_SECONDS * i) else 0L
             score.notes += NoteEvent(
                 start, Voice.Pad, score.padHz(s), PAD_VELOCITY, PAD_PANS[i], Score.PAD_SEND,
                 score.clip(start, score.sec(Score.SWELL_SECONDS)), day.brightness.toFloat(),

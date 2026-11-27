@@ -194,6 +194,7 @@ internal class SynthVoice(private val sampleRate: Int, seed: Int) {
     private var fadeGain = 1f
     private val fadeStep = (1.0 / (sampleRate * FADE_SECONDS)).toFloat()
     private var framesLeft = 0L
+    private var notePan = 0f
     private var freq = 0.0
     private var amp = 0f
     private var bright = 0f
@@ -207,11 +208,19 @@ internal class SynthVoice(private val sampleRate: Int, seed: Int) {
 
     /**
      * Starts [note] on this voice, fading the current note out over [FADE_SECONDS] first if it is still sounding.
-     * Returns false, leaving the voice untouched, when it is already fading toward another note.
+     * Returns false, leaving the voice untouched, when it is already fading toward another note. With [carryOn] the
+     * sounding bed tone instead goes on as [note]: its new length, level, send and brightness, rising back from where
+     * it is.
      */
-    fun begin(note: NoteEvent): Boolean {
+    fun begin(note: NoteEvent, carryOn: Boolean = false): Boolean {
         if (fading) return false
-        if (active) {
+        if (carryOn && active) {
+            amp = clamp(note.velocity, 0f, 1f)
+            bright = clamp(note.brightness, 0f, 1f)
+            send = clamp(note.reverbSend, 0f, 1f)
+            framesLeft = max(note.durationFrames, 1L)
+            startPadBed((framesLeft / sr).toFloat(), fromLevel = true)
+        } else if (active) {
             pending = note
             fading = true
             fadeGain = 1f
@@ -229,6 +238,7 @@ internal class SynthVoice(private val sampleRate: Int, seed: Int) {
         framesLeft = max(note.durationFrames, 1L)
         val durSec = (framesLeft / sr).toFloat()
         val pan = clamp(note.pan, -1f, 1f)
+        notePan = pan
         val angle = (pan + 1f) * PAN_TO_ANGLE
         panLeft = cos(angle)
         panRight = sin(angle)
@@ -352,40 +362,48 @@ internal class SynthVoice(private val sampleRate: Int, seed: Int) {
     }
 
     /** The voices on the chorused pad bus, whose attack and release grow with the note. */
-    private fun startPadBed(durSec: Float) {
+    /** The pan the current note asked for, -1..1. */
+    val pan: Float get() = notePan
+
+    /**
+     * The bed envelopes: a held gate whose attack and release are shares of the note. From silence the oscillators
+     * restart; [fromLevel] carries the voice on as it is.
+     */
+    private fun startPadBed(durSec: Float, fromLevel: Boolean = false) {
+        val attack = when (kind) {
+            Voice.Pad -> noteShare(durSec, fraction = 0.3f, longest = 6f)
+            Voice.Drone -> noteShare(durSec, fraction = 0.35f, longest = 8f)
+            Voice.Shimmer -> noteShare(durSec, fraction = 0.4f, longest = 6f)
+            else -> noteShare(durSec, fraction = 0.35f, longest = 2f)
+        }
+        val release = when (kind) {
+            Voice.Pad -> noteShare(durSec, fraction = 0.4f, shortest = 0.2f, longest = 8f)
+            Voice.Drone -> noteShare(durSec, fraction = 0.4f, shortest = 0.2f, longest = 10f)
+            Voice.Shimmer -> noteShare(durSec, fraction = 0.5f, shortest = 0.2f, longest = 10f)
+            else -> noteShare(durSec, fraction = 0.5f, shortest = 0.3f, longest = 4f)
+        }
+        if (fromLevel) {
+            env.regate(attack, release)
+            return
+        }
+        env.gate(attack, release)
         when (kind) {
             Voice.Pad -> {
-                env.gate(
-                    attackSec = noteShare(durSec, fraction = 0.3f, longest = 6f),
-                    releaseSec = noteShare(durSec, fraction = 0.4f, shortest = 0.2f, longest = 8f),
-                )
                 saw1.reset(0.0)
                 saw2.reset(startPhase = 0.33)
                 saw3.reset(startPhase = 0.66)
             }
             Voice.Drone -> {
-                env.gate(
-                    attackSec = noteShare(durSec, fraction = 0.35f, longest = 8f),
-                    releaseSec = noteShare(durSec, fraction = 0.4f, shortest = 0.2f, longest = 10f),
-                )
                 sine1.reset(0.0)
                 sine2.reset(startPhase = 0.25)
                 saw1.reset(0.0)
             }
             Voice.Shimmer -> {
-                env.gate(
-                    attackSec = noteShare(durSec, fraction = 0.4f, longest = 6f),
-                    releaseSec = noteShare(durSec, fraction = 0.5f, shortest = 0.2f, longest = 10f),
-                )
                 sine1.reset(0.0)
                 sine2.reset(startPhase = 0.3)
                 sine3.reset(startPhase = 0.6)
             }
             else -> {
-                env.gate(
-                    attackSec = noteShare(durSec, fraction = 0.35f, longest = 2f),
-                    releaseSec = noteShare(durSec, fraction = 0.5f, shortest = 0.3f, longest = 4f),
-                )
                 saw1.reset(0.0)
                 saw2.reset(startPhase = 0.33)
                 saw3.reset(startPhase = 0.66)

@@ -98,6 +98,43 @@ class SynthTest {
         assertTrue(db in -26.0..-14.0, "bed rms $db dBFS")
     }
 
+    /** Lowest RMS, in dB under [steady], of the 100 ms windows from [fromSec] to [toSec]. */
+    private fun deepestDip(out: FloatArray, steady: Double, fromSec: Double, toSec: Double): Double {
+        var low = Double.MAX_VALUE
+        var t = fromSec
+        while (t < toSec) {
+            low = minOf(low, out.rms((t * rate).toInt(), ((t + 0.1) * rate).toInt()))
+            t += 0.1
+        }
+        return 20 * kotlin.math.log10(steady / low)
+    }
+
+    // Regression: the bed was struck again every 20 s and each old tone released as the new one began its 6 s attack,
+    // a dip of about 8 dB at every tick (pulse20 0.3 to 1.1 on hour-long renders).
+    @Test
+    fun `a pad struck again at the same pitch and pan carries on without a dip`() {
+        val synth = Synth(rate)
+        synth.schedule(controls(0, texture()))
+        synth.schedule(notes(note(Voice.Pad, 0, 220.0, 0.5f, 20.0), note(Voice.Pad, 20L * rate, 220.0, 0.5f, 20.0)))
+        val out = synth.renderAll(30 * rate)
+        val steady = out.rms(10 * rate, 19 * rate)
+        // The pad's detuned saws beat on their own, so the tick is held to the dips of an equal stretch of steady pad.
+        val ownBeat = deepestDip(out, steady, 12.0, 18.5)
+        val atTick = deepestDip(out, steady, 19.5, 26.0)
+        assertTrue(atTick < ownBeat + 1.0, "the bed dipped $atTick dB at the tick against $ownBeat dB of its own beating")
+    }
+
+    @Test
+    fun `a pad at a new pitch starts its own voice and the old tone releases`() {
+        val synth = Synth(rate)
+        synth.schedule(controls(0, texture()))
+        synth.schedule(notes(note(Voice.Pad, 0, 220.0, 0.5f, 10.0), note(Voice.Pad, 10L * rate, 330.0, 0.5f, 20.0)))
+        val out = mono(synth.renderAll(30 * rate))
+        val old = goertzel(out, 25 * rate, 26 * rate, 220.0, rate)
+        val new = goertzel(out, 25 * rate, 26 * rate, 330.0, rate)
+        assertTrue(new > 100 * old, "330 Hz $new against the released 220 Hz $old")
+    }
+
     // Regression: a drone with a sub-octave at f/2 pushes the bed into inaudible low energy and eats headroom.
     @Test
     fun `a drone carries no energy an octave below its pitch`() {
