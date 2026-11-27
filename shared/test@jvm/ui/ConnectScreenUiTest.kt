@@ -17,9 +17,11 @@ import androidx.compose.ui.test.assertIsNotSelected
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.assertWidthIsAtLeast
 import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isSelected
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performKeyInput
@@ -59,7 +61,7 @@ class ConnectScreenUiTest {
     fun `with the focus flag the selected link type starts focused and the connect button does not`() = runComposeUiTest {
         show(focusChooser = true)
         waitForIdle()
-        onNode(hasText("Network") and hasClickAction() and isSelected()).assertIsFocused()
+        onNode(hasContentDescription("Network") and hasClickAction() and isSelected()).assertIsFocused()
         onNode(hasClickAction() and hasText("Connect over TCP")).assertIsNotFocused()
     }
 
@@ -67,7 +69,7 @@ class ConnectScreenUiTest {
     fun `without the focus flag nothing on the connect screen takes focus`() = runComposeUiTest {
         show()
         waitForIdle()
-        onNode(hasText("Network") and hasClickAction() and isSelected()).assertIsNotFocused()
+        onNode(hasContentDescription("Network") and hasClickAction() and isSelected()).assertIsNotFocused()
         onNode(hasClickAction() and hasText("Connect over TCP")).assertIsNotFocused()
     }
 
@@ -84,10 +86,10 @@ class ConnectScreenUiTest {
             }
         }
         waitForIdle()
-        onNode(hasText("Network") and hasClickAction()).assertIsSelected()
+        onNode(hasContentDescription("Network") and hasClickAction()).assertIsSelected()
         shown = LinkKind.Demo
         waitForIdle()
-        onNode(hasText("Demo") and hasClickAction()).assertIsSelected()
+        onNode(hasContentDescription("Demo") and hasClickAction()).assertIsSelected()
     }
 
     @Test
@@ -95,7 +97,7 @@ class ConnectScreenUiTest {
         val kinds = mutableListOf<LinkKind>()
         show(onKind = { kinds += it })
         waitForIdle()
-        onNode(hasText("Demo") and hasClickAction()).performClick()
+        onNode(hasContentDescription("Demo") and hasClickAction()).performClick()
         waitForIdle()
         assertEquals(listOf(LinkKind.Demo), kinds)
     }
@@ -169,7 +171,7 @@ class ConnectScreenUiTest {
     fun `changing the link kind cancels the countdown`() = runComposeUiTest {
         val pending = PendingConnect(LinkChoice.Demo, Countdown(5))
         show(pending)
-        onNodeWithText("WebSocket").performClick()
+        onNodeWithContentDescription("WebSocket").performClick()
         assertTrue(pending.countdown.cancelled)
     }
 
@@ -178,7 +180,7 @@ class ConnectScreenUiTest {
     fun `Enter in the port field chooses the Tcp link`() = runComposeUiTest {
         val chosen = mutableListOf<LinkChoice>()
         show(chosen = chosen)
-        onNodeWithText("Network").performClick()
+        onNodeWithContentDescription("Network").performClick()
         onNode(hasSetTextAction() and hasText("Port")).performClick()
         onNode(hasSetTextAction() and hasText("Port")).performKeyInput { pressKey(Key.Enter) }
         waitForIdle()
@@ -197,11 +199,11 @@ class ConnectScreenUiTest {
     @Test
     fun `the chooser exposes which kind is selected`() = runComposeUiTest {
         show()
-        onNodeWithText("Network").assertIsSelected()
-        onNodeWithText("Demo").assertIsNotSelected()
-        onNodeWithText("Demo").performClick()
-        onNodeWithText("Demo").assertIsSelected()
-        onNodeWithText("Network").assertIsNotSelected()
+        onNodeWithContentDescription("Network").assertIsSelected()
+        onNodeWithContentDescription("Demo").assertIsNotSelected()
+        onNodeWithContentDescription("Demo").performClick()
+        onNodeWithContentDescription("Demo").assertIsSelected()
+        onNodeWithContentDescription("Network").assertIsNotSelected()
     }
 
     // Regression: the error was plain colored text that a screen reader never announced.
@@ -217,11 +219,21 @@ class ConnectScreenUiTest {
     fun `no pane needs vertical scrolling at 800 by 600`() = runComposeUiTest {
         show(PendingConnect(LinkChoice.Demo, Countdown(5)), failure = "Could not reach the node")
         for (label in listOf("Demo", "Network", "WebSocket")) {
-            onNodeWithText(label).performClick()
+            onNodeWithContentDescription(label).performClick()
             waitForIdle()
             onAllNodes(SemanticsMatcher.keyIsDefined(SemanticsProperties.VerticalScrollAxisRange)).fetchSemanticsNodes().forEach {
                 assertEquals(0f, it.config[SemanticsProperties.VerticalScrollAxisRange].maxValue(), "$label pane scrolls")
             }
+        }
+    }
+
+    // Regression: the chooser clipped its labels mid-word at phone width; its buttons are icons, which must keep their names for a screen reader.
+    @Test
+    fun `at phone width every link type is an icon named by its label`() = runComposeUiTest {
+        show(width = 360, height = 720, serial = true)
+        for (label in listOf("Network", "USB", "WebSocket", "Demo")) {
+            onNodeWithText(label).assertDoesNotExist()
+            onNode(hasContentDescription(label) and hasClickAction()).assertWidthIsAtLeast(44.dp)
         }
     }
 

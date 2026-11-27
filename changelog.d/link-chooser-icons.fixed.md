@@ -1,0 +1,1 @@
+- The connect screen's link buttons are icons, so a label is never cut off on a narrow screen.

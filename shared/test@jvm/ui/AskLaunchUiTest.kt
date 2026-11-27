@@ -1,6 +1,7 @@
 package org.meshtastic.aether.ui
 
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.v2.runComposeUiTest
 import org.meshtastic.aether.AppRoot
@@ -27,7 +28,7 @@ class AskLaunchUiTest {
     @Test
     fun `ask shows the connect screen without a countdown though a link is saved`() = runComposeUiTest {
         setContent { AppRoot(settingsWithSavedLink(), FakePlatform(), ask = true) }
-        onNodeWithText("Demo").assertExists()
+        onNodeWithContentDescription("Demo").assertExists()
         onNodeWithText("Connect now").assertDoesNotExist()
     }
 
