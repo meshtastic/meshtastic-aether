@@ -25,9 +25,9 @@ jobs:
     if: github.repository == 'meshtastic/meshtastic-aether'
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    # The environment holds the Vercel token and ids, and admits only main.
+    # The environment holds the Vercel token and ids.
     environment:
-      name: web-stable
+      name: aether-stable
       url: https://aether.meshtastic.org
     steps:
       - name: Checkout the deploy action

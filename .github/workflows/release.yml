@@ -152,8 +152,7 @@ jobs:
             --notes-file artifacts/release-notes/release-notes.md \
             artifacts/android/* artifacts/desktop-*/* artifacts/web/* update.properties
 
-      # web-stable.yml deploys the release's web zip to aether.meshtastic.org. It runs on main, the
-      # only ref its web-stable environment admits.
+      # web-stable.yml deploys the release's web zip to aether.meshtastic.org. It runs on main.
       - name: Dispatch web deploy
         run: |
           if ! gh workflow run web-stable.yml --ref main -f "tag=v$VERSION"; then
