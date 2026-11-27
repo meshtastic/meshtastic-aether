@@ -23,18 +23,43 @@ enum class Density(val nodes: Int, val speed: Double) {
 }
 
 sealed interface Command {
-    data class Render(val density: Density, val hours: Double, val out: String, val seed: Long) : Command
+    data class Render(
+        val density: Density,
+        val hours: Double,
+        val out: String,
+        val seed: Long,
+        val startEpochMs: Long = START_EPOCH_MS,
+    ) : Command
 
     data class Analyze(val wav: String) : Command
 }
 
-const val USAGE = "usage: RenderWav <silent|sparse|busy> <hours> <outPath> [seed]  |  RenderWav analyze <wav>"
+const val USAGE = "usage: RenderWav <silent|sparse|busy> <hours> <outPath> [seed] [--at <UTC instant>]  |  " +
+    "RenderWav analyze <wav>"
+
+private const val AT_FLAG = "--at"
 
 /** A render takes density, hours and the output path; an optional seed follows them. */
 private const val RENDER_ARGS = 3
 private const val DEFAULT_SEED = 1L
 
-fun parseArgs(args: List<String>): Command {
+/** The `--at` instant as epoch milliseconds, or the fixed Wednesday evening start when the flag is absent. */
+private fun startEpochMs(all: List<String>, at: Int): Long {
+    if (at < 0) return START_EPOCH_MS
+    val value = all.getOrNull(at + 1)
+    require(value != null) { "$AT_FLAG needs an instant; $USAGE" }
+    return try {
+        java.time.Instant.parse(value).toEpochMilli()
+    } catch (e: java.time.format.DateTimeParseException) {
+        throw IllegalArgumentException("$AT_FLAG takes a UTC instant like 2026-11-29T23:00:00Z: '$value'", e)
+    }
+}
+
+fun parseArgs(all: List<String>): Command {
+    require(all.isNotEmpty()) { USAGE }
+    val at = all.indexOf(AT_FLAG)
+    val startEpochMs = startEpochMs(all, at)
+    val args = if (at >= 0) all.filterIndexed { i, _ -> i != at && i != at + 1 } else all
     require(args.isNotEmpty()) { USAGE }
     if (args[0] == "analyze") {
         require(args.size == 2) { USAGE }
@@ -51,7 +76,7 @@ fun parseArgs(args: List<String>): Command {
     } else {
         DEFAULT_SEED
     }
-    return Command.Render(density, hours, args[2], seed)
+    return Command.Render(density, hours, args[2], seed, startEpochMs)
 }
 
 private const val SAMPLE_RATE = 48_000
@@ -82,11 +107,16 @@ internal fun momentAt(epochMs: Long): LocalMoment {
 }
 
 @OptIn(ExperimentalCoroutinesApi::class)
-internal fun generateEvents(density: Density, seed: Long, durationMs: Long): List<MeshEvent> {
+internal fun generateEvents(
+    density: Density,
+    seed: Long,
+    durationMs: Long,
+    startEpochMs: Long = START_EPOCH_MS,
+): List<MeshEvent> {
     if (density.nodes == 0) return emptyList()
     val out = ArrayList<MeshEvent>()
     runTest(timeout = kotlin.time.Duration.INFINITE) {
-        val src = SimulatedMeshSource(seed, density.nodes, density.speed) { START_EPOCH_MS + currentTime }
+        val src = SimulatedMeshSource(seed, density.nodes, density.speed) { startEpochMs + currentTime }
         val flow: Flow<MeshEvent> = src.events
         withTimeoutOrNull(durationMs) { flow.collect { out += it } }
     }
@@ -146,7 +176,7 @@ private class PcmChunkWriter(private val raf: RandomAccessFile) {
 
 fun render(cmd: Command.Render): RenderSummary {
     val frames = (cmd.hours * SECONDS_PER_HOUR * SAMPLE_RATE).toLong()
-    val events = generateEvents(cmd.density, cmd.seed, (cmd.hours * MILLIS_PER_HOUR).toLong())
+    val events = generateEvents(cmd.density, cmd.seed, (cmd.hours * MILLIS_PER_HOUR).toLong(), cmd.startEpochMs)
     val composer = Composer(cmd.seed, SAMPLE_RATE)
     val synth = Synth(SAMPLE_RATE)
     val header = wavBytes(FloatArray(0), SAMPLE_RATE)
@@ -161,7 +191,7 @@ fun render(cmd: Command.Render): RenderSummary {
         var done = 0L
         while (done < frames) {
             val n = minOf(BLOCK.toLong(), frames - done).toInt()
-            val epoch = START_EPOCH_MS + done * MILLIS_PER_SECOND / SAMPLE_RATE
+            val epoch = cmd.startEpochMs + done * MILLIS_PER_SECOND / SAMPLE_RATE
             while (next < events.size && events[next].atMillis <= epoch) composer.onEvent(events[next++])
             val out = composer.advance(done, LOOKAHEAD, momentAt(epoch))
             notes += out.notes.size

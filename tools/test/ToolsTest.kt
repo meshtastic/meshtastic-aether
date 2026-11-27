@@ -156,3 +156,88 @@ class AnalyzerTest {
         assertTrue(stats.all { it.frames == SR.toLong() })
     }
 }
+
+class StartInstantTest {
+    @Test
+    fun `the at flag sets the render start and may sit anywhere after the density`() {
+        // 2026-11-29T23:00:00Z is the Wednesday 20:00 epoch 1_795_636_800_000 plus 4 d 3 h: a Sunday night, the Phrygian hours before the Monday key.
+        val c = parseArgs(listOf("sparse", "--at", "2026-11-29T23:00:00Z", "1", "o.wav", "3")) as Command.Render
+        assertEquals(1_795_636_800_000L + 4 * 86_400_000L + 3 * 3_600_000L, c.startEpochMs)
+        assertEquals(3L, c.seed)
+        assertEquals(7, momentAt(c.startEpochMs).dayOfWeek)
+        assertEquals(23 * 60, momentAt(c.startEpochMs).minuteOfDay)
+    }
+
+    @Test
+    fun `a missing or malformed instant is rejected`() {
+        assertFailsWith<IllegalArgumentException> { parseArgs(listOf("sparse", "1", "o.wav", "--at")) }
+        assertFailsWith<IllegalArgumentException> { parseArgs(listOf("sparse", "1", "o.wav", "--at", "sunday")) }
+    }
+}
+
+class LoudnessTest {
+    private fun sine(amplitude: Double, hz: Double, i: Int) = (amplitude * sin(2.0 * PI * hz * i / SR)).toFloat()
+
+    @Test
+    fun `a stereo 1 kHz sine at minus 23 dBFS reads minus 23 LUFS as in EBU Tech 3341`() {
+        // EBU Tech 3341 test signal 1: 1000 Hz stereo sine, -23.0 dBFS peak per channel, expected -23.0 +-0.1 LUFS.
+        val a = Math.pow(10.0, -23.0 / 20)
+        val st = analyze(SR * 20) { i -> sine(a, 1000.0, i).let { it to it } }.single()
+        assertEquals(-23.0, st.lufs, 0.1)
+    }
+
+    @Test
+    fun `quiet passages below the relative gate do not pull integrated loudness down`() {
+        // EBU Tech 3341 test signal 3: 10 s at -36 dBFS, 60 s at -23 dBFS, 10 s at -36 dBFS reads -23.0 +-0.1 LUFS.
+        val loud = Math.pow(10.0, -23.0 / 20)
+        val soft = Math.pow(10.0, -36.0 / 20)
+        val st = analyze(SR * 80) { i ->
+            val a = if (i < SR * 10 || i >= SR * 70) soft else loud
+            sine(a, 1000.0, i).let { it to it }
+        }.single()
+        assertEquals(-23.0, st.lufs, 0.1)
+    }
+
+    @Test
+    fun `a 60 Hz tone sits in the low band and a 1 kHz tone does not`() {
+        val low = analyze(SR * 4) { i -> sine(0.5, 60.0, i).let { it to it } }.single()
+        val high = analyze(SR * 4) { i -> sine(0.5, 1000.0, i).let { it to it } }.single()
+        assertTrue(low.lowBandRatio > 0.99, "60 Hz low band ${low.lowBandRatio}")
+        assertTrue(high.lowBandRatio < 0.01, "1 kHz low band ${high.lowBandRatio}")
+    }
+
+    /** A 440 Hz tone that dips 20 dB for 2 s once every [periodSec], over 300 s. */
+    private fun dips(periodSec: Double) = analyze(SR * 300) { i ->
+        val t = i.toDouble() / SR
+        val a = if (t % periodSec < 2.0) 0.05 else 0.5
+        sine(a, 440.0, i).let { it to it }
+    }.single()
+
+    /** A 440 Hz tone whose level swells smoothly between 0.1 and 0.5 once every [periodSec], over 300 s. */
+    private fun swell(periodSec: Double) = analyze(SR * 300) { i ->
+        val t = i.toDouble() / SR
+        sine(0.3 + 0.2 * kotlin.math.cos(2.0 * PI * t / periodSec), 440.0, i).let { it to it }
+    }.single()
+
+    @Test
+    fun `a level dip every 20 s scores a pulse and a smooth 17 s swell does not`() {
+        // The old bed re-struck every pad and drone on one 20 s tick. A 17 s swell still correlates at a 20 s lag
+        // (cos of 2 pi 20 over 17 is about 0.44) but more at 17 s, so it must not read as the 20 s pulse.
+        val pulse = dips(20.0).pulse20
+        val loop = swell(17.0).pulse20
+        assertTrue(pulse > 0.5, "20 s dips $pulse")
+        assertTrue(loop < 0.1, "17 s swell $loop")
+    }
+
+    @Test
+    fun `a rest 54 dB under the music counts as a rest though it is not digital silence`() {
+        // 60 s of tone, 20 s at amplitude 0.001 (54 dB down, above the absolute quiet floor), 60 s of tone.
+        val st = analyze(SR * 140) { i ->
+            val t = i.toDouble() / SR
+            val a = if (t >= 60.0 && t < 80.0) 0.001 else 0.5
+            sine(a, 440.0, i).let { it to it }
+        }.single()
+        assertEquals(0.0, st.longestQuietSec, 1e-9)
+        assertEquals(20.0, st.longestRestSec, 0.11)
+    }
+}
