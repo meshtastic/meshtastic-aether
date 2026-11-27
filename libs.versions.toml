@@ -2,8 +2,6 @@
 compose-material3 = "1.12.0-alpha03"
 # The version compose ui-backhandler 1.12.2 resolves; BackHandler is deprecated in favor of its NavigationBackHandler.
 compose-navigationevent = "1.1.0"
-# Must match settings.compose.version in common.module-template.yaml.
-compose = "1.12.2"
 meshtastic-sdk = "0.2.1-SNAPSHOT"
 androidx-activity-compose = "1.13.0"
 kotlinx-coroutines = "1.11.0"

@@ -67,6 +67,9 @@ jobs:
       - name: Tools tests
         run: ./kotlin test -m tools
 
+      - name: Build info plugin tests
+        run: ./kotlin test -m build-info
+
   ios:
     name: iOS simulator tests
     if: ${{ !github.event.repository.private }}

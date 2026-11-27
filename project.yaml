@@ -3,6 +3,10 @@ modules:
   - blescan
   - desktopApp
   - iosApp
+  - plugins/build-info
   - shared
   - tools
   - webApp
+
+plugins:
+  - ./plugins/build-info

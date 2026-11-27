@@ -1,0 +1,8 @@
+tasks:
+  generateBuildInfo:
+    action: !org.meshtastic.aether.buildinfo.generateBuildInfo
+      outputDir: ${taskOutputDir}
+
+generated:
+  sources:
+    - directory: ${tasks.generateBuildInfo.action.outputDir}

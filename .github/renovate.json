@@ -13,7 +13,7 @@
     },
     {
       "customType": "regex",
-      "description": "Compose Multiplatform in the toolchain template; it must match `compose` in libs.versions.toml, so it shares the compose-multiplatform group with the catalog entries.",
+      "description": "Compose Multiplatform in the toolchain template, which versions every $compose.* library; it shares the compose-multiplatform group with the catalog's Compose entries.",
       "managerFilePatterns": ["/(^|/)common\\.module-template\\.yaml$/"],
       "matchStrings": ["compose:\\s*\\n\\s*version:\\s*(?<currentValue>\\S+)"],
       "depNameTemplate": "org.jetbrains.compose.runtime:runtime",
