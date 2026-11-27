@@ -17,7 +17,7 @@ The score and the instruments are synthesized in pure Kotlin on every target, wi
 
 https://github.com/user-attachments/assets/1cd9f471-1ecd-4d73-8fed-7f31a4c19316
 
-The 90 second demo above has sound. Below, the scene while it listens to a generated DEF CON mesh (150 simulated nodes, from the `defcon` preset of `meshtastic-mcp replay`): each orb is a node, each ring a packet, each faint line a neighbor link, and the cloud rotates slowly in 3D.
+The 90 second demo above has sound; it was rendered offline from the in-repo simulated mesh with `./kotlin run -m tools -- video`. Below, the scene while it listens to a generated DEF CON mesh (150 simulated nodes, from the `defcon` preset of `meshtastic-mcp replay`): each orb is a node, each ring a packet, each faint line a neighbor link, and the cloud rotates slowly in 3D.
 
 ![Orbs and rings under the simulated mesh](docs/screenshots/scene-1.jpg)
 
