@@ -2,8 +2,11 @@ package org.meshtastic.aether.mesh
 
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.FlowCollector
 import kotlinx.coroutines.flow.flow
+import org.meshtastic.proto.Data
 import org.meshtastic.proto.FromRadio
+import org.meshtastic.proto.MeshPacket
 import org.meshtastic.proto.Telemetry
 import kotlin.io.encoding.Base64
 
@@ -22,61 +25,76 @@ internal class ReplayMeshSource(
     }
 
     override val events: Flow<MeshEvent> = flow {
+        val identity = ReplayIdentity()
         var previous: Long? = null
-        var ownNode: Long? = null
-        var lastSelf: MeshEvent.Self? = null
-        val seen = HashSet<Long>()
-        var started = false
         for (line in lines) {
-            val tab = line.indexOf('\t')
-            if (tab < 0) continue
-            val at = line.substring(0, tab).trim().toLongOrNull() ?: continue
-            val frame = decodeFrame(line.substring(tab + 1).trim()) ?: continue
-            if (!started) {
-                started = true
-                emit(MeshEvent.Link(LinkState.Replaying, at))
-            }
+            val (at, frame) = parseLine(line) ?: continue
+            if (previous == null) emit(MeshEvent.Link(LinkState.Replaying, at))
             val gap = previous?.let { at - it } ?: 0L
             previous = at
             if (gap > 0) delay((gap / speed).toLong())
-
-            frame.my_info?.let {
-                ownNode = it.my_node_num.toLong() and 0xFFFFFFFFL
-                if (ownNode != lastSelf?.node) emit(MeshEvent.Self(ownNode, null, null, at).also { s -> lastSelf = s })
-            }
-            frame.node_info?.let { info ->
-                val num = info.num.toLong() and 0xFFFFFFFFL
-                val node = info.toNodeSeen(seen.add(num), at)
-                emit(node)
-                if (num == ownNode && (node.name != lastSelf?.name || node.position != lastSelf?.position)) {
-                    emit(MeshEvent.Self(num, node.name, node.position, at).also { s -> lastSelf = s })
-                }
-            }
-            val packet = frame.packet ?: continue
-            val data = packet.decoded
-            if (data == null) {
-                RawFrameMapper.map(frame, at, ownNode)?.let { emit(it) }
-                continue
-            }
-            PacketMapper.map(packet, at, ownNode)?.let { heard ->
-                emit(heard)
-                packet.toNeighbors(at)?.let { emit(it) }
-                packet.toRoute(at)?.let { emit(it) }
-                if (heard.kind == PacketKind.Telemetry) {
-                    val t = try {
-                        Telemetry.ADAPTER.decode(data.payload)
-                    } catch (_: Exception) {
-                        null
-                    }
-                    t?.toEnvironment(heard.from, at)?.let { emit(it) }
-                    t?.toHealth(heard.from, at)?.let { emit(it) }
-                    if (heard.from == ownNode) {
-                        t?.toVitals(at)?.let { emit(it) }
-                        t?.toStats(at)?.let { emit(it) }
-                    }
-                }
-            }
+            emitFrame(frame, at, identity)
         }
+    }
+}
+
+/** What the replay has learned about the capturing node so far. */
+private class ReplayIdentity {
+    var ownNode: Long? = null
+    var lastSelf: MeshEvent.Self? = null
+    val seen = HashSet<Long>()
+}
+
+/** The timestamp and frame of one capture line; null when the line is malformed. */
+private fun parseLine(line: String): Pair<Long, FromRadio>? {
+    val tab = line.indexOf('\t')
+    val at = if (tab < 0) null else line.substring(0, tab).trim().toLongOrNull()
+    val frame = at?.let { decodeFrame(line.substring(tab + 1).trim()) }
+    return if (at == null || frame == null) null else at to frame
+}
+
+private suspend fun FlowCollector<MeshEvent>.emitFrame(frame: FromRadio, at: Long, identity: ReplayIdentity) {
+    frame.my_info?.let {
+        val own = it.my_node_num.toNodeNum()
+        identity.ownNode = own
+        if (own != identity.lastSelf?.node) {
+            emit(MeshEvent.Self(own, null, null, at).also { s -> identity.lastSelf = s })
+        }
+    }
+    frame.node_info?.let { info ->
+        val num = info.num.toNodeNum()
+        val node = info.toNodeSeen(identity.seen.add(num), at)
+        emit(node)
+        val last = identity.lastSelf
+        if (num == identity.ownNode && (node.name != last?.name || node.position != last?.position)) {
+            emit(MeshEvent.Self(num, node.name, node.position, at).also { s -> identity.lastSelf = s })
+        }
+    }
+    val packet = frame.packet ?: return
+    val data = packet.decoded
+    if (data == null) {
+        RawFrameMapper.map(frame, at, identity.ownNode)?.let { emit(it) }
+    } else {
+        emitDecoded(packet, data, at, identity.ownNode)
+    }
+}
+
+private suspend fun FlowCollector<MeshEvent>.emitDecoded(packet: MeshPacket, data: Data, at: Long, ownNode: Long?) {
+    val heard = PacketMapper.map(packet, at, ownNode) ?: return
+    emit(heard)
+    packet.toNeighbors(at)?.let { emit(it) }
+    packet.toRoute(at)?.let { emit(it) }
+    if (heard.kind != PacketKind.Telemetry) return
+    val t = try {
+        Telemetry.ADAPTER.decode(data.payload)
+    } catch (_: Exception) {
+        null
+    }
+    t?.toEnvironment(heard.from, at)?.let { emit(it) }
+    t?.toHealth(heard.from, at)?.let { emit(it) }
+    if (heard.from == ownNode) {
+        t?.toVitals(at)?.let { emit(it) }
+        t?.toStats(at)?.let { emit(it) }
     }
 }
 

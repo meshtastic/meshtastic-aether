@@ -33,14 +33,14 @@ private class RadioClientFeed(private val client: RadioClient) : SdkFeed {
     override val nodes get() = client.nodes
     override val connection get() = client.connection
     override val ownNode get() = client.ownNode
-    override fun ownNodeNum(): Long? = client.ownNode.value?.num?.toLong()?.and(0xFFFFFFFFL)
+    override fun ownNodeNum(): Long? = client.ownNode.value?.num?.toNodeNum()
     override fun telemetry(node: Long): Flow<Telemetry> = client.telemetry.observe(NodeId(node.toInt()))
 }
 
 /**
  * Live mesh through the SDK. After every `Connected` the source emits state-only events
- * (`NodeSeen`, `Environment`, `Health`, `Vitals`, `Stats`, `Self`) and no `PacketHeard`, `Neighbors` or `Route` for [warmUpMillis], because the
- * node snapshot and retained handshake packets flush at that point.
+ * (`NodeSeen`, `Environment`, `Health`, `Vitals`, `Stats`, `Self`) and no `PacketHeard`, `Neighbors` or `Route` for
+ * [warmUpMillis], because the node snapshot and retained handshake packets flush at that point.
  */
 internal class SdkMeshSource internal constructor(
     private val feed: SdkFeed,
@@ -74,7 +74,7 @@ internal class SdkMeshSource internal constructor(
             feed.ownNode.collect { info ->
                 val seen = info?.toNodeSeen(false, nowMillis()) ?: return@collect
                 val prev = last
-                if (prev == null || prev.node != seen.node || prev.name != seen.name || prev.position != seen.position) {
+                if (prev == null || !prev.sameAs(seen)) {
                     MeshEvent.Self(seen.node, seen.name, seen.position, nowMillis()).also { last = it; send(it) }
                 }
             }
@@ -105,7 +105,7 @@ internal class SdkMeshSource internal constructor(
     private suspend fun observeNodes(scope: kotlinx.coroutines.CoroutineScope, emit: suspend (MeshEvent) -> Unit) {
         val watching = HashMap<Long, Job>()
         suspend fun seen(info: NodeInfo) {
-            val num = info.num.toLong() and 0xFFFFFFFFL
+            val num = info.num.toNodeNum()
             val first = seenThisSession.add(num)
             emit(info.toNodeSeen(first, nowMillis()))
             if (num !in watching) {
@@ -127,7 +127,7 @@ internal class SdkMeshSource internal constructor(
                 is NodeChange.Added -> seen(change.node)
                 is NodeChange.Updated -> seen(change.node)
                 is NodeChange.Removed -> {
-                    val num = change.nodeId.raw.toLong() and 0xFFFFFFFFL
+                    val num = change.nodeId.raw.toNodeNum()
                     watching.remove(num)?.cancel()
                     emit(MeshEvent.NodeGone(num, nowMillis()))
                 }
@@ -136,6 +136,10 @@ internal class SdkMeshSource internal constructor(
         }
     }
 }
+
+/** True when [seen] names the same node, name and position as this `Self`: nothing new to announce. */
+private fun MeshEvent.Self.sameAs(seen: MeshEvent.NodeSeen) =
+    node == seen.node && name == seen.name && position == seen.position
 
 /** How long after a connect the source reports state only: the node snapshot and retained packets flush then. */
 internal const val WARM_UP_MILLIS = 5_000L

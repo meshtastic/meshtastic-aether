@@ -20,7 +20,8 @@ internal fun Telemetry.toEnvironment(node: Long, nowMillis: Long): MeshEvent.Env
     )
 }
 
-private fun Int.unsigned(): Long = toLong() and 0xFFFFFFFFL
+/** A proto `uint32` counter, which Wire reads as a signed Int, as its unsigned value. */
+private fun Int.unsigned(): Long = toUInt().toLong()
 
 /** DeviceMetrics of any node; null when the packet carries none of battery, voltage, uptime and channel use. */
 internal fun Telemetry.toHealth(node: Long, nowMillis: Long): MeshEvent.Health? {
@@ -29,8 +30,12 @@ internal fun Telemetry.toHealth(node: Long, nowMillis: Long): MeshEvent.Health? 
     val volts = d.voltage
     val uptime = d.uptime_seconds?.unsigned()
     val channel = d.channel_utilization
-    if (battery == null && volts == null && uptime == null && channel == null) return null
-    return MeshEvent.Health(node, battery, volts, uptime, nowMillis, channel, d.air_util_tx)
+    val reportsNothing = (battery ?: volts ?: uptime ?: channel) == null
+    return if (reportsNothing) {
+        null
+    } else {
+        MeshEvent.Health(node, battery, volts, uptime, nowMillis, channel, d.air_util_tx)
+    }
 }
 
 /** LocalStats of our own node; zero node counts and a zero noise floor are the proto's "not reported". */
@@ -56,12 +61,18 @@ internal fun Telemetry.toVitals(nowMillis: Long): MeshEvent.Vitals? {
 internal fun NodeInfo.toNodeSeen(first: Boolean, nowMillis: Long): MeshEvent.NodeSeen {
     val lat = position?.latitude_i
     val lon = position?.longitude_i
-    val geo = if (lat != null && lon != null && (lat != 0 || lon != 0)) {
-        GeoPoint(lat * 1e-7, lon * 1e-7, position?.altitude)
-    } else {
+    val geo = if (lat == null || lon == null || isNullIsland(lat, lon)) {
         null
+    } else {
+        GeoPoint(lat * DEGREES_PER_E7, lon * DEGREES_PER_E7, position?.altitude)
     }
     val name = user?.long_name?.takeIf { it.isNotBlank() } ?: user?.short_name?.takeIf { it.isNotBlank() }
     val hw = user?.hw_model?.takeIf { it != HardwareModel.UNSET }?.name
-    return MeshEvent.NodeSeen(num.toLong() and 0xFFFFFFFFL, name, geo, first, nowMillis, role = user?.role?.name, hardware = hw)
+    return MeshEvent.NodeSeen(num.toNodeNum(), name, geo, first, nowMillis, role = user?.role?.name, hardware = hw)
 }
+
+/** 0, 0 is what an unset position reads as. */
+private fun isNullIsland(latE7: Int, lonE7: Int) = latE7 == 0 && lonE7 == 0
+
+/** `latitude_i` and `longitude_i` are degrees times 1e7. */
+private const val DEGREES_PER_E7 = 1e-7
