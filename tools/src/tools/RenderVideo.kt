@@ -25,14 +25,25 @@ import org.meshtastic.aether.synth.wavBytes
 import org.meshtastic.aether.visual.AmbientScene
 import java.io.Closeable
 import java.io.File
+import java.io.IOException
 import java.io.RandomAccessFile
+import kotlin.math.roundToInt
 import kotlin.time.Duration
 
 private const val VIDEO_SAMPLE_RATE = 48_000
+
+/** The README screenshots' size. */
+private const val DEFAULT_WIDTH = 1600
+private const val DEFAULT_HEIGHT = 1075
 private const val LOOKAHEAD_MS = 400
 private const val MILLIS_PER_SECOND = 1000L
 private const val NANOS_PER_SECOND = 1_000_000_000L
-private const val BYTES_PER_PIXEL = 4
+
+/** Rounds of draining due work the engine gets to start its sink before the render gives up. */
+private const val START_DRAINS = 16
+
+/** Above this the picture period is under a fifth of the composer's tick. */
+private const val MAX_FPS = 240
 
 /** H.264 in 4:2:0 needs even sides; an odd size loses its last row or column. */
 private const val EVEN_CROP = "crop=trunc(iw/2)*2:trunc(ih/2)*2:0:0"
@@ -75,29 +86,33 @@ data class VideoSpec(
     val seed: Long = 1L,
     val startEpochMs: Long = START_EPOCH_MS,
     val fps: Int = 30,
-    val width: Int = 1600,
-    val height: Int = 1075,
+    val width: Int = DEFAULT_WIDTH,
+    val height: Int = DEFAULT_HEIGHT,
     val warmupSeconds: Double = 45.0,
     val look: PaletteChoice = PaletteChoice.Standard,
 ) {
     val audioFramesPerPicture: Int get() = VIDEO_SAMPLE_RATE / fps
-    val warmupPictures: Int get() = (warmupSeconds * fps).toInt()
-    val pictures: Int get() = (seconds * fps).toInt()
+    val warmupPictures: Int get() = (warmupSeconds * fps).roundToInt()
+    val pictures: Int get() = (seconds * fps).roundToInt()
+
+    /** Where the encoded video starts in the audio: the warm-up's whole pictures, not its nominal seconds. */
+    val warmupSecondsExact: Double get() = warmupPictures.toDouble() / fps
 }
 
-/** Where a render ended: audio frames pulled and the engine's virtual clock, which must agree. */
+/** Where a render ended: audio frames pulled, and the virtual clock, which stands on the last picture's frame. */
 data class RenderClock(val audioFrames: Long, val virtualMillis: Long)
 
 /**
  * Runs the app's own [AmbientEngine] on a virtual clock over the simulated mesh and draws [AmbientScene] offscreen
- * at exactly [VideoSpec.fps]. Every audio block goes to [onAudio], from the first frame of the warm-up; each picture
- * after the warm-up goes to [onPicture] as BGRA bytes, top row first.
+ * at exactly [VideoSpec.fps]. Every audio block goes to [onAudio], from the first frame of the warm-up. Each picture
+ * after the warm-up goes to [onPicture] as BGRA bytes, top row first, with its index and the playback frame it was
+ * drawn at: picture k shows audio frame k times the frames per picture, before that picture's block is pulled.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 fun renderFrames(
     spec: VideoSpec,
     onAudio: (FloatArray, Int) -> Unit,
-    onPicture: (ByteArray, Int) -> Unit,
+    onPicture: (ByteArray, Int, Long) -> Unit,
 ): RenderClock {
     require(VIDEO_SAMPLE_RATE % spec.fps == 0) { "fps must divide $VIDEO_SAMPLE_RATE" }
     var clock = RenderClock(0L, 0L)
@@ -109,10 +124,9 @@ fun renderFrames(
         val engine = AmbientEngine(source, sink, spec.seed, timing)
         engine.volume = 1f
         backgroundScope.launch { engine.run() }
-        while (!sink.started) {
-            advanceTimeBy(1)
-            runCurrent()
-        }
+        // The first composer tick and the sink's start happen at time zero; draining what is due is enough.
+        repeat(START_DRAINS) { if (!sink.started) runCurrent() }
+        check(sink.started) { "the engine never started its sink" }
         val scene = ImageComposeScene(spec.width, spec.height, Density(1f)) {
             CompositionLocalProvider(LocalAmbientPalette provides spec.look.palette) {
                 AmbientScene(engine, Modifier.fillMaxSize())
@@ -134,57 +148,83 @@ private fun TestScope.drive(
     sink: OfflineSink,
     scene: ImageComposeScene,
     onAudio: (FloatArray, Int) -> Unit,
-    onPicture: (ByteArray, Int) -> Unit,
+    onPicture: (ByteArray, Int, Long) -> Unit,
 ) {
     val block = FloatArray(spec.audioFramesPerPicture * 2)
     val bitmap = Bitmap()
-    for (i in 0 until spec.warmupPictures + spec.pictures) {
-        sink.pull(block, spec.audioFramesPerPicture)
-        onAudio(block, spec.audioFramesPerPicture)
-        advanceTimeBy(sink.playbackFrame() * MILLIS_PER_SECOND / VIDEO_SAMPLE_RATE - currentTime)
-        runCurrent()
-        val nanos = i * NANOS_PER_SECOND / spec.fps
-        if (i < spec.warmupPictures) {
-            scene.render(nanos).close()
-            continue
+    try {
+        bitmap.allocN32Pixels(spec.width, spec.height)
+        for (i in 0 until spec.warmupPictures + spec.pictures) {
+            val shown = sink.playbackFrame()
+            advanceTimeBy((shown * MILLIS_PER_SECOND / VIDEO_SAMPLE_RATE - currentTime).coerceAtLeast(0))
+            runCurrent()
+            val keep = i >= spec.warmupPictures
+            val bgra = picture(scene, i * NANOS_PER_SECOND / spec.fps, if (keep) bitmap else null)
+            if (bgra != null) onPicture(bgra, i - spec.warmupPictures, shown)
+            sink.pull(block, spec.audioFramesPerPicture)
+            onAudio(block, spec.audioFramesPerPicture)
         }
-        scene.render(nanos).use { image ->
-            bitmap.allocN32Pixels(image.width, image.height)
-            image.readPixels(bitmap)
-            val bgra = bitmap.readPixels() ?: ByteArray(image.width * image.height * BYTES_PER_PIXEL)
-            onPicture(bgra, i - spec.warmupPictures)
-        }
+    } finally {
+        bitmap.close()
     }
-    bitmap.close()
 }
 
-/** Renders [spec] to [out] as H.264 and AAC through ffmpeg, which must be on the PATH. */
+private fun ffmpeg(vararg args: String): Process = try {
+    ProcessBuilder("ffmpeg", "-y", "-v", "error", *args)
+        .redirectErrorStream(true).redirectOutput(ProcessBuilder.Redirect.INHERIT).start()
+} catch (e: IOException) {
+    throw IllegalStateException("ffmpeg is not on the PATH", e)
+}
+
+/** Draws one frame at [nanos]; its BGRA bytes when [into] is given, else null (a warm-up frame). */
+private fun picture(scene: ImageComposeScene, nanos: Long, into: Bitmap?): ByteArray? =
+    scene.render(nanos).use { image ->
+        if (into == null) return@use null
+        check(image.readPixels(into)) { "could not read the picture at $nanos ns" }
+        checkNotNull(into.readPixels())
+    }
+
+/** Streams [spec]'s pictures into [encoder] and its audio into [wav]; the picture count. */
+private fun encodePictures(spec: VideoSpec, encoder: Process, wav: File): Int {
+    var pictures = 0
+    try {
+        WavStream(wav, VIDEO_SAMPLE_RATE).use { audio ->
+            encoder.outputStream.buffered().use { video ->
+                renderFrames(spec, onAudio = audio::write) { bgra, _, _ ->
+                    video.write(bgra)
+                    pictures++
+                }
+            }
+        }
+    } catch (e: IOException) {
+        throw IllegalStateException("ffmpeg stopped while encoding (exit ${encoder.waitFor()})", e)
+    }
+    return pictures
+}
+
+/** Renders [spec] to [out] as H.264 and AAC through ffmpeg, which must be on the PATH. Returns the picture count. */
 fun renderVideo(spec: VideoSpec, out: String): Int {
     val wav = File("$out.wav")
     val silent = File("$out.video.mp4")
-    val encoder = ProcessBuilder(
-        "ffmpeg", "-y", "-v", "error", "-f", "rawvideo", "-pix_fmt", "bgra", "-s", "${spec.width}x${spec.height}",
-        "-r", spec.fps.toString(), "-i", "-", "-vf", EVEN_CROP, "-c:v", "libx264", "-preset", "slow", "-crf", "22",
-        "-pix_fmt", "yuv420p", silent.path,
-    ).redirectErrorStream(true).redirectOutput(ProcessBuilder.Redirect.INHERIT).start()
-    var pictures = 0
-    WavStream(wav, VIDEO_SAMPLE_RATE).use { audio ->
-        encoder.outputStream.buffered().use { video ->
-            renderFrames(spec, onAudio = audio::write) { bgra, _ ->
-                video.write(bgra)
-                pictures++
-            }
-        }
+    val encoder = ffmpeg(
+        "-f", "rawvideo", "-pix_fmt", "bgra", "-s", "${spec.width}x${spec.height}", "-r", spec.fps.toString(),
+        "-i", "-", "-vf", EVEN_CROP, "-c:v", "libx264", "-preset", "slow", "-crf", "22", "-pix_fmt", "yuv420p",
+        silent.path,
+    )
+    val pictures: Int
+    try {
+        pictures = encodePictures(spec, encoder, wav)
+        check(encoder.waitFor() == 0) { "ffmpeg failed encoding the pictures" }
+        val mux = ffmpeg(
+            "-i", silent.path, "-ss", spec.warmupSecondsExact.toString(), "-i", wav.path, "-map", "0:v", "-map", "1:a",
+            "-c:v", "copy", "-c:a", "aac", "-b:a", "192k", "-shortest", "-movflags", "+faststart", out,
+        )
+        check(mux.waitFor() == 0) { "ffmpeg failed muxing the audio" }
+    } finally {
+        encoder.destroy()
+        silent.delete()
+        wav.delete()
     }
-    check(encoder.waitFor() == 0) { "ffmpeg failed encoding the pictures" }
-    val mux = ProcessBuilder(
-        "ffmpeg", "-y", "-v", "error", "-i", silent.path, "-ss", spec.warmupSeconds.toString(), "-i", wav.path,
-        "-map", "0:v", "-map", "1:a", "-c:v", "copy", "-c:a", "aac", "-b:a", "192k", "-shortest",
-        "-movflags", "+faststart", out,
-    ).redirectErrorStream(true).redirectOutput(ProcessBuilder.Redirect.INHERIT).start()
-    check(mux.waitFor() == 0) { "ffmpeg failed muxing the audio" }
-    silent.delete()
-    wav.delete()
     return pictures
 }
 
@@ -261,7 +301,7 @@ private fun Map<String, String>.number(name: String, default: Double): Double {
 }
 
 private fun Map<String, String>.size(): List<Int> {
-    val size = (this["size"] ?: "1600x1075").split("x").map { it.toIntOrNull() ?: 0 }
+    val size = (this["size"] ?: "${DEFAULT_WIDTH}x$DEFAULT_HEIGHT").split("x").map { it.toIntOrNull() ?: 0 }
     require(size.size == 2 && size.all { it > 0 }) { "--size takes WxH, like 1600x1075" }
     return size
 }
@@ -289,6 +329,9 @@ internal fun parseVideoArgs(all: List<String>): Command.Video {
         warmupSeconds = flags.number("warmup", defaults.warmupSeconds),
         look = look,
     )
-    require(spec.fps > 0 && VIDEO_SAMPLE_RATE % spec.fps == 0) { "--fps must divide $VIDEO_SAMPLE_RATE" }
+    require(spec.fps in 1..MAX_FPS && VIDEO_SAMPLE_RATE % spec.fps == 0) {
+        "--fps must divide $VIDEO_SAMPLE_RATE and be at most $MAX_FPS"
+    }
+    require(spec.speed > 0.0) { "--speed must be above zero" }
     return Command.Video(spec, positional[1])
 }

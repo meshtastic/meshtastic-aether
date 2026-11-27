@@ -31,32 +31,66 @@ class OfflineSinkTest {
 }
 
 class RenderFramesTest {
-    // One picture per 1/fps of audio, none during the warm-up, the scene moving between pictures and the music still
-    // playing at the end: a frozen frame means the offscreen scene never saw the clock advance, and silence means the
-    // engine's virtual time stood still.
-    @Test
-    fun `a render gives one moving picture per frame period after the warm-up and audio for all of it`() {
-        val spec = VideoSpec(seconds = 1.0, fps = 10, width = 64, height = 43, warmupSeconds = 0.5)
-        var audioFrames = 0L
-        var lateEnergy = 0.0
+    private class Run(val audio: FloatArray, val pictures: List<ByteArray>, val shownAt: List<Long>, val clock: RenderClock)
+
+    private fun render(spec: VideoSpec): Run {
+        val audio = ArrayList<Float>()
         val pictures = ArrayList<ByteArray>()
-        val clock = renderFrames(spec, onAudio = { block, n ->
-            if (audioFrames >= 48_000) for (i in 0 until n * 2) lateEnergy += block[i] * block[i]
-            audioFrames += n
-        }) { bgra, index ->
+        val shownAt = ArrayList<Long>()
+        val clock = renderFrames(spec, onAudio = { block, n -> for (i in 0 until n * 2) audio += block[i] }) { bgra, index, at ->
             assertEquals(pictures.size, index)
             pictures += bgra.copyOf()
+            shownAt += at
         }
-        assertEquals(10, pictures.size)
-        assertEquals((1.5 * 48_000).toLong(), audioFrames)
-        assertTrue(pictures.all { it.size == 64 * 43 * 4 })
-        assertTrue(pictures.zipWithNext().count { (a, b) -> !a.contentEquals(b) } >= 8, "the scene stood still")
-        val rms = kotlin.math.sqrt(lateEnergy / (0.5 * 48_000 * 2))
-        assertTrue(rms > 1e-3, "the last half second is silent: rms $rms")
-        // The composer and the mesh run on virtual time; it must follow the audio to within one frame period.
-        assertEquals(clock.audioFrames, audioFrames)
-        val drift = kotlin.math.abs(clock.virtualMillis - audioFrames * 1000 / 48_000)
-        assertTrue(drift <= 100, "virtual time ${clock.virtualMillis} ms")
+        return Run(audio.toFloatArray(), pictures, shownAt, clock)
+    }
+
+    private val spec = VideoSpec(seconds = 1.0, fps = 30, width = 64, height = 43, warmupSeconds = 0.5)
+
+    // Picture k must show audio frame (warm-up + k) times the frames per picture, before that picture's block plays:
+    // drawn after the pull, every ripple led its note by one picture. The engine's virtual clock must sit on the audio
+    // clock exactly, including the 33.3 ms picture period at 30 fps.
+    @Test
+    fun `each picture shows its own audio frame and the virtual clock sits on the audio clock`() {
+        val run = render(spec)
+        val perPicture = 48_000 / 30
+        assertEquals(30, run.pictures.size)
+        assertEquals(List(30) { (15L + it) * perPicture }, run.shownAt)
+        assertEquals(45L * perPicture, run.clock.audioFrames)
+        assertEquals(45L * perPicture * 2, run.audio.size.toLong())
+        // The last block plays after the last picture, so the clock stands on that picture's frame.
+        assertEquals(run.shownAt.last() * 1000 / 48_000, run.clock.virtualMillis)
+        assertTrue(run.pictures.all { it.size == 64 * 43 * 4 })
+        assertTrue(run.pictures.zipWithNext().count { (a, b) -> !a.contentEquals(b) } >= 25, "the scene stood still")
+    }
+
+    // A render runs only on its virtual clock and seed: any real clock or dispatcher left in the engine makes two runs
+    // of one spec differ.
+    @Test
+    fun `two renders of one spec are identical in sound and picture`() {
+        val a = render(spec)
+        val b = render(spec)
+        assertContentEquals(a.audio, b.audio)
+        assertEquals(a.pictures.size, b.pictures.size)
+        a.pictures.indices.forEach { assertContentEquals(a.pictures[it], b.pictures[it], "picture $it") }
+    }
+}
+
+class WavStreamTest {
+    @Test
+    fun `a WAV written in blocks with a partial last block equals the WAV of all the samples at once`() {
+        val first = FloatArray(8) { it / 10f - 0.4f }
+        val second = FloatArray(8) { 0.3f - it / 20f }
+        val file = kotlin.io.path.createTempFile("wavstream", ".wav").toFile()
+        try {
+            WavStream(file, 48_000).use {
+                it.write(first, 4)
+                it.write(second, 3)
+            }
+            assertContentEquals(org.meshtastic.aether.synth.wavBytes(first + second.copyOf(6), 48_000), file.readBytes())
+        } finally {
+            file.delete()
+        }
     }
 }
 
@@ -89,6 +123,8 @@ class VideoArgsTest {
             listOf("video", "90", "o.mp4", "--look", "neon"),
             listOf("video", "90", "o.mp4", "--loud", "1"),
             listOf("video", "90", "o.mp4", "--nodes"),
+            listOf("video", "90", "o.mp4", "--speed", "0"),
+            listOf("video", "90", "o.mp4", "--fps", "480"),
         )) {
             assertFailsWith<IllegalArgumentException>("$bad") { parseArgs(bad) }
         }
