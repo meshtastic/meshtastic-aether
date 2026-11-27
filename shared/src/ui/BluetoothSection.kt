@@ -20,6 +20,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -29,18 +30,32 @@ import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.meshtastic.aether.ble.BleRadio
 import org.meshtastic.aether.ble.RadioList
+import org.meshtastic.aether.ble.bleChooser
 import org.meshtastic.aether.ble.bleScan
 import org.meshtastic.aether.ble.ensureBlePermissions
 import org.meshtastic.aether.log.Log
 
-/** Scan for Meshtastic radios over Bluetooth and pick one; the scan stops when the section leaves the screen. */
+/**
+ * Scan for Meshtastic radios over Bluetooth and pick one; the scan stops when the section leaves the screen. Where the
+ * platform has its own [chooser] (the browser), one button opens it instead.
+ */
 @Composable
-internal fun BluetoothSection(onPick: (BleRadio) -> Unit, modifier: Modifier = Modifier, onInteract: () -> Unit = {}) {
+internal fun BluetoothSection(
+    onPick: (BleRadio) -> Unit,
+    modifier: Modifier = Modifier,
+    onInteract: () -> Unit = {},
+    chooser: (suspend () -> BleRadio?)? = remember { bleChooser() },
+) {
+    if (chooser != null) {
+        ChooserSection(chooser, onPick, modifier, onInteract)
+        return
+    }
     var scanning by remember { mutableStateOf(false) }
     var radios by remember { mutableStateOf(emptyList<BleRadio>()) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -103,6 +118,42 @@ internal fun BluetoothSection(onPick: (BleRadio) -> Unit, modifier: Modifier = M
             }
         }
         for (radio in radios) RadioRow(radio, onPick)
+    }
+}
+
+/** One button that opens the platform's radio chooser; a dismissed chooser is not an error. */
+@Composable
+private fun ChooserSection(chooser: suspend () -> BleRadio?, onPick: (BleRadio) -> Unit, modifier: Modifier, onInteract: () -> Unit) {
+    val scope = rememberCoroutineScope()
+    var choosing by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+
+    Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        FilledTonalButton(
+            {
+                onInteract()
+                error = null
+                choosing = true
+                // Undispatched, so the browser still sees the click as the gesture that opens its chooser.
+                scope.launch(start = CoroutineStart.UNDISPATCHED) {
+                    try {
+                        val radio = chooser()
+                        Log.i("ble", if (radio == null) "chooser dismissed" else "chose ${radio.address}")
+                        radio?.let(onPick)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Throwable) {
+                        Log.e("ble", "chooser failed", e)
+                        error = e.message ?: e::class.simpleName
+                    } finally {
+                        choosing = false
+                    }
+                }
+            },
+            Modifier.fillMaxWidth().heightIn(min = MinTouch),
+            enabled = !choosing,
+        ) { Text("Choose a Bluetooth radio") }
+        error?.let { ErrorSurface(it) }
     }
 }
 

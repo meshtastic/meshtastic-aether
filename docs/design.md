@@ -37,12 +37,12 @@ Here the mesh is the lobby. The app plays a slow autonomous piece that sounds go
 
 ## Constraints
 
-- Toolchain: Kotlin 2.4.21 (the SDK's pin, so its klibs link), Compose Multiplatform 1.12.2, and the SDK at `0.2.1-SNAPSHOT` from the Sonatype snapshot repository until 0.3.0, because 0.2.0 has no JS or Wasm klibs, no `transport-websocket` and no `fromRadio`. Only `core`, `testing` and `transport-websocket` publish `js` and `wasmJs` klibs. SDK modules may need `-Xskip-prerelease-check`, as the SDK's `samples/parity-app` does.
+- Toolchain: Kotlin 2.4.21 (the SDK's pin, so its klibs link), Compose Multiplatform 1.12.2, and the SDK at `0.2.1-SNAPSHOT` from the Sonatype snapshot repository until 0.3.0, because 0.2.0 has no JS or Wasm klibs, no `transport-websocket` and no `fromRadio`. `core`, `testing`, `transport-websocket` and `transport-ble` publish `js` and `wasmJs` klibs. SDK modules may need `-Xskip-prerelease-check`, as the SDK's `samples/parity-app` does.
 - Build: the JetBrains Kotlin Toolchain (alpha), not Gradle. The `./kotlin` and `kotlin.bat` wrappers pin the toolchain version (0.14.1). `project.yaml` lists the modules, `common.module-template.yaml` holds the Kotlin version, the Compose version and the snapshot repository for every module, and versions live in a root `libs.versions.toml`.
   - Compose Multiplatform builds for jvm, android and wasmJs and links the SDK on each. The shared module and its tests also compile and run on the iOS simulator when built on a Mac.
   - A Linux `build` skips Apple targets silently, so iOS builds on a Mac only. Tests cannot read files on the iOS simulator, so fixtures are Kotlin constants.
   - Commands: `./kotlin build`, `./kotlin test -m <module> -p <platform>`, `./kotlin check`, `./kotlin run -m <module>`.
-- Browser link: the SDK's WebSocket transport needs a node that serves the phone API over WebSocket (firmware PRs #12412-12414), so WebSocket is the web target's only link.
+- Browser links: the SDK's WebSocket transport needs a node that serves the phone API over WebSocket (firmware PRs #12412-12414). Bluetooth goes through Web Bluetooth, which only Chrome and Edge have, only on a secure page, and which offers a device chooser opened from a gesture instead of a scan.
 - Browser audio needs a user gesture.
 - Dependencies: only the SDK, kotlinx-coroutines and JetBrains Compose. Anything else is written in the repository on platform APIs.
 - The SDK's Wasm engine is tested on Node.js only, never in a browser.
@@ -100,7 +100,7 @@ Links per target, picked on the connect screen:
 | Desktop | TCP, Bluetooth, USB serial, WebSocket |
 | Android | Bluetooth, TCP, USB serial, WebSocket |
 | iOS | Bluetooth, TCP, WebSocket |
-| Web | WebSocket |
+| Web | WebSocket, Bluetooth (Chrome and Edge) |
 | All | Demo, replay |
 
 Desktop, Android (including TV) and iOS are the unattended install targets: the last demo, TCP, USB or WebSocket link is remembered and reconnects after a cancelable countdown, and audio starts on launch. Web is a demo and development target: it opens on a "tap to start" screen.

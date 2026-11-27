@@ -57,11 +57,11 @@ To record the sound for a video, start the desktop app with `AETHER_RECORD_AUDIO
 
 ## Connect
 
-The connect screen opens on a connected group of toggle buttons that picks one link type at a time: Network (TCP), Bluetooth, USB, WebSocket and Demo. A target lists only the types it supports: Network is desktop, Android and iOS, Bluetooth is not on web, and USB is desktop and Android. The group opens on the saved link's type while its countdown runs, else on the type you last chose, else on Network (WebSocket on web). On a TV or with a keyboard, focus starts on the selected type.
+The connect screen opens on a connected group of toggle buttons that picks one link type at a time: Network (TCP), Bluetooth, USB, WebSocket and Demo. A target lists only the types it supports: Network is desktop, Android and iOS, USB is desktop and Android, and Bluetooth is everywhere but a browser without Web Bluetooth (it needs Chrome or Edge). The group opens on the saved link's type while its countdown runs, else on the type you last chose, else on the first type listed: Network, or on web Bluetooth where the browser has it and WebSocket where it does not. On a TV or with a keyboard, focus starts on the selected type.
 
 - Demo: a scripted five-minute mesh, no node needed. The button reads Start the demo, and `--demo` does the same at launch.
 - Network: a host field and a port field (digits only; a blank port means 4403), then Connect over TCP. `--tcp host[:port]` connects at launch on desktop, and the `tcp` intent extra does the same on Android.
-- Bluetooth: Scan for Bluetooth radios lists each node by name, the last five characters of its address and a signal word (Strong, Good, Fair, Weak or Signal unknown). Tapping a radio connects, so this pane has no connect button.
+- Bluetooth: Scan for Bluetooth radios lists each node by name, the last five characters of its address and a signal word (Strong, Good, Fair, Weak or Signal unknown). Tapping a radio connects, so this pane has no connect button. A browser cannot scan, so on web the pane has one button, Choose a Bluetooth radio, that opens the browser's own device chooser, and picking a radio there connects.
 - USB: Find USB radios lists the serial ports present, likely Meshtastic boards first, each by its board name (on Linux from its `/dev/serial/by-id` name, since many boards report the same USB product) and port. Tapping one connects, and the link is saved: on Linux it is saved by its stable `/dev/serial/by-id` path. Android asks for USB permission for each device the first time. `--serial PORT` opens a port at launch.
 - WebSocket: a `ws://` or `wss://` address, prefilled with the firmware's WebSocket phone API: `wss://meshtastic.local/api/v1/ws` on web, `ws://meshtastic.local/api/v1/ws` in the native apps, which would refuse a stock node's self-signed certificate (ESP32 firmware serves it on ports 443 and 80, meshtasticd on its web server port). A page served over HTTPS, such as a hosted web app, may only open `wss://`, so the browser must trust the node's certificate: open `https://<node>/` once to accept its self-signed one.
 - A connect button stays disabled while its fields are invalid, and the field says why. The Go key on the keyboard submits from the TCP port and the WebSocket address.
@@ -162,6 +162,7 @@ The render tool runs the simulated mesh through the composer and synth offline. 
 - Headless over ssh: the desktop app needs a display, so use the render tool to produce a WAV file instead.
 - Bluetooth permission: Android asks for Bluetooth scan and connect permission on the first scan, and without it the scan does not start and the log says so. macOS and Linux need Bluetooth enabled and permitted for the terminal or app.
 - Silent on web: browsers block audio until a gesture, so tap the start screen.
+- No Bluetooth on web: the type is listed only where the browser has Web Bluetooth (Chrome and Edge, not Firefox or Safari; Chrome on Linux has it off by default), and the page must be served over HTTPS or from `localhost`.
 - No sound on desktop: check M (mute) and the volume in the HUD.
 
 ## Updates and privacy
@@ -174,7 +175,7 @@ Aether only listens: it sends nothing to the mesh. It keeps the saved link, the 
 | --- | --- | --- | --- |
 | jvm (Linux) | yes | shared, tools and Compose UI tests pass | offline renders only on Linux |
 | jvm (macOS, M4) | yes | - | 6 h live run against a real mesh (about 210 nodes): 59.9 fps, p95 18 ms, 340 MB, about 27% of one core, LocalStats delivered, no warnings. On JetBrains Runtime the visible window holds 60 fps |
-| wasmJs | yes | shared tests pass in the browser runner | the app was never run in a browser |
+| wasmJs | yes | shared tests pass in the browser runner | Chrome on Linux: the connect screen, and the Bluetooth chooser path against a stubbed `navigator.bluetooth`; never against a radio |
 | Android TV | release build | - | Chromecast with Google TV (Android 14) over TCP: HUD, remote keys and Back checked; about 27 fps under a 150-node simulated mesh (GPU bound), audio thread under half a core, no underruns |
 | Android phone or tablet | compiles | - | never run |
 | iOS | shared compiles for the simulator | see `docs/design.md` | never run |
