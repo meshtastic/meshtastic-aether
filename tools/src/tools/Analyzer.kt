@@ -157,7 +157,7 @@ class WindowAnalyzer(private val sampleRate: Int, private val windowFrames: Long
                 val hz = k.toDouble() * sampleRate / FFT_SIZE
                 num += hz * power[k]
                 den += power[k]
-                if (hz <= LOW_BAND_HZ) low += power[k]
+                if (k > 0 && hz <= LOW_BAND_HZ) low += power[k]
             }
         }
         val frames = frameIndex - winStart

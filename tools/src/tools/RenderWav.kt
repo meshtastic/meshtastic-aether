@@ -62,7 +62,7 @@ fun parseArgs(all: List<String>): Command {
     val args = if (at >= 0) all.filterIndexed { i, _ -> i != at && i != at + 1 } else all
     require(args.isNotEmpty()) { USAGE }
     if (args[0] == "analyze") {
-        require(args.size == 2) { USAGE }
+        require(args.size == 2 && at < 0) { USAGE }
         return Command.Analyze(args[1])
     }
     require(args.size in RENDER_ARGS..RENDER_ARGS + 1) { USAGE }
