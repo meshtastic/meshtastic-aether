@@ -14,6 +14,7 @@ private const val DRONE_SEND = 0.5f
 private const val DRONE_BRIGHTNESS = 0.2f
 private const val PAD_VELOCITY = 0.5f
 private const val PAD_STAGGER_SECONDS = 0.3
+private const val PAD_VOICES = 4
 
 /**
  * The drone and pad struck at every tick in the current chord, and the chord and key changes between them. Every
@@ -36,6 +37,9 @@ internal class Bed(
     private var nextChordFrame = 0L
     private var nextTextureFrame = 0L
 
+    /** Each pad voice's last pitch, so a chord change staggers only the voices that move. */
+    private val lastPadHz = DoubleArray(PAD_VOICES)
+
     fun start(nowFrame: Long) {
         nextChordFrame = nowFrame
         score.nextTickFrame = nowFrame
@@ -51,7 +55,7 @@ internal class Bed(
         val levels = score.levels(at)
         if (levels.getValue(Voice.Drone) > Score.AUDIBLE_LEVEL) playDrone(at)
         if (levels.getValue(Voice.Pad) > Score.AUDIBLE_LEVEL) {
-            playPads(at, day)
+            playPads(at, day, staggered = chordDue)
             sessionVoices.play(at)
         }
     }
@@ -101,11 +105,18 @@ internal class Bed(
         )
     }
 
-    private fun playPads(at: Long, day: DayState) {
+    /**
+     * The pad's chord tones. On a new chord the voices that move enter [staggered], one after another; every tone that
+     * holds its pitch strikes at the tick, where its predecessor ends, so the synth carries it on without a dip.
+     */
+    private fun playPads(at: Long, day: DayState, staggered: Boolean) {
         score.chord.voiceSemitones.forEachIndexed { i, s ->
-            val start = at + score.sec(PAD_STAGGER_SECONDS * i)
+            val hz = score.padHz(s)
+            val moved = hz != lastPadHz[i]
+            lastPadHz[i] = hz
+            val start = at + if (staggered && moved) score.sec(PAD_STAGGER_SECONDS * i) else 0L
             score.notes += NoteEvent(
-                start, Voice.Pad, score.padHz(s), PAD_VELOCITY, PAD_PANS[i], Score.PAD_SEND,
+                start, Voice.Pad, hz, PAD_VELOCITY, PAD_PANS[i], Score.PAD_SEND,
                 score.clip(start, score.sec(Score.SWELL_SECONDS)), day.brightness.toFloat(),
             )
         }

@@ -34,6 +34,18 @@ internal class Adsr(private val sampleRate: Int) {
         trigger(attackSec, HELD_DECAY_SECONDS, 1f, releaseSec)
     }
 
+    /**
+     * Holds again from the current level, as [gate] does from silence: a continued bed note rises back to full level
+     * over what is left of [attackSec] instead of restarting at zero, so a re-struck tone never dips.
+     */
+    fun regate(attackSec: Float, releaseSec: Float) {
+        attackInc = 1.0f / (maxOf(attackSec, MIN_STAGE_SECONDS) * sampleRate)
+        decayCoef = coefFor(HELD_DECAY_SECONDS)
+        releaseCoef = coefFor(releaseSec)
+        sustain = 1f
+        stage = ATTACK
+    }
+
     fun release() {
         if (stage != IDLE) stage = RELEASE
     }

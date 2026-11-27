@@ -8,6 +8,7 @@ import org.meshtastic.aether.music.NoteSink
 import org.meshtastic.aether.music.Voice
 import kotlin.concurrent.atomics.AtomicInt
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
+import kotlin.math.abs
 import kotlin.math.exp
 
 /**
@@ -107,6 +108,9 @@ class Synth(val sampleRate: Int) : NoteSink, BlockRenderer {
     }
 
     private fun trigger(note: NoteEvent) {
+        for (v in voices) {
+            if (continues(v, note) && v.begin(note, carryOn = true)) return
+        }
         var pick = -1
         for (i in voices.indices) {
             if (!voices[i].active) {
@@ -230,6 +234,7 @@ class Synth(val sampleRate: Int) : NoteSink, BlockRenderer {
     companion object {
         const val VOICE_COUNT = 24
         private const val MAX_CHUNK = 64
+
         private const val NOTE_RING = 4096
         private const val CONTROL_RING = 256
         private const val PENDING_NOTES = 2048
@@ -274,3 +279,17 @@ private const val MAX_RT60 = 26.0
 
 /** Reverb tail (seconds to fall 60 dB) for a `Texture.reverbSize` of 0..1. */
 internal fun rt60ForSize(size: Float): Double = MIN_RT60 + (MAX_RT60 - MIN_RT60) * size.toDouble()
+
+/** Two bed pitches this close (as a share of the pitch) are the same tone struck again. */
+private const val SAME_PITCH = 1e-9
+
+/**
+ * Whether [note] is [v]'s sounding bed tone struck again: the same Pad, Drone or Shimmer, not a node's, at the same
+ * pitch, pan and velocity. The voice then carries on instead of another starting, so the bed's tick never dips; a
+ * note that differs in level starts its own voice rather than step this one.
+ */
+private fun continues(v: SynthVoice, note: NoteEvent): Boolean =
+    v.active && !v.isFading && !v.fromNode && note.node == null && note.voice == v.kind &&
+        (v.kind == Voice.Pad || v.kind == Voice.Drone || v.kind == Voice.Shimmer) &&
+        abs(note.pitchHz - v.pitchHz) <= v.pitchHz * SAME_PITCH && note.pan.coerceIn(-1f, 1f) == v.pan &&
+        note.velocity.coerceIn(0f, 1f) == v.velocity

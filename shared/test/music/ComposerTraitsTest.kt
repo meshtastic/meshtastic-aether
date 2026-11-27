@@ -125,7 +125,9 @@ class ComposerTraitsTest {
         val at = notes.first().atFrame
         val pair = notes.filter { it.atFrame == at }.sortedByDescending { it.velocity }
         assertEquals(2, pair.size, "no twin")
-        assertEquals(1.006956, pair[1].pitchHz / pair[0].pitchHz, 1e-5)
+        // 10 percent is 12 cents (a ratio of 1.006956), capped at a 2 Hz beat against the note.
+        val beat = pair[1].pitchHz - pair[0].pitchHz
+        assertEquals(minOf(pair[0].pitchHz * 0.006956, 2.0), beat, 1e-3)
         assertEquals(0.6f, pair[1].velocity / pair[0].velocity, 1e-4f)
     }
 

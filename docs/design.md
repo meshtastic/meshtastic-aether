@@ -120,7 +120,7 @@ Time and weather change the rules, following *Sonorous Reception* and Eno's Refl
 
 - Weekday picks the key (7 roots).
 - Time of day picks mode brightness, density, register, decay length and loop periods: Lydian or Ionian in the morning, Mixolydian or Dorian through the afternoon, Aeolian at night and Phrygian in the darkest hours, back toward home by evening; sparser, lower and longer-decaying late at night. No Locrian.
-- Weather sets texture, scaled to the mesh's own rolling range (per-quantity min and max over about a week, absolute defaults until there is data), so a cold season isn't one dull setting for months: temperature sets brightness (filter, FM index), humidity sets reverb size and wetness, falling pressure sets slow detuned movement, and wind or lux sets noise and shimmer.
+- Weather sets texture, scaled to the mesh's own rolling range (per-quantity min and max over about a week, absolute defaults until there is data), so a cold season isn't one dull setting for months: temperature sets brightness (filter, FM index), humidity sets reverb size and wetness, falling pressure sets slow detuned movement, and wind or lux sets noise and shimmer. A quantity no node reports adds nothing: most meshes have no wind, lux or pressure sensor, so detune sits at its neutral and the hiss and shimmer come only from tension and the form. The hiss belongs to the bed and thins with it, so a rest is quiet.
 
 The mesh perturbs the piece:
 
@@ -140,7 +140,7 @@ Output is `NoteEvent(voice, pitch, velocity, pan, sends, atFrame)` and `ControlE
 
 ### Synth
 
-The synth is pure Kotlin and renders stereo `FloatArray` blocks at the sink's sample rate (not assumed 48 kHz), with no allocation in the render loop and a tiny noise floor injected into feedback paths against denormal CPU spikes. It has about 24 voices with stealing and a soft limiter on the master.
+The synth is pure Kotlin and renders stereo `FloatArray` blocks at the sink's sample rate (not assumed 48 kHz), with no allocation in the render loop and a tiny noise floor injected into feedback paths against denormal CPU spikes. It has about 24 voices with stealing and a soft limiter on the master. A bed note (Pad, Drone or Shimmer, not a node's) at the pitch and pan of a sounding one carries that voice on from its current level instead of starting another, so the bed's 20 s tick never dips; pads stagger their entries only when the chord changes.
 
 Building blocks, ported (licenses checked against the repositories):
 

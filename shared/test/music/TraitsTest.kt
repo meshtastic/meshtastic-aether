@@ -113,4 +113,17 @@ class TraitsTest {
         assertEquals(0.32f, Traits.channelPanOffset(7), 1e-6f)
         assertTrue((0..7).all { kotlin.math.abs(Traits.channelPanOffset(it)) <= 0.32f })
     }
+
+    // Regression: the twin's cents ignored its pitch, so 15 cents on a high note beat at about 5 Hz, near the 4 Hz
+    // fluctuation-strength peak, and the weakest battery became the most salient voice.
+    @Test
+    fun `a battery twin beats against its note at no more than two hertz`() {
+        // A twin r times the note beats at f(r - 1) Hz.
+        for (hz in listOf(130.0, 260.0, 600.0, 1200.0)) {
+            val beat = hz * (Traits.centsRatio(twinCents(15.0, hz)) - 1)
+            assertTrue(beat <= 2.0 + 1e-9, "$hz Hz twin beats at $beat Hz")
+        }
+        assertEquals(2.0, 600.0 * (Traits.centsRatio(twinCents(15.0, 600.0)) - 1), 1e-9)
+        assertEquals(12.0, twinCents(12.0, 100.0), 1e-12)
+    }
 }
