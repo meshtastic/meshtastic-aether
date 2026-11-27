@@ -6,6 +6,9 @@ apply:
 
 dependencies:
   - //shared
+  - $compose.runtime
+  - $compose.ui
+  - $compose.desktop.currentOs
   - $libs.kotlinx.coroutines.core
   - $libs.kotlinx.coroutines.test
 
@@ -13,5 +16,6 @@ test-dependencies:
   - $libs.kotlinx.coroutines.test
 
 settings:
+  compose: enabled
   jvm:
     mainClass: org.meshtastic.aether.tools.RenderWavKt

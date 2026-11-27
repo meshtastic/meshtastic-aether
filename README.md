@@ -152,6 +152,7 @@ The log records the session link, link state changes, Bluetooth scan results, fa
 ```sh
 ./kotlin run -m tools -- sparse 1 /tmp/sparse.wav   # silent | sparse | busy, hours, output [seed] [--at <UTC instant>]
 ./kotlin run -m tools -- analyze /tmp/sparse.wav    # per-window peak, RMS, clipping, centroid, LUFS, low band, pulse, rests
+./kotlin run -m tools -- video 90 /tmp/demo.mp4     # the app's engine and scene rendered offline to H.264 and AAC (needs ffmpeg)
 ./kotlin run -m blescan -- 15                       # scan for nodes for 15 s, print what is found
 ```
 

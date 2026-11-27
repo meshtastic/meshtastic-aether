@@ -72,6 +72,7 @@ class WindowAnalyzer(private val sampleRate: Int, private val windowFrames: Long
             val l = block[2 * f]
             val r = block[2 * f + 1]
             var m = 0.0
+            var power = 0.0
             var finite = 0
             for (ch in 0..1) {
                 val x = if (ch == 0) l else r
@@ -88,12 +89,13 @@ class WindowAnalyzer(private val sampleRate: Int, private val windowFrames: Long
                 hopSumSq += a * a
                 sum += x
                 m += x
+                power += a * a
             }
             samples += finite
             hopCount += finite
             if (finite > 0) m /= finite
             if (finite == 2) kWeighting.push(l.toDouble(), r.toDouble())
-            envelope.push(m)
+            envelope.push(power / maxOf(finite, 1))
             feedSpectrum(m)
             frameIndex++
             if ((frameIndex % hopFrames) == 0L) endHop()
@@ -118,9 +120,11 @@ class WindowAnalyzer(private val sampleRate: Int, private val windowFrames: Long
         }
     }
 
+    /** The frame's mean comes off before the window, so DC cannot leak into the bins beside zero. */
     private fun accumulateSpectrum() {
+        val mean = mono.average()
         for (i in 0 until FFT_SIZE) {
-            re[i] = mono[i] * hann[i]
+            re[i] = (mono[i] - mean) * hann[i]
             im[i] = 0.0
         }
         fft(re, im)

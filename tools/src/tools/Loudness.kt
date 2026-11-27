@@ -146,15 +146,18 @@ internal fun longestRestSec(envelope: List<Double>): Double {
     return best.toDouble() / STEPS_PER_SECOND
 }
 
-/** RMS per 100 ms of a mono-summed stream, kept for the window's envelope metrics. */
+/**
+ * RMS per 100 ms of the per-frame channel power, kept for the window's envelope metrics. Power, not the signed channel
+ * average, so channels in opposite polarity do not cancel into a false rest.
+ */
 internal class Envelope(sampleRate: Int) {
     private val subFrames = sampleRate / STEPS_PER_SECOND
     private var acc = 0.0
     private var fill = 0
     val steps = ArrayList<Double>()
 
-    fun push(m: Double) {
-        acc += m * m
+    fun push(power: Double) {
+        acc += power
         if (++fill == subFrames) {
             steps += sqrt(acc / subFrames)
             acc = 0.0
