@@ -1,16 +1,21 @@
 package org.meshtastic.aether.update
 
 import com.sun.net.httpserver.HttpServer
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import java.io.File
 import java.net.InetSocketAddress
 import java.nio.file.Files
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class DesktopUpdateTest {
     private val dir: File = Files.createTempDirectory("aether-update").toFile()
@@ -76,7 +81,8 @@ class DesktopUpdateTest {
         assertEquals("ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad", sha)
     }
 
-    private class TestUpdater(url: String, code: Long) : HttpUpdater(url, code) {
+    private class TestUpdater(url: String, code: Long, manifestFor: (UpdateTrack) -> String? = { null }) :
+        HttpUpdater(url, code, manifestFor = manifestFor) {
         override fun modeFor(latest: PublishedBuild) = InstallMode.OPEN_PAGE
         override fun assetFor(latest: PublishedBuild): Asset? = null
         override fun downloadTarget(asset: Asset) = error("unused")
@@ -98,5 +104,44 @@ class DesktopUpdateTest {
         val available = assertIs<UpdateState.Available>(answer(TestUpdater("$base/manifest", 57)))
         assertEquals(60L, available.latest.code)
         assertIs<UpdateState.UpToDate>(answer(TestUpdater("$base/manifest", 60)))
+    }
+
+    private fun manifestBody(version: String, code: Int, tag: String) = "version=$version\ncode=$code\ntag=$tag\n".encodeToByteArray()
+
+    // Regression: following the other track kept offering the old track's build, or read its manifest again.
+    @Test
+    fun `following another track reads its manifest and forgets the old answer`() {
+        serve("/release", 200, manifestBody("0.2.0", 60, "v0.2.0"))
+        serve("/snapshot", 200, manifestBody("0.3.0-SNAPSHOT-abc1234", 70, "snapshot"))
+        server.start()
+        val updater = TestUpdater("$base/release", 57) { if (it == UpdateTrack.Snapshot) "$base/snapshot" else "$base/release" }
+        assertEquals(60L, assertIs<UpdateState.Available>(answer(updater)).latest.code)
+        updater.follow(UpdateTrack.Snapshot)
+        assertEquals(UpdateState.Idle, updater.update.value)
+        assertEquals(70L, assertIs<UpdateState.Available>(answer(updater)).latest.code)
+    }
+
+    // Regression: a check already in flight finished after a track switch and put the old track's build back on screen.
+    @Test
+    fun `a check that was in flight when the track changed does not land`() = runBlocking {
+        val entered = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        server.createContext("/slow") { exchange ->
+            entered.countDown()
+            release.await(10, TimeUnit.SECONDS)
+            val body = manifestBody("0.2.0", 60, "v0.2.0")
+            exchange.sendResponseHeaders(200, body.size.toLong())
+            exchange.responseBody.use { it.write(body) }
+            exchange.close()
+        }
+        serve("/snapshot", 200, manifestBody("0.3.0-SNAPSHOT-abc1234", 70, "snapshot"))
+        server.start()
+        val updater = TestUpdater("$base/slow", 57) { "$base/snapshot" }
+        val inFlight = async(Dispatchers.IO) { updater.check() }
+        assertTrue(entered.await(10, TimeUnit.SECONDS))
+        updater.follow(UpdateTrack.Snapshot)
+        release.countDown()
+        withTimeout(10_000) { inFlight.await() }
+        assertEquals(UpdateState.Idle, updater.update.value)
     }
 }

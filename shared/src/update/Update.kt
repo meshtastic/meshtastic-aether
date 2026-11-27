@@ -156,7 +156,7 @@ enum class InstallFailure {
 /** How the platform gets an update in: installs it itself, or only points at the download page. */
 enum class InstallMode { INSTALL, INSTALL_AND_RESTART, OPEN_PAGE }
 
-/** Checks this build's channel for a newer build and installs it when asked. */
+/** Checks the followed track (the build's own channel until [follow] says otherwise) for a newer build and installs it when asked. */
 interface Updater {
     val update: StateFlow<UpdateState>
     val install: StateFlow<InstallState>

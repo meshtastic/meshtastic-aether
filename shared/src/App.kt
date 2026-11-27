@@ -27,6 +27,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -202,6 +203,7 @@ internal fun AppRoot(
     var track by remember { mutableStateOf(settings.updateTrack ?: UpdateTrack.of(BuildInfo.CHANNEL)) }
     UpdateChecks(appUpdater, track)
     var settingsOpen by remember { mutableStateOf(false) }
+    val saveable = rememberSaveableStateHolder()
     val settingsBack = rememberNavigationEventState(NavigationEventInfo.None)
     NavigationBackHandler(settingsBack, isBackEnabled = settingsOpen, onBackCompleted = { settingsOpen = false })
     var palette by remember { mutableStateOf(resolveLook(look, settings.savedPalette, launchedFullscreen)) }
@@ -218,6 +220,7 @@ internal fun AppRoot(
                 session = sessionFor(choice)
                 failure = null
                 pending = null
+                settingsOpen = false
                 settings.link = choice
             } catch (e: Exception) {
                 Log.e("app", "could not start session", e)
@@ -261,10 +264,14 @@ internal fun AppRoot(
                     },
                     onBack = { settingsOpen = false },
                     modifier = Modifier.windowInsetsPadding(WindowInsets.safeDrawing),
+                    focusBack = platform.isTelevision || platform.hasKeyboard,
                 )
 
-                current == null -> ConnectScreen(
-                    onSettings = { settingsOpen = true },
+                current == null -> saveable.SaveableStateProvider("connect") { ConnectScreen(
+                    onSettings = {
+                        pending?.countdown?.cancel()
+                        settingsOpen = true
+                    },
                     onChoose = ::start,
                     pending = pending,
                     failure = failure,
@@ -274,7 +281,7 @@ internal fun AppRoot(
                     focusChooser = platform.isTelevision || platform.hasKeyboard,
                     lastKind = LinkKind.entries.firstOrNull { it.name == settings.linkKind },
                     onKind = { settings.linkKind = it.name },
-                )
+                ) }
 
                 else -> Running(
                     session = current,

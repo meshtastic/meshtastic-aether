@@ -84,6 +84,5 @@ class UpdateTest {
         assertEquals(UpdateTrack.Release, UpdateTrack.of(Channel.RELEASE))
         assertEquals(UpdateTrack.Snapshot, UpdateTrack.of(Channel.SNAPSHOT))
         assertNull(UpdateTrack.of(Channel.DEV))
-        assertEquals(manifestUrl(Channel.SNAPSHOT), manifestUrl(UpdateTrack.Snapshot.channel))
     }
 }

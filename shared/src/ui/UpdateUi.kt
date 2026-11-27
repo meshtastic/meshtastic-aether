@@ -15,9 +15,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
@@ -47,11 +45,11 @@ internal val appUpdater: Updater? by lazy { createUpdater() }
 @Composable
 internal fun UpdateChecks(updater: Updater?, track: UpdateTrack?) {
     if (updater == null) return
-    var launched by remember { mutableStateOf(false) }
+    val launched = remember { BooleanArray(1) }
     LaunchedEffect(updater, track) {
         track?.let(updater::follow)
-        if (!launched) delay(FIRST_CHECK_DELAY_MS)
-        launched = true
+        if (!launched[0]) delay(FIRST_CHECK_DELAY_MS)
+        launched[0] = true
         while (true) {
             delay(nextCheckDelayMillis(updater.check()))
         }

@@ -167,7 +167,7 @@ The render tool runs the simulated mesh through the composer and synth offline. 
 
 ## Updates and privacy
 
-Aether only listens: it sends nothing to the mesh. It keeps the saved link, the last link type, the volume, mute, headphone mode and look on the device, and writes a local log. Android and desktop builds from [Releases](https://github.com/meshtastic/meshtastic-aether/releases) check this repository's releases for a newer build of their own channel shortly after launch and then daily, and download one only when asked. Store installs, iOS, the web build and local builds never check.
+Aether only listens: it sends nothing to the mesh. It keeps the saved link, the last link type, the volume, mute, headphone mode and look on the device, and writes a local log. Android and desktop builds from [Releases](https://github.com/meshtastic/meshtastic-aether/releases) check this repository's releases for a newer build shortly after launch and then daily, and download one only when asked. A release build follows releases and a snapshot build follows snapshots until Settings (the cog on the connect screen) picks the other track; Settings also checks on demand. Store installs, iOS, the web build and local builds never check.
 
 ## Verified on
 

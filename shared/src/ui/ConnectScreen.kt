@@ -36,6 +36,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -155,9 +156,9 @@ internal fun ConnectScreen(
     }
     val kinds = availableKinds(supportsTcp, bluetooth, serial)
     val pendingLink = pending?.link
-    var host by remember { mutableStateOf(lastTcp?.host ?: DEFAULT_HOST) }
-    var port by remember { mutableStateOf((lastTcp?.port ?: LinkChoice.DEFAULT_TCP_PORT).toString()) }
-    var ws by remember { mutableStateOf((pendingLink as? LinkChoice.WebSocket)?.url ?: defaultWebSocketUrl(secureWebSocket)) }
+    var host by rememberSaveable { mutableStateOf(lastTcp?.host ?: DEFAULT_HOST) }
+    var port by rememberSaveable { mutableStateOf((lastTcp?.port ?: LinkChoice.DEFAULT_TCP_PORT).toString()) }
+    var ws by rememberSaveable { mutableStateOf((pendingLink as? LinkChoice.WebSocket)?.url ?: defaultWebSocketUrl(secureWebSocket)) }
     var kind by remember { mutableStateOf(initialKind(kinds, pendingLink?.kind(), lastKind)) }
     var chosen by remember { mutableStateOf<LinkKind?>(null) }
     val selected = if (kind in kinds) kind else kinds.first()
@@ -298,7 +299,13 @@ internal fun ConnectScreen(
         }
     }
 
-    BoxWithConstraints(modifier.fillMaxSize()) {
+    Column(modifier.fillMaxSize()) {
+    if (onSettings != null) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+            IconButton(onSettings, Modifier.size(MinTouch).semantics { contentDescription = "Settings" }) { HudIcon(HudIcons.Settings) }
+        }
+    }
+    BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
         val twoPanes = widthClass(maxWidth) == WidthClass.Expanded || maxHeight < ShortHeight
         if (twoPanes) {
             Row(
@@ -350,11 +357,7 @@ internal fun ConnectScreen(
                 if (primary != null) Column(column.fillMaxWidth().padding(top = 12.dp)) { primary() }
             }
         }
-        if (onSettings != null) {
-            IconButton(onSettings, Modifier.align(Alignment.TopEnd).size(MinTouch).semantics { contentDescription = "Settings" }) {
-                HudIcon(HudIcons.Settings)
-            }
-        }
+    }
     }
 }
 

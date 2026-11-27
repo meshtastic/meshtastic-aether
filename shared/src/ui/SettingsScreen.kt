@@ -24,19 +24,21 @@ import androidx.compose.material3.SegmentedListItem
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalUriHandler
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
-import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -59,11 +61,13 @@ internal fun trackDetail(track: UpdateTrack): String = when (track) {
     UpdateTrack.Snapshot -> "Every build of main that passes its checks, newest first"
 }
 
-/** What the check row says about [state] for the build that is running. */
-internal fun checkStatus(state: UpdateState): String = when (state) {
+/** What the check row says about [state] for the build that is running as [runningCode]. */
+internal fun checkStatus(state: UpdateState, runningCode: Long = BuildInfo.CODE): String = when (state) {
     UpdateState.Idle -> "Not checked yet"
     UpdateState.Checking -> "Checking"
-    is UpdateState.UpToDate -> "Up to date with ${state.latest.version}"
+    // A snapshot ahead of the newest release is not "up to date with" an older version.
+    is UpdateState.UpToDate ->
+        if (state.latest.code < runningCode) "Nothing newer than this build; the latest is ${state.latest.version}" else "Up to date with ${state.latest.version}"
     is UpdateState.Available -> "Aether ${state.latest.version} is ready"
     UpdateState.NothingPublished -> "Nothing is published on this track yet"
     UpdateState.Failed -> "Could not reach the update server"
@@ -81,13 +85,16 @@ internal fun SettingsScreen(
     onTrack: (UpdateTrack) -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
+    focusBack: Boolean = false,
 ) {
+    val backFocus = remember { FocusRequester() }
+    LaunchedEffect(Unit) { if (focusBack) runCatching { backFocus.requestFocus() } }
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     Column(modifier.fillMaxSize().nestedScroll(scrollBehavior.nestedScrollConnection)) {
         LargeFlexibleTopAppBar(
             title = { Text("Settings") },
             navigationIcon = {
-                IconButton(onBack, Modifier.semantics { contentDescription = "Back" }) { HudIcon(HudIcons.Back) }
+                IconButton(onBack, Modifier.focusRequester(backFocus).semantics { contentDescription = "Back" }) { HudIcon(HudIcons.Back) }
             },
             scrollBehavior = scrollBehavior,
         )
@@ -122,30 +129,28 @@ private fun SectionHeading(text: String) {
 private fun UpdateSettings(updater: Updater, track: UpdateTrack, onTrack: (UpdateTrack) -> Unit) {
     val state by updater.update.collectAsState()
     val scope = rememberCoroutineScope()
+    val tracks = UpdateTrack.entries
     Column(Modifier.fillMaxWidth().selectableGroup(), verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap)) {
-        val tracks = UpdateTrack.entries
         tracks.forEachIndexed { index, choice ->
             val selected = choice == track
             SegmentedListItem(
                 selected = selected,
                 onClick = { onTrack(choice) },
-                shapes = ListItemDefaults.segmentedShapes(index, tracks.size + 1),
-                modifier = Modifier.semantics { role = Role.RadioButton },
+                shapes = ListItemDefaults.segmentedShapes(index, tracks.size),
                 leadingContent = { RadioButton(selected = selected, onClick = null) },
                 supportingContent = { Text(trackDetail(choice)) },
                 content = { Text(trackLabel(choice)) },
             )
         }
-        SegmentedListItem(
-            selected = false,
-            onClick = { scope.launch { updater.check() } },
-            shapes = ListItemDefaults.segmentedShapes(tracks.size, tracks.size + 1),
-            enabled = state != UpdateState.Checking,
-            trailingContent = { if (state == UpdateState.Checking) LoadingIndicator(Modifier.padding(4.dp)) },
-            supportingContent = { Text(checkStatus(state), Modifier.semantics { liveRegion = LiveRegionMode.Polite }) },
-            content = { Text("Check for updates") },
-        )
     }
+    SegmentedListItem(
+        onClick = { scope.launch { updater.check() } },
+        shapes = ListItemDefaults.segmentedShapes(0, 1),
+        enabled = state != UpdateState.Checking,
+        trailingContent = { if (state == UpdateState.Checking) LoadingIndicator(Modifier.padding(4.dp)) },
+        supportingContent = { Text(checkStatus(state), Modifier.semantics { liveRegion = LiveRegionMode.Polite }) },
+        content = { Text("Check for updates") },
+    )
     Text(
         "Switching from Snapshot to Release never downgrades: the next release that is newer than this build is offered.",
         style = MaterialTheme.typography.bodyMedium,
@@ -169,7 +174,7 @@ internal const val LICENSE_NOTICE = "Free software under the GNU General Public 
 private fun AboutSection() {
     val uriHandler = LocalUriHandler.current
     val links = listOf(
-        "Version" to ("Aether ${BuildInfo.VERSION}" to null),
+        "Version" to ("Aether ${BuildInfo.VERSION}" to "$SOURCE_URL/releases"),
         "Source code" to ("github.com/meshtastic/meshtastic-aether" to SOURCE_URL),
         "Meshtastic website" to ("meshtastic.org" to WEBSITE_URL),
         "License" to ("GNU General Public License v3" to LICENSE_URL),
@@ -180,12 +185,9 @@ private fun AboutSection() {
     )
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap)) {
         links.forEachIndexed { index, (title, detail) ->
-            val url = detail.second
             SegmentedListItem(
-                selected = false,
-                onClick = { url?.let(uriHandler::openUri) },
+                onClick = { uriHandler.openUri(detail.second) },
                 shapes = ListItemDefaults.segmentedShapes(index, links.size),
-                enabled = url != null,
                 supportingContent = { Text(detail.first) },
                 content = { Text(title) },
             )

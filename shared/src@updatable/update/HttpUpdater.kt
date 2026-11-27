@@ -32,37 +32,41 @@ internal fun manifestOverride(): String? = System.getenv("AETHER_UPDATE_MANIFEST
  * goes in. One per process, so a download outlives the dialog that started it.
  */
 internal abstract class HttpUpdater(
-    manifestUrl: String,
+    initialManifest: String,
     private val runningCode: Long,
     /** A test manifest names files that sit beside it, not on GitHub. */
     private val assetsBesideManifest: Boolean = false,
+    /** The manifest a track's builds publish; tests point it at a local server. */
+    private val manifestFor: (UpdateTrack) -> String? = { manifestUrl(it.channel) },
 ) : Updater {
     protected val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val _update = MutableStateFlow<UpdateState>(UpdateState.Idle)
     override val update: StateFlow<UpdateState> = _update.asStateFlow()
     protected val _install = MutableStateFlow<InstallState>(InstallState.Idle)
     override val install: StateFlow<InstallState> = _install.asStateFlow()
-    @Volatile private var currentManifest = manifestUrl
+    @Volatile private var currentManifest = initialManifest
     private val checkLock = Mutex()
     private var installing: Job? = null
 
     override fun follow(track: UpdateTrack) {
         // A test manifest is the one being tested; a track has no say over it.
         if (assetsBesideManifest) return
-        currentManifest = manifestUrl(track.channel) ?: return
+        currentManifest = manifestFor(track) ?: return
         _update.value = UpdateState.Idle
     }
 
     override suspend fun check(): UpdateState = checkLock.withLock {
+        val manifest = currentManifest
         val previous = _update.value
         // An offered update stays offered while the next check runs, so the Update button does not blink.
         if (previous !is UpdateState.Available) _update.value = UpdateState.Checking
         val answer = try {
-            fetchLatest()?.let { latest ->
+            fetchLatest(manifest)?.let { latest ->
                 Log.i(TAG, "running $runningCode, published ${latest.version} (${latest.code})")
                 compare(runningCode, latest)
             } ?: UpdateState.Failed
         } catch (e: CancellationException) {
+            if (manifest == currentManifest) _update.value = previous
             throw e
         } catch (_: NotPublished) {
             // The snapshot's manifest is briefly missing while it is replaced; an offer already made stands.
@@ -71,6 +75,8 @@ internal abstract class HttpUpdater(
             Log.w(TAG, "check failed: ${e.message}")
             if (previous is UpdateState.Available) previous else UpdateState.Failed
         }
+        // The track changed while this ran: the answer belongs to the old one, and follow() already reset the state.
+        if (manifest != currentManifest) return@withLock _update.value
         _update.value = answer
         answer
     }
@@ -117,9 +123,9 @@ internal abstract class HttpUpdater(
         }
     }
 
-    private suspend fun fetchLatest(): PublishedBuild? =
-        PublishedBuild.parse(fetchText(currentManifest))
-            ?.let { if (assetsBesideManifest) it.copy(downloadBase = currentManifest.substringBeforeLast('/')) else it }
+    private suspend fun fetchLatest(manifest: String): PublishedBuild? =
+        PublishedBuild.parse(fetchText(manifest))
+            ?.let { if (assetsBesideManifest) it.copy(downloadBase = manifest.substringBeforeLast('/')) else it }
 
     /** The asset this platform installs, or null when the build carries none for it. */
     protected abstract fun assetFor(latest: PublishedBuild): Asset?

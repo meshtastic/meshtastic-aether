@@ -117,7 +117,7 @@ class SettingsTest {
         assertEquals(PaletteChoice.Standard, Settings(store).palette)
     }
 
-    // Regression: a stored track must win over the build's channel, and an unset or unknown one must leave the channel in charge.
+    // Regression: an unset or unknown saved track must read as none, so the build's own channel stays in charge.
     @Test
     fun `the update track is unset until chosen and ignores an unknown saved value`() {
         val store = MemoryStore()
