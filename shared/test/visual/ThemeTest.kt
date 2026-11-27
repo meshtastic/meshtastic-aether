@@ -133,4 +133,14 @@ class ThemeTest {
         assertTrue(orbHaloAlpha(SceneModel.IDLE_FLOOR) > 0f)
         assertTrue(orbHaloAlpha(1.0) < orbCoreAlpha(1.0))
     }
+    // Regression: the dither tile was random grey at alpha 0.03, which lifted pixels by up to 7.6 of 255 and turned the
+    // OLED look's black pixels on.
+    @Test
+    fun `the OLED dither only darkens and every dither moves a pixel by about one code value`() {
+        val dark = ditherPixels(darkOnly = true)
+        val signed = ditherPixels(darkOnly = false)
+        assertTrue(dark.all { it and 0xFFFFFF == 0 }, "an OLED dither pixel is not black")
+        for (px in dark + signed) assertTrue((px ushr 24) in 1..3, "dither alpha ${px ushr 24} of 255")
+        assertTrue(signed.any { it and 0xFFFFFF == 0xFFFFFF } && signed.any { it and 0xFFFFFF == 0 })
+    }
 }
