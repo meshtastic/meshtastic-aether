@@ -49,17 +49,15 @@ internal class MotifMemory {
 
     private val states = HashMap<Long, State>()
 
-    /** The motif [node] plays now; the next call may hear it changed. */
-    fun next(node: Long): Motif {
-        val s = states.getOrPut(node) { State(Motifs.of(node), 0) }
-        val out = s.motif
-        s.plays++
-        s.motif = if (s.plays % RETURN_EVERY == 0) Motifs.of(node) else mutate(node, out, s.plays)
-        return out
-    }
-
-    /** The motif [node] would play next, without playing it. */
+    /** The motif [node] plays now. */
     fun current(node: Long): Motif = states[node]?.motif ?: Motifs.of(node)
+
+    /** Records that [node] was heard playing [current]; the next play may hear it changed. */
+    fun advance(node: Long) {
+        val s = states.getOrPut(node) { State(Motifs.of(node), 0) }
+        s.plays++
+        s.motif = if (s.plays % RETURN_EVERY == 0) Motifs.of(node) else mutate(node, s.motif, s.plays)
+    }
 
     fun forget(node: Long) {
         states.remove(node)

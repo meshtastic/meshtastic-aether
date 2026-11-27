@@ -9,12 +9,15 @@ class MotifsTest {
 
     private fun Motif.key(): String = roles.joinToString() + "|" + gaps.joinToString()
 
+    /** Plays [node]'s motif as the composer does when its first note is heard. */
+    private fun MotifMemory.play(node: Long): Motif = current(node).also { advance(node) }
+
     // Regression: a node's motif was a hash of its number and never developed, so the same phrase repeated for hours.
     @Test
     fun `a node's motif drifts while its opening note stays its own role`() {
         for (node in nodes) {
             val memory = MotifMemory()
-            val plays = List(40) { memory.next(node) }
+            val plays = List(40) { memory.play(node) }
             assertEquals(Motifs.of(node).key(), plays[0].key(), "the first play is the original")
             for (m in plays) {
                 assertEquals(Ornaments.role(node), m.roles[0])
@@ -28,7 +31,7 @@ class MotifsTest {
     fun `the original motif returns every eighth play`() {
         for (node in nodes) {
             val memory = MotifMemory()
-            val plays = List(25) { memory.next(node) }
+            val plays = List(25) { memory.play(node) }
             val original = Motifs.of(node).key()
             for (i in listOf(8, 16, 24)) assertEquals(original, plays[i].key(), "node $node play $i")
         }
@@ -37,8 +40,8 @@ class MotifsTest {
     @Test
     fun `forgetting a node starts its motif over`() {
         val memory = MotifMemory()
-        repeat(5) { memory.next(42L) }
+        repeat(5) { memory.play(42L) }
         memory.forget(42L)
-        assertEquals(Motifs.of(42L).key(), memory.next(42L).key())
+        assertEquals(Motifs.of(42L).key(), memory.play(42L).key())
     }
 }

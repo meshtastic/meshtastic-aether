@@ -142,7 +142,7 @@ internal class PacketPhrases(
 
     /** The node's motif, each note softer than the last; null when its first note found no slot. */
     private fun motifPhrase(sound: PacketSound, start: Long, deadline: Long): Placed? {
-        val motif = nodes.motifs.next(sound.node)
+        val motif = nodes.motifs.current(sound.node)
         val chord = score.chord
         val speed = score.phraseSpeed()
         var offset = 0.0
@@ -163,7 +163,9 @@ internal class PacketPhrases(
                 break
             }
         }
-        return if (firstAt < 0) null else Placed(firstAt, anchor, anchor - start)
+        if (firstAt < 0) return null
+        nodes.motifs.advance(sound.node)
+        return Placed(firstAt, anchor, anchor - start)
     }
 
     /** Echoes by hop count after the last note, each softer and wetter; odd ones sound from the relay when known. */
