@@ -56,6 +56,8 @@ internal fun SerialSection(
         if (request == 0) return@LaunchedEffect
         looking = true
         error = null
+        // The platform port lists document no exceptions, and a failure must show as text, not end the screen.
+        @Suppress("TooGenericExceptionCaught")
         try {
             ports = orderedPorts(find())
             Log.i("serial", "found ${ports?.size} port(s)")
@@ -107,9 +109,9 @@ private fun PortRow(port: SerialRadio, onPick: (SerialRadio) -> Unit) {
         Row(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text(port.label, style = MaterialTheme.typography.bodyLarge)
-                Text(port.path.substringAfterLast('/'), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                SecondaryText(port.path.substringAfterLast('/'))
             }
-            Text(if (port.likelyMeshtastic) "Meshtastic" else "Other device", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            SecondaryText(if (port.likelyMeshtastic) "Meshtastic" else "Other device")
         }
     }
 }

@@ -18,7 +18,7 @@ internal class Svf {
     }
 
     fun setFq(f: Float, q: Float) {
-        g = tan(PI * clamp(f, 1.0e-5f, 0.497f)).toFloat()
+        g = tan(PI * clamp(f, MIN_F, MAX_F)).toFloat()
         r = 1.0f / q
         h = 1.0f / (1.0f + r * g + g * g)
     }
@@ -48,6 +48,10 @@ internal class Svf {
         const val MODE_LP = 0
         const val MODE_BP = 1
         const val MODE_HP = 2
+
+        /** Cutoff range, kept short of Nyquist where the prewarp `tan` runs off. */
+        const val MIN_F = 1.0e-5f
+        const val MAX_F = 0.497f
     }
 }
 

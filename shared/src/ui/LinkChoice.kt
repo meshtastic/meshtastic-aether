@@ -29,12 +29,15 @@ sealed interface LinkChoice {
         /** `host` or `host:port`; null for a blank host, a non-numeric port or a port outside 1..65535. */
         fun parseTcp(text: String): Tcp? {
             val value = text.trim()
-            if (value.isEmpty()) return null
             val colon = value.lastIndexOf(':')
-            if (colon < 0) return Tcp(value, DEFAULT_TCP_PORT)
-            val host = value.substring(0, colon).trim()
-            val port = value.substring(colon + 1).toIntOrNull() ?: return null
-            return if (host.isEmpty() || port !in 1..MAX_PORT) null else Tcp(host, port)
+            return when {
+                value.isEmpty() -> null
+                colon < 0 -> Tcp(value, DEFAULT_TCP_PORT)
+                else -> tcpOrNull(value.substring(0, colon).trim(), value.substring(colon + 1).toIntOrNull())
+            }
         }
+
+        private fun tcpOrNull(host: String, port: Int?): Tcp? =
+            if (host.isEmpty() || port == null || port !in 1..MAX_PORT) null else Tcp(host, port)
     }
 }

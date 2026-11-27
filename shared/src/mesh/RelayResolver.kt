@@ -7,6 +7,6 @@ package org.meshtastic.aether.mesh
  */
 internal fun resolveRelay(known: Collection<Long>, relayByte: Int?, source: Long, self: Long? = null): Long? {
     if (relayByte == null || relayByte == 0) return null
-    val matches = known.filter { it != source && it != self && (it and 0xFF).toInt() == relayByte }.distinct()
+    val matches = known.filter { it != source && it != self && it.lowByte() == relayByte }.distinct()
     return matches.singleOrNull()
 }

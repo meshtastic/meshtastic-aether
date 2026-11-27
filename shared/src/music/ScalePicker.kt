@@ -2,9 +2,10 @@ package org.meshtastic.aether.music
 
 /**
  * Picks the scale at a chord boundary: the clock's mode is the base, `modeLean` moves it at most one step along the
- * brightness order (Lydian, Ionian, Mixolydian, Dorian, Aeolian, Phrygian; never past either end, so never Locrian), and
- * `scalePentatonicBias` opens it to the matching pentatonic. Both moves have hysteresis: they enter past one threshold and
- * leave only past a lower one, so a value hovering on an edge does not flicker. Call [pick] only at a chord boundary.
+ * brightness order (Lydian, Ionian, Mixolydian, Dorian, Aeolian, Phrygian; never past either end, so never Locrian),
+ * and `scalePentatonicBias` opens it to the matching pentatonic. Both moves have hysteresis: they enter past one
+ * threshold and leave only past a lower one, so a value hovering on an edge does not flicker. Call [pick] only at a
+ * chord boundary.
  */
 class ScalePicker {
     private var leanStep = 0
@@ -13,11 +14,7 @@ class ScalePicker {
     fun pick(base: Mode, modeLean: Double, pentatonicBias: Double): Mode {
         val lean = if (modeLean.isFinite()) modeLean.coerceIn(-1.0, 1.0) else 0.0
         val bias = if (pentatonicBias.isFinite()) pentatonicBias.coerceIn(0.0, 1.0) else 0.0
-        leanStep = when (leanStep) {
-            1 -> if (lean < LEAN_EXIT) (if (lean < -LEAN_ENTER) -1 else 0) else 1
-            -1 -> if (lean > -LEAN_EXIT) (if (lean > LEAN_ENTER) 1 else 0) else -1
-            else -> if (lean > LEAN_ENTER) 1 else if (lean < -LEAN_ENTER) -1 else 0
-        }
+        leanStep = nextLeanStep(lean)
         pentatonic = if (pentatonic) bias > PENTATONIC_EXIT else bias > PENTATONIC_ENTER
         val at = (brightnessIndex(base) - leanStep).coerceIn(0, BRIGHT_TO_DARK.lastIndex)
         return if (pentatonic) {
@@ -25,6 +22,13 @@ class ScalePicker {
         } else {
             BRIGHT_TO_DARK[at]
         }
+    }
+
+    /** One step brighter (1), darker (-1) or none: a held step lets go only once the lean falls back past the exit. */
+    private fun nextLeanStep(lean: Double): Int = when (leanStep) {
+        1 -> if (lean < LEAN_EXIT) (if (lean < -LEAN_ENTER) -1 else 0) else 1
+        -1 -> if (lean > -LEAN_EXIT) (if (lean > LEAN_ENTER) 1 else 0) else -1
+        else -> if (lean > LEAN_ENTER) 1 else if (lean < -LEAN_ENTER) -1 else 0
     }
 
     companion object {
@@ -39,9 +43,10 @@ class ScalePicker {
         /** Lydian, Ionian and Mixolydian have a major third. */
         private const val LAST_MAJOR_INDEX = 2
 
+        /** A pentatonic sits where the mode it is drawn from sits: major in Ionian, minor in Aeolian. */
         private fun brightnessIndex(mode: Mode): Int = when (mode) {
-            Mode.MajorPentatonic -> 1
-            Mode.MinorPentatonic -> 4
+            Mode.MajorPentatonic -> BRIGHT_TO_DARK.indexOf(Mode.Ionian)
+            Mode.MinorPentatonic -> BRIGHT_TO_DARK.indexOf(Mode.Aeolian)
             else -> BRIGHT_TO_DARK.indexOf(mode)
         }
     }

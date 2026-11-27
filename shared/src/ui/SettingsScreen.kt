@@ -27,6 +27,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.Stable
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
@@ -66,23 +67,29 @@ internal fun checkStatus(state: UpdateState, runningCode: Long = BuildInfo.CODE)
     UpdateState.Idle -> "Not checked yet"
     UpdateState.Checking -> "Checking"
     // A snapshot ahead of the newest release is not "up to date with" an older version.
-    is UpdateState.UpToDate ->
-        if (state.latest.code < runningCode) "Nothing newer than this build; the latest is ${state.latest.version}" else "Up to date with ${state.latest.version}"
+    is UpdateState.UpToDate -> if (state.latest.code < runningCode) {
+        "Nothing newer than this build; the latest is ${state.latest.version}"
+    } else {
+        "Up to date with ${state.latest.version}"
+    }
     is UpdateState.Available -> "Aether ${state.latest.version} is ready"
     UpdateState.NothingPublished -> "Nothing is published on this track yet"
     UpdateState.Failed -> "Could not reach the update server"
 }
 
+/** What the update controls edit: the [updater], the [track] it follows, and [onTrack] to follow another. */
+@Stable
+internal class TrackedUpdates(val updater: Updater, val track: UpdateTrack, val onTrack: (UpdateTrack) -> Unit)
+
 /**
- * Settings: which builds the app follows for updates, and a check on demand. [updater] is null where updates come another
- * way (an app store, iOS, the web) or on a local build, and the screen then says so instead of offering a choice.
+ * Settings: which builds the app follows for updates, and a check on demand. [updates] is null where updates come
+ * another way (an app store, iOS, the web) or on a local build, and the screen then says so instead of offering a
+ * choice.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun SettingsScreen(
-    updater: Updater?,
-    track: UpdateTrack?,
-    onTrack: (UpdateTrack) -> Unit,
+    updates: TrackedUpdates?,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
     focusBack: Boolean = false,
@@ -94,24 +101,27 @@ internal fun SettingsScreen(
         LargeFlexibleTopAppBar(
             title = { Text("Settings") },
             navigationIcon = {
-                IconButton(onBack, Modifier.focusRequester(backFocus).semantics { contentDescription = "Back" }) { HudIcon(HudIcons.Back) }
+                IconButton(onBack, Modifier.focusRequester(backFocus).semantics { contentDescription = "Back" }) {
+                    HudIcon(HudIcons.Back)
+                }
             },
             scrollBehavior = scrollBehavior,
         )
         Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.TopCenter) {
             Column(
-                Modifier.widthIn(max = SettingsWidth).fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = ScreenGutter, vertical = 8.dp),
+                Modifier.widthIn(max = SettingsWidth).fillMaxWidth().verticalScroll(rememberScrollState())
+                    .padding(horizontal = ScreenGutter, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(24.dp),
             ) {
                 SectionHeading("Updates")
-                if (updater == null || track == null) {
+                if (updates == null) {
                     Text(
                         "This copy of Aether gets its updates another way.",
                         style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 } else {
-                    UpdateSettings(updater, track, onTrack)
+                    UpdateSettings(updates.updater, updates.track, updates.onTrack)
                 }
                 SectionHeading("About")
                 AboutSection()
@@ -122,7 +132,12 @@ internal fun SettingsScreen(
 
 @Composable
 private fun SectionHeading(text: String) {
-    Text(text, Modifier.semantics { heading() }, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+    Text(
+        text,
+        Modifier.semantics { heading() },
+        style = MaterialTheme.typography.titleMedium,
+        color = MaterialTheme.colorScheme.primary,
+    )
 }
 
 @Composable
@@ -130,7 +145,10 @@ private fun UpdateSettings(updater: Updater, track: UpdateTrack, onTrack: (Updat
     val state by updater.update.collectAsState()
     val scope = rememberCoroutineScope()
     val tracks = UpdateTrack.entries
-    Column(Modifier.fillMaxWidth().selectableGroup(), verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap)) {
+    Column(
+        Modifier.fillMaxWidth().selectableGroup(),
+        verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap),
+    ) {
         tracks.forEachIndexed { index, choice ->
             val selected = choice == track
             SegmentedListItem(
@@ -152,7 +170,8 @@ private fun UpdateSettings(updater: Updater, track: UpdateTrack, onTrack: (Updat
         content = { Text("Check for updates") },
     )
     Text(
-        "Switching from Snapshot to Release never downgrades: the next release that is newer than this build is offered.",
+        "Switching from Snapshot to Release never downgrades: " +
+            "the next release that is newer than this build is offered.",
         style = MaterialTheme.typography.bodyMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
@@ -166,8 +185,10 @@ private const val PRIVACY_URL = "https://meshtastic.org/docs/legal/privacy/"
 private const val TRADEMARK_URL = "https://meshtastic.org/docs/legal/licensing-and-trademark/"
 private const val CONDUCT_URL = "https://meshtastic.org/docs/legal/conduct/"
 
-internal const val COPYRIGHT_NOTICE = "Meshtastic® Copyright Meshtastic LLC. Meshtastic® is a registered trademark of Meshtastic LLC. Aether is a Meshtastic project."
-internal const val LICENSE_NOTICE = "Free software under the GNU General Public License v3 or later, with no warranty. You may redistribute it under the same license."
+internal const val COPYRIGHT_NOTICE = "Meshtastic® Copyright Meshtastic LLC. " +
+    "Meshtastic® is a registered trademark of Meshtastic LLC. Aether is a Meshtastic project."
+internal const val LICENSE_NOTICE = "Free software under the GNU General Public License v3 or later, " +
+    "with no warranty. You may redistribute it under the same license."
 
 /** The project's links, then who owns the name and under what license the app is shared. */
 @Composable

@@ -163,7 +163,7 @@ class DspBlocksTest {
     @Test
     fun `the modal resonator rings at its fundamental and not a third away`() {
         val modal = ModalResonator(rate)
-        modal.configure(440.0, 0.3f, 0.5f, 3.0f, 0.2f, 14)
+        modal.configure(440.0, ModalBody(structure = 0.3f, position = 0.2f, modes = 14), 0.5f, 3.0f)
         val out = FloatArray(rate) { modal.process(if (it == 0) 1f else 0f) }
         val at = goertzel(out, 4800, 40000, 440.0, rate)
         val off = goertzel(out, 4800, 40000, 440.0 * 1.26, rate)
@@ -174,7 +174,7 @@ class DspBlocksTest {
     fun `a longer ring time keeps the modal resonator louder one second in`() {
         fun level(ring: Float): Double {
             val modal = ModalResonator(rate)
-            modal.configure(440.0, 0.3f, 0.5f, ring, 0.2f, 14)
+            modal.configure(440.0, ModalBody(structure = 0.3f, position = 0.2f, modes = 14), 0.5f, ring)
             val out = FloatArray(rate * 2) { modal.process(if (it == 0) 1f else 0f) }
             var e = 0.0
             for (i in rate until rate * 2) e += out[i] * out[i]

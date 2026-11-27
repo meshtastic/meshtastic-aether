@@ -23,7 +23,8 @@ internal enum class KeyAction(
 }
 
 /**
- * H overlay, F fullscreen, Esc close or leave fullscreen, Up and Down volume, M mute, P headphones, D disconnect; null for any other key.
+ * H overlay, F fullscreen, Esc close or leave fullscreen, Up and Down volume, M mute, P headphones, D disconnect; null
+ * for any other key.
  * A TV remote has no letters: Select (D-pad center) opens the HUD and Play/Pause mutes. A focused HUD button
  * consumes Select first, so the HUD's own buttons still work.
  */
@@ -55,7 +56,9 @@ internal class DisconnectConfirm {
     /** True from the first press until it is confirmed or expires; drives the hint. */
     val armed: Boolean get() = armedAt != NOT_ARMED
 
-    /** A press at [nowMillis]: true when it confirms an armed press, false when it only arms (or re-arms after expiry). */
+    /**
+     * A press at [nowMillis]: true when it confirms an armed press, false when it only arms (or re-arms after expiry).
+     */
     fun press(nowMillis: Long): Boolean {
         val first = armedAt
         if (first != NOT_ARMED && nowMillis - first in 0 until DISCONNECT_CONFIRM_MILLIS) {
@@ -76,7 +79,10 @@ internal class DisconnectConfirm {
     }
 }
 
-/** The viewer's controls: overlay, volume, mute and headphones. Plain state, so a key table can be tested without a window. */
+/**
+ * The viewer's controls: overlay, volume, mute and headphones. Plain state, so a key table can be tested without a
+ * window.
+ */
 internal class Controls(volume: Float = 1f, headphones: Boolean = false) {
     /** Whether the sound is placed for headphones; the engine and the saved setting follow it. */
     var headphones by mutableStateOf(headphones)
@@ -116,36 +122,46 @@ internal class Controls(volume: Float = 1f, headphones: Boolean = false) {
      * the result says what the caller must do and, through [consumed], whether the key was used. [now] times the
      * Disconnect confirmation; its first press opens the overlay so the hint is on screen.
      */
-    fun apply(action: KeyAction, fullscreen: Boolean, canFullscreen: Boolean, now: Long = nowMillis()): Result = when (action) {
-        KeyAction.ToggleOverlay -> {
-            overlayOpen = !overlayOpen
-            Result(true, Effect.None)
-        }
-        KeyAction.ToggleFullscreen -> if (canFullscreen) Result(true, Effect.ToggleFullscreen) else Result(false, Effect.None)
-        KeyAction.Escape -> when {
-            overlayOpen -> {
-                overlayOpen = false
+    fun apply(action: KeyAction, fullscreen: Boolean, canFullscreen: Boolean, now: Long = nowMillis()): Result =
+        when (action) {
+            KeyAction.ToggleOverlay -> {
+                overlayOpen = !overlayOpen
                 Result(true, Effect.None)
             }
-            fullscreen && canFullscreen -> Result(true, Effect.ToggleFullscreen)
-            else -> Result(false, Effect.None)
+            KeyAction.ToggleFullscreen -> fullscreenSwitch(canFullscreen)
+            KeyAction.Escape -> escape(fullscreen, canFullscreen)
+            KeyAction.VolumeUp -> step(VOLUME_STEP)
+            KeyAction.VolumeDown -> step(-VOLUME_STEP)
+            KeyAction.ToggleMute -> {
+                muted = !muted
+                Result(true, Effect.None)
+            }
+            KeyAction.ToggleHeadphones -> {
+                headphones = !headphones
+                Result(true, Effect.None)
+            }
+            KeyAction.Disconnect -> disconnectPress(now)
         }
-        KeyAction.VolumeUp -> step(VOLUME_STEP)
-        KeyAction.VolumeDown -> step(-VOLUME_STEP)
-        KeyAction.ToggleMute -> {
-            muted = !muted
+
+    private fun fullscreenSwitch(canFullscreen: Boolean): Result =
+        if (canFullscreen) Result(true, Effect.ToggleFullscreen) else Result(false, Effect.None)
+
+    /** Esc closes the HUD first, then leaves fullscreen; otherwise it is not used. */
+    private fun escape(fullscreen: Boolean, canFullscreen: Boolean): Result = when {
+        overlayOpen -> {
+            overlayOpen = false
             Result(true, Effect.None)
         }
-        KeyAction.ToggleHeadphones -> {
-            headphones = !headphones
-            Result(true, Effect.None)
-        }
-        KeyAction.Disconnect -> if (disconnect.press(now)) {
-            Result(true, Effect.Disconnect)
-        } else {
-            overlayOpen = true
-            Result(true, Effect.None)
-        }
+        fullscreen && canFullscreen -> Result(true, Effect.ToggleFullscreen)
+        else -> Result(false, Effect.None)
+    }
+
+    /** A confirming press disconnects; an arming one opens the HUD so the hint is on screen. */
+    private fun disconnectPress(now: Long): Result = if (disconnect.press(now)) {
+        Result(true, Effect.Disconnect)
+    } else {
+        overlayOpen = true
+        Result(true, Effect.None)
     }
 
     /**

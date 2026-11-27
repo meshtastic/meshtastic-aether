@@ -5,9 +5,9 @@ package org.meshtastic.aether.synth
  * crossfaded by a triangle, one line per channel.
  */
 internal class PitchShifter(sampleRate: Int) {
-    private val windowSize = WINDOW_AT_32K * sampleRate / 32000.0
-    private val lineL = DelayLine(windowSize.toInt() + 8)
-    private val lineR = DelayLine(windowSize.toInt() + 8)
+    private val windowSize = WINDOW_AT_32K * sampleRate / REF_RATE
+    private val lineL = DelayLine(windowSize.toInt() + LINE_GUARD)
+    private val lineR = DelayLine(windowSize.toInt() + LINE_GUARD)
     /** Sweep position in 0..1; a Double so hours of accumulation keep the pitch exact. */
     internal var phase = 0.0
         private set
@@ -25,9 +25,9 @@ internal class PitchShifter(sampleRate: Int) {
         phase += (1.0 - ratio.toDouble()) / windowSize
         if (phase >= 1.0) phase -= 1.0
         if (phase <= 0.0) phase += 1.0
-        val tri = (2.0 * (if (phase >= 0.5) 1.0 - phase else phase)).toFloat()
+        val tri = (2.0 * (if (phase >= MID_SWEEP) 1.0 - phase else phase)).toFloat()
         val p = (phase * windowSize).toFloat()
-        var half = p + (windowSize * 0.5).toFloat()
+        var half = p + (windowSize / 2).toFloat()
         if (half >= windowSize) half -= windowSize.toFloat()
         lineL.write(l + DENORMAL_FLOOR)
         lineR.write(r + DENORMAL_FLOOR)
@@ -37,5 +37,12 @@ internal class PitchShifter(sampleRate: Int) {
 
     private companion object {
         const val WINDOW_AT_32K = 1024.0
+        const val REF_RATE = 32000.0
+
+        /** Spare samples past the line's longest read. */
+        const val LINE_GUARD = 8
+
+        /** Where the crossfade triangle peaks: the first tap is loudest half way through its sweep. */
+        const val MID_SWEEP = 0.5
     }
 }

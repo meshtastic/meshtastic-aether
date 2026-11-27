@@ -3,6 +3,7 @@ package org.meshtastic.aether.mesh
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
+import org.meshtastic.aether.music.Rng
 import kotlin.math.cos
 import kotlin.math.sin
 
@@ -73,28 +74,99 @@ internal object DemoScript {
     private const val SENSOR_EVERY = 4
     private const val FAR_NODE = NODE_COUNT - 1
     private const val BASE_NUM = 0x0B000000L
+    private const val NODE_NUM_STRIDE = 0x101L
+
+    /** Nodes spiral out from this fraction of [FIELD_DEG] to all of it. */
+    private const val INNER_RING = 0.25
+
+    /** Each further node sits this much higher than the last, sensors excepted. */
+    private const val ALTITUDE_STEP_M = 15
+
+    /** A degree of longitude is shorter than one of latitude at 45 degrees north (1 / cos 45 is about 1.4). */
+    private const val LON_STRETCH = 1.4
+
+    private const val FULL_PCT = 100
+    private const val LIPO_STEP_PCT = 10.0
+    private const val MV_PER_VOLT = 1000.0
+
+    /** Before the front: cool and warming one degree per [MS_PER_DEGREE], calm; after it: warm, low and gusty. */
+    private const val COOL_START_C = 9f
+    private const val MS_PER_DEGREE = 100_000f
+    private const val CALM_WIND_MPS = 1.5f
+    private const val WARM_C = 17f
+    private const val LOW_PRESSURE_HPA = 976f
+    private const val GUSTY_WIND_MPS = 8f
+    private const val HUMIDITY_PCT = 55f
+    private const val NODE_TEMP_STEP_C = 0.1f
+
+    /**
+     * A packet's link figures cycle with its index k: SNR -12 to +7 dB in steps of 7, RSSI -110 to -71 dBm in steps
+     * of 11, 0 to 3 hops and 24 to 103 payload bytes in steps of 17.
+     */
+    private const val SNR_FLOOR_DB = -12f
+    private const val SNR_STEP_DB = 7
+    private const val SNR_SPAN_DB = 20
+    private const val RSSI_FLOOR_DBM = -110
+    private const val RSSI_STEP_DB = 11
+    private const val RSSI_SPAN_DB = 40
+    private const val HOP_VARIETY = 4
+    private const val PAYLOAD_MIN_BYTES = 24
+    private const val PAYLOAD_STEP_BYTES = 17
+    private const val PAYLOAD_SPAN_BYTES = 80
+
+    /** After a node arrives: its NodeInfo, then its first environment reading, then its health. */
+    private const val NODE_INFO_DELAY_MS = 500
+    private const val FIRST_ENVIRONMENT_DELAY_MS = 1_000
+    private const val HEALTH_DELAY_MS = 1_500
+    private const val BATTERY_BASE_PCT = 55
+    private const val BATTERY_STEP_PCT = 4
+    private const val BATTERY_SPAN_PCT = 40
+    private const val UPTIME_STEP_S = 3_600L
+
+    /** Upper bounds of each kind's share of the background traffic, cumulative; the rest is encrypted. */
+    private const val POSITION_UNTIL = 0.30
+    private const val TELEMETRY_UNTIL = 0.50
+    private const val NODEINFO_UNTIL = 0.65
+
+    private const val DM_NODE = 3
+    private const val DM_LENGTH = 14
+    private const val TEXT_NODE = 5
+    private const val TEXT_LENGTH = 72
+
+    /** The traceroute's reply crosses the field through these two nodes; the first also reports its neighbors. */
+    private const val ROUTE_HUB_NODE = 6
+    private const val ROUTE_HOP_NODE = 2
+    private const val ROUTE_REPLY_DELAY_MS = 400
+    private const val NEIGHBORS_DELAY_MS = 800
+
+    /** The sensors report the front one after another, this far apart. */
+    private const val SENSOR_STAGGER_MS = 2_000
 
     /** Our own node; never heard from, the target of the direct message and the traceroute. */
     const val SELF = BASE_NUM + 0xFF
 
-    fun nodeNum(i: Int): Long = BASE_NUM + i * 0x101L + 1
+    fun nodeNum(i: Int): Long = BASE_NUM + i * NODE_NUM_STRIDE + 1
 
     private fun position(i: Int): GeoPoint {
-        val r = FIELD_DEG * (0.25 + 0.75 * (i + 1).toDouble() / NODE_COUNT)
+        val r = FIELD_DEG * (INNER_RING + (1.0 - INNER_RING) * (i + 1).toDouble() / NODE_COUNT)
         val a = i * GOLDEN_ANGLE
         val altitude = when {
             i == HIGH_GROUND_NODE -> HIGH_GROUND_M
             i % SENSOR_EVERY == 0 -> BASE_ALTITUDE_M
-            else -> BASE_ALTITUDE_M + i * 15
+            else -> BASE_ALTITUDE_M + i * ALTITUDE_STEP_M
         }
-        return GeoPoint(ORIGIN_LAT + r * cos(a), ORIGIN_LON + 1.4 * r * sin(a), altitude)
+        return GeoPoint(ORIGIN_LAT + r * cos(a), ORIGIN_LON + LON_STRETCH * r * sin(a), altitude)
     }
 
     private fun arrivalMs(i: Int): Long = FIRST_ARRIVAL_MS + i * ARRIVAL_GAP_MS
 
     private val ROLES = mapOf(ROUTER_NODE to "ROUTER", TRACKER_NODE to "TRACKER", SENSOR_NODE to "SENSOR")
     private val HARDWARE = listOf("HELTEC_V3", "TBEAM", "TLORA_V2_1_1P6")
-    private val SPECIAL_HARDWARE = mapOf(ROUTER_NODE to "STATION_G2", TRACKER_NODE to "T_ECHO", SENSOR_NODE to "RAK4631")
+    private val SPECIAL_HARDWARE = mapOf(
+        ROUTER_NODE to "STATION_G2",
+        TRACKER_NODE to "T_ECHO",
+        SENSOR_NODE to "RAK4631",
+    )
 
     fun role(i: Int): String = ROLES[i] ?: "CLIENT"
 
@@ -103,10 +175,10 @@ internal object DemoScript {
 
     /** Cell voltage the firmware would report at [pct] percent: linear between the curve's points. */
     internal fun lipoVolts(pct: Int): Float {
-        val pos = (100 - pct.coerceIn(0, 100)) / 10.0
+        val pos = (FULL_PCT - pct.coerceIn(0, FULL_PCT)) / LIPO_STEP_PCT
         val i = pos.toInt().coerceAtMost(LIPO_MV.lastIndex)
         val next = minOf(i + 1, LIPO_MV.lastIndex)
-        return ((LIPO_MV[i] + (LIPO_MV[next] - LIPO_MV[i]) * (pos - i)) / 1000.0).toFloat()
+        return ((LIPO_MV[i] + (LIPO_MV[next] - LIPO_MV[i]) * (pos - i)) / MV_PER_VOLT).toFloat()
     }
 
     fun hardware(i: Int): String = SPECIAL_HARDWARE[i] ?: HARDWARE[i % HARDWARE.size]
@@ -117,123 +189,171 @@ internal object DemoScript {
      */
     internal fun pace(atMs: Long): Double = when {
         atMs <= TRAFFIC_FROM_MS -> QUIET_PACE
-        atMs < BUSY_FROM_MS -> QUIET_PACE + (BUSY_PACE - QUIET_PACE) * (atMs - TRAFFIC_FROM_MS) / (BUSY_FROM_MS - TRAFFIC_FROM_MS)
+        atMs < BUSY_FROM_MS ->
+            QUIET_PACE + (BUSY_PACE - QUIET_PACE) * (atMs - TRAFFIC_FROM_MS) / (BUSY_FROM_MS - TRAFFIC_FROM_MS)
         atMs <= BUSY_UNTIL_MS -> BUSY_PACE
-        else -> (BUSY_PACE + (QUIET_PACE - BUSY_PACE) * (atMs - BUSY_UNTIL_MS) / (TRAFFIC_UNTIL_MS - BUSY_UNTIL_MS)).coerceAtMost(QUIET_PACE)
+        else -> (BUSY_PACE + (QUIET_PACE - BUSY_PACE) * (atMs - BUSY_UNTIL_MS) / (TRAFFIC_UNTIL_MS - BUSY_UNTIL_MS))
+            .coerceAtMost(QUIET_PACE)
     }
 
-    /** Temperature C, pressure hPa and wind m/s at [atMs]: a calm cool spell, then a step to warm, low and gusty. */
-    private fun weather(atMs: Long, first: Boolean): Triple<Float, Float, Float> =
+    private class Weather(val temperatureC: Float, val pressureHpa: Float, val windMps: Float)
+
+    /** The weather at [atMs]: a calm cool spell, then a step to warm, low and gusty. */
+    private fun weather(atMs: Long, first: Boolean): Weather =
         if (atMs < WEATHER_SHIFT_MS) {
-            Triple(9f + atMs / 100_000f, if (first) 988f else 976f, 1.5f)
+            val pressure = if (first) PRESSURE_START_HPA + HISTORY_RISE_HPA else LOW_PRESSURE_HPA
+            Weather(COOL_START_C + atMs / MS_PER_DEGREE, pressure, CALM_WIND_MPS)
         } else {
-            Triple(17f, 976f, 8f)
+            Weather(WARM_C, LOW_PRESSURE_HPA, GUSTY_WIND_MPS)
         }
 
     /**
      * Every event of one pass, in time order, with `atMillis = base + offset`. The [first] pass also leads with the
      * pressure history, stamped before [base]; a later pass is only what happens inside its own five minutes.
      */
-    fun events(base: Long, first: Boolean = true): List<MeshEvent> {
+    fun events(base: Long, first: Boolean = true): List<MeshEvent> = with(Pass(base, first)) {
+        if (first) history()
+        arrivals()
+        traffic()
+        scenes()
+        for (i in 0 until NODE_COUNT) out += MeshEvent.NodeGone(nodeNum(i), base + LEAVE_FROM_MS + i * LEAVE_GAP_MS)
+        out.sortedBy { it.atMillis }
+    }
+
+    /** One pass being written: every event lands in [out] at `base + offset`. */
+    private class Pass(val base: Long, val first: Boolean) {
         val out = ArrayList<MeshEvent>()
-        fun heard(
-            offset: Long,
-            node: Int,
-            kind: PacketKind,
-            k: Int,
-            to: Long? = null,
-            toUs: Boolean = false,
-            viaMqtt: Boolean = node == FAR_NODE,
-            textLength: Int? = null,
-        ) {
-            out += MeshEvent.PacketHeard(
-                from = nodeNum(node),
-                kind = kind,
-                snr = -12f + (k * 7 % 20),
-                rssi = -110 + (k * 11 % 40),
-                hopsTaken = k % 4,
-                viaMqtt = viaMqtt,
-                atMillis = base + offset,
-                to = to,
-                toUs = toUs,
-                payloadBytes = textLength ?: (24 + k * 17 % 80),
-                textLength = textLength,
-                channel = k % 2,
-            )
-        }
-        fun environment(offset: Long, node: Int) {
-            val (t, p, w) = weather(offset, first)
-            out += MeshEvent.Environment(nodeNum(node), t + node * 0.1f, 55f, p, w, null, base + offset)
+
+        /** A broadcast from [node] whose link figures cycle with [k]; only the far node's arrive over MQTT. */
+        private fun packet(offset: Long, node: Int, kind: PacketKind, k: Int) = MeshEvent.PacketHeard(
+            from = nodeNum(node),
+            kind = kind,
+            snr = SNR_FLOOR_DB + (k * SNR_STEP_DB % SNR_SPAN_DB),
+            rssi = RSSI_FLOOR_DBM + (k * RSSI_STEP_DB % RSSI_SPAN_DB),
+            hopsTaken = k % HOP_VARIETY,
+            viaMqtt = node == FAR_NODE,
+            atMillis = base + offset,
+            payloadBytes = PAYLOAD_MIN_BYTES + k * PAYLOAD_STEP_BYTES % PAYLOAD_SPAN_BYTES,
+            channel = k % 2,
+        )
+
+        fun heard(offset: Long, node: Int, kind: PacketKind, k: Int) {
+            out += packet(offset, node, kind, k)
         }
 
-        if (first) {
+        fun heardOverMqtt(offset: Long, node: Int, kind: PacketKind, k: Int) {
+            out += packet(offset, node, kind, k).copy(viaMqtt = true)
+        }
+
+        /** A text of [length] characters from [node], addressed to us when [toUs]. */
+        fun text(offset: Long, node: Int, length: Int, toUs: Boolean = false) {
+            out += packet(offset, node, PacketKind.Text, node).copy(
+                to = if (toUs) SELF else null,
+                toUs = toUs,
+                payloadBytes = length,
+                textLength = length,
+            )
+        }
+
+        fun environment(offset: Long, node: Int) {
+            val w = weather(offset, first)
+            out += MeshEvent.Environment(
+                node = nodeNum(node),
+                temperatureC = w.temperatureC + node * NODE_TEMP_STEP_C,
+                humidityPct = HUMIDITY_PCT,
+                pressureHpa = w.pressureHpa,
+                windMps = w.windMps,
+                lux = null,
+                atMillis = base + offset,
+            )
+        }
+
+        /** The pressure history the first pass leads with: every sensor, rising, before [base]. */
+        fun history() {
             val steps = (HISTORY_MS / HISTORY_STEP_MS).toInt()
             for (j in 0..steps) {
                 val hpa = PRESSURE_START_HPA + HISTORY_RISE_HPA * j / steps
+                val at = base - HISTORY_MS + j * HISTORY_STEP_MS
                 for (n in 0 until NODE_COUNT step SENSOR_EVERY) {
-                    out += MeshEvent.Environment(nodeNum(n), null, null, hpa, null, null, base - HISTORY_MS + j * HISTORY_STEP_MS)
+                    out += MeshEvent.Environment(nodeNum(n), null, null, hpa, null, null, at)
                 }
             }
         }
 
-        out += MeshEvent.Link(LinkState.Simulated, base)
-        out += MeshEvent.Self(SELF, "Demo Home", GeoPoint(ORIGIN_LAT, ORIGIN_LON), base)
-        for (i in 0 until NODE_COUNT) {
-            out += MeshEvent.NodeSeen(
-                nodeNum(i), "Demo ${i + 1}", position(i), true, base + arrivalMs(i),
-                role = role(i), hardware = hardware(i),
-            )
-            heard(arrivalMs(i) + 500, i, PacketKind.NodeInfo, i)
-            if (i % SENSOR_EVERY == 0) environment(arrivalMs(i) + 1_000, i)
-            val pct = when (i) {
-                ROUTER_NODE -> POWERED
-                LOW_BATTERY_NODE -> LOW_BATTERY_PCT
-                else -> 55 + i * 4 % 40
-            }
-            out += MeshEvent.Health(
-                nodeNum(i), pct, if (pct == POWERED) null else lipoVolts(pct), 3_600L * (i + 1), base + arrivalMs(i) + 1_500,
-                channelUtilPct = 8f + (i * 7 % 30), airUtilTxPct = 0.5f + (i % 5) * 0.4f,
-            )
-        }
-
-        val rnd = SplitMix(SEED)
-        var t = TRAFFIC_FROM_MS
-        var k = 0
-        while (t < TRAFFIC_UNTIL_MS) {
-            val arrived = ((t - FIRST_ARRIVAL_MS) / ARRIVAL_GAP_MS).toInt().coerceIn(0, NODE_COUNT - 1) + 1
-            val node = rnd.nextInt(arrived)
-            val roll = rnd.nextDouble()
-            when {
-                roll < 0.30 -> heard(t, node, PacketKind.Position, k)
-                roll < 0.50 -> {
-                    heard(t, node, PacketKind.Telemetry, k)
-                    if (node % SENSOR_EVERY == 0) environment(t, node)
+        /** The link, our own node, then each node arriving with its NodeInfo, first reading and health. */
+        fun arrivals() {
+            out += MeshEvent.Link(LinkState.Simulated, base)
+            out += MeshEvent.Self(SELF, "Demo Home", GeoPoint(ORIGIN_LAT, ORIGIN_LON), base)
+            for (i in 0 until NODE_COUNT) {
+                val arrival = arrivalMs(i)
+                out += MeshEvent.NodeSeen(
+                    nodeNum(i), "Demo ${i + 1}", position(i), true, base + arrival,
+                    role = role(i), hardware = hardware(i),
+                )
+                heard(arrival + NODE_INFO_DELAY_MS, i, PacketKind.NodeInfo, i)
+                if (i % SENSOR_EVERY == 0) environment(arrival + FIRST_ENVIRONMENT_DELAY_MS, i)
+                val pct = when (i) {
+                    ROUTER_NODE -> POWERED
+                    LOW_BATTERY_NODE -> LOW_BATTERY_PCT
+                    else -> BATTERY_BASE_PCT + i * BATTERY_STEP_PCT % BATTERY_SPAN_PCT
                 }
-                roll < 0.65 -> heard(t, node, PacketKind.NodeInfo, k)
-                else -> heard(t, node, PacketKind.Encrypted, k)
+                out += MeshEvent.Health(
+                    nodeNum(i), pct, if (pct == POWERED) null else lipoVolts(pct), UPTIME_STEP_S * (i + 1),
+                    base + arrival + HEALTH_DELAY_MS,
+                    channelUtilPct = 8f + (i * 7 % 30), airUtilTxPct = 0.5f + (i % 5) * 0.4f,
+                )
             }
-            t += ((TRAFFIC_MIN_GAP_MS + rnd.nextDouble() * TRAFFIC_GAP_SPAN_MS) * pace(t)).toLong()
-            k++
         }
 
-        heard(ROUTER_MS, ROUTER_NODE, PacketKind.Position, 1)
-        heard(TRACKER_MS, TRACKER_NODE, PacketKind.Position, 2)
-        heard(SENSOR_MS, SENSOR_NODE, PacketKind.Telemetry, 4)
-        environment(SENSOR_MS, SENSOR_NODE)
-        heard(LOW_BATTERY_MS, LOW_BATTERY_NODE, PacketKind.Telemetry, 7)
-        heard(HIGH_GROUND_MS, HIGH_GROUND_NODE, PacketKind.Position, 9)
-        heard(MQTT_MS, MQTT_NODE, PacketKind.Position, 10, viaMqtt = true)
+        /** Background traffic from the nodes arrived so far, paced by [pace]. */
+        fun traffic() {
+            val rnd = Rng(SEED)
+            var t = TRAFFIC_FROM_MS
+            var k = 0
+            while (t < TRAFFIC_UNTIL_MS) {
+                val arrived = ((t - FIRST_ARRIVAL_MS) / ARRIVAL_GAP_MS).toInt().coerceIn(0, NODE_COUNT - 1) + 1
+                val node = rnd.nextInt(arrived)
+                val roll = rnd.nextDouble()
+                when {
+                    roll < POSITION_UNTIL -> heard(t, node, PacketKind.Position, k)
+                    roll < TELEMETRY_UNTIL -> {
+                        heard(t, node, PacketKind.Telemetry, k)
+                        if (node % SENSOR_EVERY == 0) environment(t, node)
+                    }
+                    roll < NODEINFO_UNTIL -> heard(t, node, PacketKind.NodeInfo, k)
+                    else -> heard(t, node, PacketKind.Encrypted, k)
+                }
+                t += ((TRAFFIC_MIN_GAP_MS + rnd.nextDouble() * TRAFFIC_GAP_SPAN_MS) * pace(t)).toLong()
+                k++
+            }
+        }
 
-        heard(DM_MS, 3, PacketKind.Text, 3, to = SELF, toUs = true, textLength = 14)
-        heard(TRACEROUTE_MS, FAR_NODE, PacketKind.Traceroute, 1)
-        out += MeshEvent.Route(listOf(nodeNum(FAR_NODE), nodeNum(6), nodeNum(2), SELF), base + TRACEROUTE_MS + 400)
-        out += MeshEvent.Neighbors(nodeNum(6), listOf(nodeNum(2), nodeNum(FAR_NODE)), base + TRACEROUTE_MS + 800)
-        heard(TEXT_MS, 5, PacketKind.Text, 5, textLength = 72)
-        environment(WEATHER_SHIFT_MS, 0)
-        environment(WEATHER_SHIFT_MS + 2_000, 4)
-        environment(WEATHER_SHIFT_MS + 4_000, 8)
-        for (i in 0 until NODE_COUNT) out += MeshEvent.NodeGone(nodeNum(i), base + LEAVE_FROM_MS + i * LEAVE_GAP_MS)
-        return out.sortedBy { it.atMillis }
+        /** The set pieces: each role, the low battery, high ground, MQTT, the DM, the traceroute and the front. */
+        fun scenes() {
+            heard(ROUTER_MS, ROUTER_NODE, PacketKind.Position, ROUTER_NODE)
+            heard(TRACKER_MS, TRACKER_NODE, PacketKind.Position, TRACKER_NODE)
+            heard(SENSOR_MS, SENSOR_NODE, PacketKind.Telemetry, SENSOR_NODE)
+            environment(SENSOR_MS, SENSOR_NODE)
+            heard(LOW_BATTERY_MS, LOW_BATTERY_NODE, PacketKind.Telemetry, LOW_BATTERY_NODE)
+            heard(HIGH_GROUND_MS, HIGH_GROUND_NODE, PacketKind.Position, HIGH_GROUND_NODE)
+            heardOverMqtt(MQTT_MS, MQTT_NODE, PacketKind.Position, MQTT_NODE)
+
+            text(DM_MS, DM_NODE, DM_LENGTH, toUs = true)
+            heard(TRACEROUTE_MS, FAR_NODE, PacketKind.Traceroute, 1)
+            out += MeshEvent.Route(
+                listOf(nodeNum(FAR_NODE), nodeNum(ROUTE_HUB_NODE), nodeNum(ROUTE_HOP_NODE), SELF),
+                base + TRACEROUTE_MS + ROUTE_REPLY_DELAY_MS,
+            )
+            out += MeshEvent.Neighbors(
+                nodeNum(ROUTE_HUB_NODE),
+                listOf(nodeNum(ROUTE_HOP_NODE), nodeNum(FAR_NODE)),
+                base + TRACEROUTE_MS + NEIGHBORS_DELAY_MS,
+            )
+            text(TEXT_MS, TEXT_NODE, TEXT_LENGTH)
+            for (n in 0 until NODE_COUNT step SENSOR_EVERY) {
+                environment(WEATHER_SHIFT_MS + n / SENSOR_EVERY * SENSOR_STAGGER_MS, n)
+            }
+        }
     }
 }
 

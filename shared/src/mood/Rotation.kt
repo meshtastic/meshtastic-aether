@@ -7,7 +7,8 @@ import kotlin.math.sin
 /**
  * What the mesh asks of the cloud's rotation right now.
  * [direction] is -1, +1 or 0 (no preference, keep turning the way it is); [directionStrength] is how far past neutral
- * the evidence for it is, 0..1, which the integrator compares with its hysteresis band. [impulse] is the 0..1 packet surge.
+ * the evidence for it is, 0..1, which the integrator compares with its hysteresis band. [impulse] is the 0..1 packet
+ * surge.
  */
 data class RotationTarget(
     val targetPeriodSeconds: Double,
@@ -54,7 +55,10 @@ class RotationIntegrator(initialPeriodSeconds: Double = RotationTargets.NEUTRAL_
     private var amp = RotationTargets.NEUTRAL_WOBBLE_DEGREES * DEG
     private var phase = 0.0
 
-    /** Advances by [dtSeconds] (non-finite or negative counts as zero, more than two minutes as two) and returns the new state. */
+    /**
+     * Advances by [dtSeconds] (non-finite or negative counts as zero, more than two minutes as two) and returns the new
+     * state.
+     */
     fun step(dtSeconds: Double, target: RotationTarget): RotationState {
         var rem = if (dtSeconds.isFinite() && dtSeconds > 0.0) minOf(dtSeconds, MAX_DT_SECONDS) else 0.0
         val period = finiteOr(target.targetPeriodSeconds, RotationTargets.NEUTRAL_PERIOD_SECONDS)
@@ -68,9 +72,7 @@ class RotationIntegrator(initialPeriodSeconds: Double = RotationTargets.NEUTRAL_
             val h = minOf(rem, SUB_STEP_SECONDS)
             rem -= h
             clockS += h
-            if (!turning && target.direction != 0 && target.direction != dir && strength >= HYSTERESIS &&
-                clockS - lastFlipS >= MIN_FLIP_SECONDS
-            ) {
+            if (asksToFlip(target.direction) && flipAllowed(strength)) {
                 turning = true
                 pendingDir = if (target.direction > 0) 1 else -1
             }
@@ -92,6 +94,13 @@ class RotationIntegrator(initialPeriodSeconds: Double = RotationTargets.NEUTRAL_
         val ampOut = amp.coerceIn(0.0, MAX_OFFSET_DEGREES * DEG - tiltOut)
         return RotationState(yaw, total, tiltOut, ampOut * sin(phase), dir)
     }
+
+    /** True when, not already turning, the target names a direction other than the current one. */
+    private fun asksToFlip(direction: Int): Boolean = !turning && direction != 0 && direction != dir
+
+    /** True when the evidence clears the hysteresis band and the last flip is long enough ago. */
+    private fun flipAllowed(strength: Double): Boolean =
+        strength >= HYSTERESIS && clockS - lastFlipS >= MIN_FLIP_SECONDS
 
     private fun moveToward(v: Double, goal: Double, maxDelta: Double): Double =
         if (goal > v) minOf(v + maxDelta, goal) else maxOf(v - maxDelta, goal)

@@ -4,7 +4,10 @@ import org.meshtastic.aether.mood.RotationState
 import kotlin.math.cos
 import kotlin.math.sin
 
-/** A projected point: [x] and [y] are screen offsets from the centre in the same units as the input, [scale] the perspective factor, [depth] the distance past the cloud centre (positive is away). */
+/**
+ * A projected point: [x] and [y] are screen offsets from the centre in the same units as the input, [scale] the
+ * perspective factor, [depth] the distance past the cloud centre (positive is away).
+ */
 class Projected {
     var x = 0.0
     var y = 0.0
@@ -83,7 +86,10 @@ object CloudMotion {
     /** How far toward the cool tint the farthest orbs are pulled, 0..1. */
     const val FAR_COOL_MIX = 0.3
 
-    /** Multiplier near 1.0 applied to every coordinate of the cloud, from the breathing phase accumulator [phase] in radians. */
+    /**
+     * Multiplier near 1.0 applied to every coordinate of the cloud, from the breathing phase accumulator [phase] in
+     * radians.
+     */
     fun breathing(phase: Double): Double = 1.0 + BREATH_FRACTION * sin(phase)
 
     /** Depth normalised to -1 (nearest) .. 1 (farthest) for the depth cues. */
@@ -109,7 +115,8 @@ object CloudMotion {
 /** Draw order for the cloud, far to near, without allocating. */
 object DepthSort {
     /**
-     * Reorders the first [n] entries of [order] so [depth] at those indices is non-increasing (largest, farthest, first).
+     * Reorders the first [n] entries of [order] so [depth] at those indices is non-increasing (largest, farthest,
+     * first).
      * Insertion sort: the order from the previous frame is nearly sorted, so a frame costs about n steps.
      */
     fun backToFront(depth: DoubleArray, order: IntArray, n: Int) {

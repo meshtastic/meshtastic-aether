@@ -11,6 +11,9 @@ object Motifs {
     const val MIN_NOTES = 3
     private const val SALT = 0x4D4F544946L
 
+    /** Each draw reads the hash's high bits, the best mixed. */
+    private const val DRAW_SHIFT = 33
+
     /**
      * 3 or 4 notes derived only from [node]. The first role is the node's own [Ornaments.role], each next role moves
      * 1..4 steps up the chord stack (mod 5), so neighbors always differ and a node keeps its motif across chords.
@@ -18,7 +21,7 @@ object Motifs {
     fun of(node: Long): Motif {
         var h = Rng.mix(node xor SALT)
         fun draw(bound: Int): Int {
-            val v = (h ushr 33).mod(bound.toLong()).toInt()
+            val v = (h ushr DRAW_SHIFT).mod(bound.toLong()).toInt()
             h = Rng.mix(h)
             return v
         }
@@ -27,7 +30,7 @@ object Motifs {
         val gaps = DoubleArray(size)
         roles[0] = Ornaments.role(node)
         for (i in 1 until size) {
-            roles[i] = (roles[i - 1] + 1 + draw(4)).mod(5)
+            roles[i] = (roles[i - 1] + 1 + draw(Chord.ROLES - 1)).mod(Chord.ROLES)
             gaps[i] = GAPS_SECONDS[draw(GAPS_SECONDS.size)]
         }
         return Motif(roles, gaps)

@@ -8,7 +8,9 @@ internal const val DENORMAL_FLOOR = 1.0e-18f
 
 internal const val TWO_PI = 2.0 * PI
 
-internal fun semitonesToRatio(semitones: Double): Double = 2.0.pow(semitones / 12.0)
+private const val SEMITONES_PER_OCTAVE = 12.0
+
+internal fun semitonesToRatio(semitones: Double): Double = 2.0.pow(semitones / SEMITONES_PER_OCTAVE)
 
 internal fun clamp(x: Float, lo: Float, hi: Float): Float = if (x < lo) lo else if (x > hi) hi else x
 
@@ -16,14 +18,27 @@ internal fun clamp(x: Double, lo: Double, hi: Double): Double = if (x < lo) lo e
 
 /** xorshift32 white noise; no allocation, deterministic per seed. */
 internal class Rng(seed: Int) {
-    private var s: Int = if (seed == 0) 0x2545F491 else seed
+    private var s: Int = if (seed == 0) ZERO_SEED_STAND_IN else seed
 
     /** Uniform in [-1, 1). */
     fun nextSigned(): Float {
-        s = s xor (s shl 13)
-        s = s xor (s ushr 17)
-        s = s xor (s shl 5)
-        return s * (1.0f / 2147483648.0f)
+        s = s xor (s shl SHIFT_A)
+        s = s xor (s ushr SHIFT_B)
+        s = s xor (s shl SHIFT_C)
+        return s * INT_TO_UNIT
+    }
+
+    private companion object {
+        /** xorshift never leaves the all-zero state, so a zero seed is swapped for this one. */
+        const val ZERO_SEED_STAND_IN = 0x2545F491
+
+        // Marsaglia's 13, 17, 5 triple for a full-period 32-bit xorshift.
+        const val SHIFT_A = 13
+        const val SHIFT_B = 17
+        const val SHIFT_C = 5
+
+        /** Scales an Int to [-1, 1): one over 2^31. */
+        const val INT_TO_UNIT = 1.0f / 2147483648.0f
     }
 }
 
@@ -59,10 +74,10 @@ internal class DelayLine(private val size: Int) {
         val x0 = at(di)
         val x1 = at(di + 1)
         val x2 = at(di + 2)
-        val c = (x1 - xm1) * 0.5f
+        val c = (x1 - xm1) / 2
         val v = x0 - x1
         val w = c + v
-        val a = w + v + (x2 - x0) * 0.5f
+        val a = w + v + (x2 - x0) / 2
         val bNeg = w + a
         return (((a * f) - bNeg) * f + c) * f + x0
     }

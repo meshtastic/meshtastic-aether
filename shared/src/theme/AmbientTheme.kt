@@ -14,7 +14,7 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import org.meshtastic.aether.visual.SceneModel
 
-/** Meshtastic brand and neutral colors from the client design standards, sections 7.1-7.3. */
+/** Meshtastic brand colors and the tonal scales the theme uses, from the client design standards, sections 7.1-7.6. */
 object Brand {
     val Accent = Color(0xFF67EA94)
     val Primary = Color(0xFF2C2D3C)
@@ -26,46 +26,63 @@ object Brand {
     val Neutral300 = Color(0xFFB8BAC8)
     val Neutral200 = Color(0xFFD5D6E0)
     val Neutral100 = Color(0xFFECEDF3)
+    val NeutralVariant700 = Color(0xFF444660)
+    val NeutralVariant500 = Color(0xFF767892)
+    val NeutralVariant300 = Color(0xFFBDBFCF)
+    val Green700 = Color(0xFF2D8F52)
+    val Green400 = Color(0xFF8FF0B2)
+    val Green300 = Color(0xFFB5F5CE)
+    val Blue950 = Color(0xFF001849)
+    val Blue700 = Color(0xFF2855A8)
+    val Blue300 = Color(0xFFB0BFF0)
+    val Blue50 = Color(0xFFE8EAF6)
+    val Error800 = Color(0xFF690005)
+    val Error700 = Color(0xFF93000A)
+    val Error300 = Color(0xFFFFB4AB)
+    val Error100 = Color(0xFFFDEAEA)
 }
+
+/** Section 8.3's surfaceContainer, interpolated between Neutral 900 and 800: the one scheme color off the scales. */
+private val SurfaceContainer = Color(0xFF242533)
 
 /** The design standards' dark scheme role mapping, section 8.3. */
 fun ambientColorScheme(): ColorScheme = darkColorScheme(
-    primary = Color(0xFF67EA94),
-    onPrimary = Color(0xFF0F1017),
-    primaryContainer = Color(0xFF2D8F52),
-    onPrimaryContainer = Color(0xFFB5F5CE),
-    secondary = Color(0xFFB8BAC8),
-    onSecondary = Color(0xFF1A1B26),
-    secondaryContainer = Color(0xFF3D3E50),
-    onSecondaryContainer = Color(0xFFD5D6E0),
-    tertiary = Color(0xFFB0BFF0),
-    onTertiary = Color(0xFF001849),
-    tertiaryContainer = Color(0xFF2855A8),
-    onTertiaryContainer = Color(0xFFE8EAF6),
-    error = Color(0xFFFFB4AB),
-    onError = Color(0xFF690005),
-    errorContainer = Color(0xFF93000A),
-    onErrorContainer = Color(0xFFFDEAEA),
-    background = Color(0xFF1A1B26),
-    onBackground = Color(0xFFECEDF3),
-    surface = Color(0xFF1A1B26),
-    onSurface = Color(0xFFECEDF3),
-    surfaceVariant = Color(0xFF444660),
-    onSurfaceVariant = Color(0xFFBDBFCF),
-    outline = Color(0xFF767892),
-    outlineVariant = Color(0xFF444660),
-    inverseSurface = Color(0xFFECEDF3),
-    inverseOnSurface = Color(0xFF2C2D3C),
-    inversePrimary = Color(0xFF2D8F52),
-    surfaceTint = Color(0xFF67EA94),
-    scrim = Color(0xFF000000),
-    surfaceDim = Color(0xFF0F1017),
-    surfaceBright = Color(0xFF3D3E50),
-    surfaceContainerLowest = Color(0xFF0F1017),
-    surfaceContainerLow = Color(0xFF1A1B26),
-    surfaceContainer = Color(0xFF242533),
-    surfaceContainerHigh = Color(0xFF2C2D3C),
-    surfaceContainerHighest = Color(0xFF3D3E50),
+    primary = Brand.Accent,
+    onPrimary = Brand.Neutral950,
+    primaryContainer = Brand.Green700,
+    onPrimaryContainer = Brand.Green300,
+    secondary = Brand.Neutral300,
+    onSecondary = Brand.Neutral900,
+    secondaryContainer = Brand.Neutral700,
+    onSecondaryContainer = Brand.Neutral200,
+    tertiary = Brand.Blue300,
+    onTertiary = Brand.Blue950,
+    tertiaryContainer = Brand.Blue700,
+    onTertiaryContainer = Brand.Blue50,
+    error = Brand.Error300,
+    onError = Brand.Error800,
+    errorContainer = Brand.Error700,
+    onErrorContainer = Brand.Error100,
+    background = Brand.Neutral900,
+    onBackground = Brand.Neutral100,
+    surface = Brand.Neutral900,
+    onSurface = Brand.Neutral100,
+    surfaceVariant = Brand.NeutralVariant700,
+    onSurfaceVariant = Brand.NeutralVariant300,
+    outline = Brand.NeutralVariant500,
+    outlineVariant = Brand.NeutralVariant700,
+    inverseSurface = Brand.Neutral100,
+    inverseOnSurface = Brand.Neutral800,
+    inversePrimary = Brand.Green700,
+    surfaceTint = Brand.Accent,
+    scrim = Color.Black,
+    surfaceDim = Brand.Neutral950,
+    surfaceBright = Brand.Neutral700,
+    surfaceContainerLowest = Brand.Neutral950,
+    surfaceContainerLow = Brand.Neutral900,
+    surfaceContainer = SurfaceContainer,
+    surfaceContainerHigh = Brand.Neutral800,
+    surfaceContainerHighest = Brand.Neutral700,
 )
 
 /**
@@ -83,7 +100,8 @@ data class AmbientPalette(
 ) {
     /** Scene brightness multiplier at [minuteOfDay]: 1.0 from 07:00 to 22:00, [dimFloor] from 00:00 to 05:00. */
     fun dim(minuteOfDay: Int): Double {
-        val night = ((SceneModel.nightDim(minuteOfDay) - SceneModel.NIGHT_DIM_MIN) / (1.0 - SceneModel.NIGHT_DIM_MIN)).coerceIn(0.0, 1.0)
+        val dimmed = SceneModel.nightDim(minuteOfDay) - SceneModel.NIGHT_DIM_MIN
+        val night = (dimmed / (1.0 - SceneModel.NIGHT_DIM_MIN)).coerceIn(0.0, 1.0)
         return dimFloor + (1.0 - dimFloor) * night
     }
 }
@@ -125,10 +143,13 @@ private val PROJECTOR = AmbientPalette(
     dimFloor = 0.8,
 )
 
-/** Neutral 950 over true black (standards section 2 allows pure black in dark mode) so an OLED pixel is off, and a deep dim at night. */
+/**
+ * Neutral 950 over true black (standards section 2 allows pure black in dark mode) so an OLED pixel is off, and a deep
+ * dim at night.
+ */
 private val OLED_NIGHT = AmbientPalette(
     backgroundTop = Brand.Neutral950,
-    backgroundBottom = Color(0xFF000000),
+    backgroundBottom = Color.Black,
     haze = Brand.Neutral400,
     edge = Brand.Neutral400,
     anchor = Brand.Accent,
@@ -138,7 +159,10 @@ private val OLED_NIGHT = AmbientPalette(
 
 val LocalAmbientPalette = staticCompositionLocalOf { PaletteChoice.Standard.palette }
 
-/** Expressive Material theme with the standards' dark scheme and the calm standard motion scheme, and the chosen [AmbientPalette] for the scene. */
+/**
+ * Expressive Material theme with the standards' dark scheme and the calm standard motion scheme, and the chosen
+ * [AmbientPalette] for the scene.
+ */
 @Composable
 fun AmbientTheme(choice: PaletteChoice = PaletteChoice.Standard, content: @Composable () -> Unit) {
     val scheme = ambientColorScheme()

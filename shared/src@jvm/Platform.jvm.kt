@@ -4,7 +4,7 @@ import org.meshtastic.aether.ui.KeyValueStore
 import org.meshtastic.sdk.RadioTransport
 import org.meshtastic.sdk.transport.tcp.TcpTransport
 
-internal class JVMPlatform : Platform {
+private class JVMPlatform : Platform {
     override val name: String = "Java ${System.getProperty("java.version")}"
     override val supportsTcp: Boolean = true
     override val lookaheadMillis: Int = 400
@@ -18,7 +18,10 @@ internal class JVMPlatform : Platform {
 
 internal actual fun getPlatform(): Platform = JVMPlatform()
 
-internal actual fun localOffsetMinutes(epochMillis: Long): Int = java.util.TimeZone.getDefault().getOffset(epochMillis) / 60_000
+private const val MILLIS_PER_MINUTE = 60_000
+
+internal actual fun localOffsetMinutes(epochMillis: Long): Int =
+    java.util.TimeZone.getDefault().getOffset(epochMillis) / MILLIS_PER_MINUTE
 
 internal actual fun createTcpTransport(host: String, port: Int): RadioTransport? = TcpTransport(host, port)
 

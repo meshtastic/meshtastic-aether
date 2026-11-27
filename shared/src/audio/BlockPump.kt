@@ -33,7 +33,7 @@ class BlockPump(private val renderer: BlockRenderer, private val blockFrames: In
                 val s = toPcm16(scratch[i]).toInt()
                 val o = (done * 2 + i) * 2
                 out[o] = s.toByte()
-                out[o + 1] = (s shr 8).toByte()
+                out[o + 1] = (s shr Byte.SIZE_BITS).toByte()
             }
             done += n
         }
@@ -55,7 +55,7 @@ class BlockPump(private val renderer: BlockRenderer, private val blockFrames: In
         fun toPcm16(sample: Float): Short {
             if (sample.isNaN()) return 0
             val c = if (sample > 1f) 1f else if (sample < -1f) -1f else sample
-            return (c * 32767f).roundToInt().toShort()
+            return (c * Short.MAX_VALUE).roundToInt().toShort()
         }
     }
 }

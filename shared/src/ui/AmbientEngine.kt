@@ -26,10 +26,12 @@ import org.meshtastic.aether.music.Composer
 import org.meshtastic.aether.music.ControlEvent
 import org.meshtastic.aether.music.Day
 import org.meshtastic.aether.music.NoteEvent
+import org.meshtastic.aether.music.Ornaments
 import org.meshtastic.aether.music.Texture
 import org.meshtastic.aether.mood.ParamValues
 import org.meshtastic.aether.synth.Synth
 import org.meshtastic.aether.visual.SceneModel
+import org.meshtastic.sdk.MeshtasticException
 import kotlin.concurrent.atomics.AtomicInt
 import kotlin.concurrent.atomics.AtomicLong
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
@@ -51,23 +53,38 @@ data class EngineStatus(
     val error: String? = null,
     /** The mesh-driven parameters in force; the overlay's Drivers panel lists them. */
     val params: ParamValues = ParamValues.NEUTRAL,
-    /** The way the cloud is actually turning: -1, 0 or +1; null before the first frame. The Drivers panel shows it next to the target. */
+    /**
+     * The way the cloud is actually turning: -1, 0 or +1; null before the first frame. The Drivers panel shows it next
+     * to the target.
+     */
     val turningDirection: Int? = null,
 )
 
 /** Whether the radio link is up: everything but `Connecting` and `Lost` shows the field in full color. */
 internal fun isLinked(state: LinkState): Boolean = state != LinkState.Connecting && state != LinkState.Lost
 
+/** The musical position in words: the key's root, its mode and the form section. */
+private class MusicLabels(val key: String, val mode: String, val section: String)
+
 /** What one composer tick hands the main thread: the notes to show and the state to display. */
 private class TickResult(
     val notes: List<NoteEvent>,
     val texture: Texture?,
     val minuteOfDay: Int,
-    val key: String,
-    val mode: String,
-    val section: String,
+    val labels: MusicLabels,
     val params: ParamValues,
     val batteryMoved: Int,
+)
+
+/**
+ * The engine's clock: the composer fills [lookaheadMillis] ahead every [tickMillis], reading wall time from [now], on
+ * [composerContext]. Tests pass a virtual clock and dispatcher.
+ */
+class EngineTiming(
+    val lookaheadMillis: Int,
+    val tickMillis: Long = 100,
+    val now: () -> Long = ::nowMillis,
+    val composerContext: CoroutineContext = Dispatchers.Default,
 )
 
 /**
@@ -76,23 +93,24 @@ private class TickResult(
  * `[rendered, rendered + lookahead)`, hands the notes to the synth and the same notes back to the main thread
  * through a second channel. The scene and the status are touched only by the coroutine that calls [run]. A packet's
  * ripple fires when the sink's playback frame reaches the frame its note was scheduled for. [pinFormFull] holds the
- * long form at its full level (demo mode). [failureText] turns a failed link open into the line the person sees; the raw exception goes
+ * long form at its full level (demo mode). [failureText] turns a failed link open into the line the person sees; the
+ * raw exception goes
  * to the log only. The engine starts silent: the app raises [volume].
  */
 class AmbientEngine(
     private val source: MeshSource,
     private val sink: AudioSink,
     seed: Long,
-    lookaheadMillis: Int,
-    private val tickMillis: Long = 100,
-    private val now: () -> Long = ::nowMillis,
+    timing: EngineTiming,
     pinFormFull: Boolean = false,
-    private val composerContext: CoroutineContext = Dispatchers.Default,
     private val failureText: (Throwable) -> String = { unreachableText(null) },
 ) {
+    private val tickMillis = timing.tickMillis
+    private val now = timing.now
+    private val composerContext = timing.composerContext
     private val sampleRate = sink.sampleRate
-    private val lookaheadFrames = lookaheadMillis.toLong() * sampleRate / 1000
-    private val tickFrames = tickMillis * sampleRate / 1000
+    private val lookaheadFrames = timing.lookaheadMillis.toLong() * sampleRate / MILLIS_PER_SECOND
+    private val tickFrames = tickMillis * sampleRate / MILLIS_PER_SECOND
     private val composer = Composer(seed, sampleRate, pinFormFull)
     private val synth = Synth(sampleRate)
     private val rendered = AtomicLong(0L)
@@ -123,7 +141,10 @@ class AmbientEngine(
         get() = Float.fromBits(gainBits.load())
         set(v) = gainBits.store(v.coerceIn(0f, 1f).toRawBits())
 
-    /** Headphone mix: dry voices placed to the side of the head, eased in over a fraction of a second; stereo when false. */
+    /**
+     * Headphone mix: dry voices placed to the side of the head, eased in over a fraction of a second; stereo when
+     * false.
+     */
     var headphones: Boolean
         get() = synth.headphones
         set(v) {
@@ -154,7 +175,7 @@ class AmbientEngine(
      * shown and retried with backoff, and a lost link is re-opened the same way.
      */
     suspend fun run(afterStart: suspend () -> Unit = {}): Nothing = coroutineScope {
-        Log.i(TAG, "start sampleRate=$sampleRate lookaheadMs=${lookaheadFrames * 1000 / sampleRate}")
+        Log.i(TAG, "start sampleRate=$sampleRate lookaheadMs=${lookaheadFrames * MILLIS_PER_SECOND / sampleRate}")
         val firstTick = CompletableDeferred<Unit>()
         launch(composerContext) { composerLoop(firstTick) }
         firstTick.await()
@@ -162,6 +183,8 @@ class AmbientEngine(
         try {
             launch { for (r in outbound) apply(r) }
             launch {
+                // Five sources and the packet mapping feed this; any failure stops input with a banner, not the audio.
+                @Suppress("TooGenericExceptionCaught")
                 try {
                     source.events.collect { onEvent(it) }
                 } catch (e: CancellationException) {
@@ -186,9 +209,7 @@ class AmbientEngine(
                 open()
                 status = status.copy(error = null)
                 break
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Throwable) {
+            } catch (e: MeshtasticException) {
                 Log.e(TAG, "link open failed", e)
                 status = status.copy(error = failureText(e))
                 delay(backoff.next())
@@ -202,9 +223,7 @@ class AmbientEngine(
                     Log.i(TAG, "link lost, reopening")
                     try {
                         open()
-                    } catch (e: CancellationException) {
-                        throw e
-                    } catch (e: Throwable) {
+                    } catch (e: MeshtasticException) {
                         Log.w(TAG, "reopen failed", e)
                     }
                 }
@@ -225,10 +244,12 @@ class AmbientEngine(
         }
     }
 
-    /** The composer takes a packet on its next tick and quantizes it to a quarter-second grid; so does this estimate. */
+    /**
+     * The composer takes a packet on its next tick and quantizes it to a quarter-second grid; so does this estimate.
+     */
     private fun dueFrameFor(): Long {
         val earliest = rendered.load() + tickFrames
-        val grid = sampleRate / 4L
+        val grid = (Ornaments.GRID_SECONDS * sampleRate).toLong()
         return -((-earliest).floorDiv(grid)) * grid
     }
 
@@ -243,8 +264,8 @@ class AmbientEngine(
         scene.onParams(r.params)
         batteryMoved = r.batteryMoved
         status = status.copy(
-            nodes = scene.orbs.size, key = r.key, mode = r.mode, section = r.section, params = r.params,
-            turningDirection = scene.rotation.direction,
+            nodes = scene.orbs.size, key = r.labels.key, mode = r.labels.mode, section = r.labels.section,
+            params = r.params, turningDirection = scene.rotation.direction,
         )
     }
 
@@ -275,25 +296,31 @@ class AmbientEngine(
         var texture: Texture? = null
         for (c in out.controls) if (c is ControlEvent.SetTexture) texture = c.texture
         val day = Day.at(moment)
-        val key = NOTE_NAMES[day.rootSemitones.roundToInt().mod(12)]
-        val section = composer.sectionAt(renderedNow.toDouble() / sampleRate)
-        outbound.trySend(TickResult(out.notes, texture, moment.minuteOfDay, key, day.mode.name, section, composer.params(), composer.moodSnapshot().batteryMovedNodes))
-        logSummary(ms, key, day.mode.name, section)
+        val labels = MusicLabels(
+            key = NOTE_NAMES[day.rootSemitones.roundToInt().mod(NOTE_NAMES.size)],
+            mode = day.mode.name,
+            section = composer.sectionAt(renderedNow.toDouble() / sampleRate),
+        )
+        val params = composer.params()
+        val batteryMoved = composer.moodSnapshot().batteryMovedNodes
+        outbound.trySend(TickResult(out.notes, texture, moment.minuteOfDay, labels, params, batteryMoved))
+        logSummary(ms, labels)
     }
 
     /** One line a minute: what was heard, how much was scheduled, and the key, mode and section in force. */
-    private fun logSummary(ms: Long, key: String, mode: String, section: String) {
+    private fun logSummary(ms: Long, labels: MusicLabels) {
         if (nextSummaryMillis == Long.MIN_VALUE) nextSummaryMillis = ms + SUMMARY_MILLIS
         if (ms < nextSummaryMillis) return
         nextSummaryMillis = ms + SUMMARY_MILLIS
+        val frames = scene.frameStats.takeReport()?.let { " " + it.format() } ?: ""
         Log.i(
             TAG,
             "minute heard=${tally.total} (${tally.describe()}) notes=$notesThisMinute nodes=${scene.orbs.size} " +
-                "link=${link.value} $key $mode section=$section volume=$volume${scene.frameStats.takeReport()?.let { " " + it.format() } ?: ""}",
+                "link=${link.value} ${labels.key} ${labels.mode} section=${labels.section} volume=$volume$frames",
         )
         tally.reset()
         notesThisMinute = 0
-        val shape = "$key $mode"
+        val shape = "${labels.key} ${labels.mode}"
         if (shape != lastLogged) {
             if (lastLogged.isNotEmpty()) Log.i(TAG, "key/mode $lastLogged -> $shape")
             lastLogged = shape
@@ -302,6 +329,7 @@ class AmbientEngine(
 
     private companion object {
         const val GAIN_GLIDE = 0.002f
+        const val MILLIS_PER_SECOND = 1000
         const val SUMMARY_MILLIS = 60_000L
         const val TAG = "engine"
         const val SOURCE_FAILED = "The mesh source stopped"

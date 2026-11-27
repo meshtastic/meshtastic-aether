@@ -4,6 +4,7 @@ product:
 
 apply:
   - //common.module-template.yaml
+  - //detekt.module-template.yaml
 
 plugins:
   build-info: enabled

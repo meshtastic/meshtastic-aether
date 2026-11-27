@@ -79,7 +79,8 @@ internal fun failureText(failure: InstallFailure): String = when (failure) {
 internal fun installText(state: InstallState, mode: InstallMode): String? = when (state) {
     InstallState.Idle -> null
     is InstallState.Downloading -> state.percent?.let { "Downloading $it%" } ?: "Downloading"
-    InstallState.Installing -> if (mode == InstallMode.INSTALL_AND_RESTART) "Restarting" else "Confirm the install when Android asks"
+    InstallState.Installing ->
+        if (mode == InstallMode.INSTALL_AND_RESTART) "Restarting" else "Confirm the install when Android asks"
     is InstallState.Failed -> failureText(state.failure) + (state.detail?.let { " ($it)" } ?: "")
 }
 
@@ -98,16 +99,28 @@ internal fun UpdatePanel(updater: Updater, modifier: Modifier = Modifier) {
     val install by updater.install.collectAsState()
     val latest = offered(state) ?: return
     val mode = updater.modeFor(latest)
-    Surface(modifier.widthIn(max = PANEL_WIDTH), color = MaterialTheme.colorScheme.surfaceContainerHigh, shape = MaterialTheme.shapes.large) {
+    Surface(
+        modifier.widthIn(max = PANEL_WIDTH),
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        shape = MaterialTheme.shapes.large,
+    ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("Aether ${latest.version} is ready", style = MaterialTheme.typography.titleMedium)
             installText(install, mode)?.let {
-                Text(it, Modifier.semantics { liveRegion = LiveRegionMode.Polite }, style = MaterialTheme.typography.bodyLarge)
+                Text(
+                    it,
+                    Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+                    style = MaterialTheme.typography.bodyLarge,
+                )
             }
             val downloading = install as? InstallState.Downloading
             if (downloading != null) {
                 val percent = downloading.percent
-                if (percent != null) LinearProgressIndicator(progress = { percent / 100f }) else LinearProgressIndicator()
+                if (percent != null) {
+                    LinearProgressIndicator(progress = { percent / 100f })
+                } else {
+                    LinearProgressIndicator()
+                }
             }
             val busy = install is InstallState.Downloading || install == InstallState.Installing
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

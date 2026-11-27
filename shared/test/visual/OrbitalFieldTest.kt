@@ -20,8 +20,11 @@ class OrbitalFieldTest {
         it.rssi = rssi
     }
 
-    private fun step(orbs: List<Orb>, edges: List<Edge> = emptyList(), fade: Double = 1.0, dir: Int = 1, gravity: Double = 0.5, dtSeconds: Double = dt) =
-        OrbitalField.step(dtSeconds, orbs, edges, { fade }, { n -> orbs.firstOrNull { it.node == n } }, null, dir, gravity)
+    private fun step(orbs: List<Orb>, edges: List<Edge> = emptyList(), fade: Double = 1.0, dir: Int = 1, gravity: Double = 0.5, dtSeconds: Double = dt) {
+        if (!OrbitalField.canStep(dtSeconds)) return
+        OrbitalField.pullAlongEdges(edges, { fade }, { n -> orbs.firstOrNull { it.node == n } }, null, gravity)
+        OrbitalField.advance(dtSeconds, orbs, dir, gravity)
+    }
 
     private fun run(orbs: List<Orb>, seconds: Double, edges: List<Edge> = emptyList(), fade: Double = 1.0, dir: Int = 1, gravity: Double = 0.5, each: () -> Unit = {}) {
         repeat((seconds / dt).toInt()) {

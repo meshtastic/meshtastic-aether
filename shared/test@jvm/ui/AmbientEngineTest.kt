@@ -23,6 +23,7 @@ import org.meshtastic.aether.mesh.LinkState
 import org.meshtastic.aether.mesh.MeshEvent
 import org.meshtastic.aether.mesh.MeshSource
 import org.meshtastic.aether.mesh.PacketKind
+import org.meshtastic.sdk.MeshtasticException
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -56,9 +57,12 @@ class AmbientEngineTest {
     private val base = 1_700_000_000_000L
 
     private fun TestScope.engine(sink: FakeSink, source: Flow<MeshEvent>) = AmbientEngine(
-        FlowSource(source), sink, seed = 11L, lookaheadMillis = 400,
-        now = { base + currentTime },
-        composerContext = StandardTestDispatcher(testScheduler),
+        FlowSource(source), sink, seed = 11L,
+        timing = EngineTiming(
+            lookaheadMillis = 400,
+            now = { base + currentTime },
+            composerContext = StandardTestDispatcher(testScheduler),
+        ),
     )
 
     // Regression: the engine used to leave the scene always "linked", so a lost link never desaturated the field.
@@ -127,8 +131,9 @@ class AmbientEngineTest {
     @Test
     fun `a pinned form reports a full section`() = runTest {
         val e = AmbientEngine(
-            FlowSource(flow { awaitCancellation() }), FakeSink(), 11L, 400,
-            now = { base + currentTime }, pinFormFull = true, composerContext = StandardTestDispatcher(testScheduler),
+            FlowSource(flow { awaitCancellation() }), FakeSink(), 11L,
+            EngineTiming(400, now = { base + currentTime }, composerContext = StandardTestDispatcher(testScheduler)),
+            pinFormFull = true,
         )
         val job = launch { e.run() }
         runCurrent()
@@ -145,7 +150,7 @@ class AmbientEngineTest {
         val job = launch {
             e.run {
                 attempts++
-                if (attempts < 3) throw IllegalStateException("boom")
+                if (attempts < 3) throw MeshtasticException.Transport("boom")
             }
         }
         runCurrent()
@@ -167,11 +172,12 @@ class AmbientEngineTest {
     @Test
     fun `a failing open shows the sessions own text and not the exception message`() = runTest {
         val e = AmbientEngine(
-            FlowSource(flow { awaitCancellation() }), FakeSink(), 11L, 400,
-            now = { base + currentTime }, composerContext = StandardTestDispatcher(testScheduler),
+            FlowSource(flow { awaitCancellation() }), FakeSink(), 11L,
+            EngineTiming(400, now = { base + currentTime }, composerContext = StandardTestDispatcher(testScheduler)),
             failureText = { unreachableText("node.local:4403") },
         )
-        val job = launch { e.run { throw java.net.ConnectException("Connection refused: no route") } }
+        val refused = java.net.ConnectException("Connection refused: no route")
+        val job = launch { e.run { throw MeshtasticException.Transport("TCP connect failed: ${refused.message}", refused) } }
         runCurrent()
         assertEquals("Can't reach node.local:4403 - retrying", e.status.error)
         job.cancel()

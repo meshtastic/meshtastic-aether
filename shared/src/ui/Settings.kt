@@ -33,7 +33,10 @@ internal class MemoryStore : KeyValueStore {
 
 /** What the app remembers between launches: the last link choice, the palette, the volume and the mute. */
 internal class Settings(private val store: KeyValueStore) {
-    /** The link to reconnect to; null when none was saved. A choice that cannot be encoded leaves the saved link as it was. */
+    /**
+     * The link to reconnect to; null when none was saved. A choice that cannot be encoded leaves the saved link as it
+     * was.
+     */
     var link: LinkChoice?
         get() = store.get(KEY_LINK)?.let(::decodeLink)
         set(value) {
@@ -103,18 +106,24 @@ internal fun decodeLink(text: String): LinkChoice? {
     val parts = text.split(SEP, limit = 3)
     return when (parts[0]) {
         "demo" -> LinkChoice.Demo
-        "tcp" -> {
-            val port = parts.getOrNull(2)?.toIntOrNull() ?: return null
-            val host = parts.getOrNull(1)?.takeIf { it.isNotBlank() } ?: return null
-            LinkChoice.Tcp(host, port)
-        }
+        "tcp" -> decodeTcp(parts)
         "ws" -> text.substringAfter(SEP, "").takeIf { it.isNotBlank() }?.let { LinkChoice.WebSocket(it) }
-        "serial" -> {
-            val path = parts.getOrNull(1)?.takeIf { it.isNotBlank() } ?: return null
-            LinkChoice.Serial(path, parts.getOrNull(2)?.takeIf { it.isNotBlank() } ?: path)
-        }
+        "serial" -> decodeSerial(parts)
         else -> null
     }
+}
+
+/** `tcp|host|port` split into its parts; null for a blank host or an unreadable port. */
+private fun decodeTcp(parts: List<String>): LinkChoice.Tcp? {
+    val port = parts.getOrNull(2)?.toIntOrNull()
+    val host = parts.getOrNull(1)?.takeIf { it.isNotBlank() }
+    return if (port == null || host == null) null else LinkChoice.Tcp(host, port)
+}
+
+/** `serial|path|label` split into its parts; null for a blank path, and the path stands in for a blank label. */
+private fun decodeSerial(parts: List<String>): LinkChoice.Serial? {
+    val path = parts.getOrNull(1)?.takeIf { it.isNotBlank() } ?: return null
+    return LinkChoice.Serial(path, parts.getOrNull(2)?.takeIf { it.isNotBlank() } ?: path)
 }
 
 /**

@@ -1,0 +1,17 @@
+# detekt rules for Aether, layered on detekt's defaults (buildUponDefaultConfig). Only settings that fit a rule to
+# this project live here; a finding is fixed in code, not switched off.
+
+style:
+  MagicNumber:
+    # A number that initializes a named property is named: mode tables, the brand palette and simulator tables are
+    # data, and Kotlin cannot make an array or a Color const. Literals inside expressions are still flagged.
+    ignorePropertyDeclaration: true
+
+naming:
+  FunctionNaming:
+    # Composables are PascalCase by the Compose API guidelines.
+    ignoreAnnotated: ['Composable']
+  InvalidPackageDeclaration:
+    # The Toolchain layout has no org/meshtastic/aether directories: src/ui holds org.meshtastic.aether.ui.
+    rootPackage: org.meshtastic.aether
+    requireRootInDeclaration: true
