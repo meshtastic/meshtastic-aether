@@ -17,6 +17,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -33,6 +34,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
 import org.meshtastic.aether.ble.BleRadio
 import org.meshtastic.aether.ble.RadioList
@@ -56,74 +58,97 @@ internal fun BluetoothSection(
         ChooserSection(chooser, onPick, modifier, onInteract)
         return
     }
-    var scanning by remember { mutableStateOf(false) }
-    var radios by remember { mutableStateOf(emptyList<BleRadio>()) }
-    var error by remember { mutableStateOf<String?>(null) }
-
-    LaunchedEffect(scanning) {
-        if (!scanning) return@LaunchedEffect
-        error = null
-        try {
-            if (!ensureBlePermissions()) {
-                error = "Bluetooth permission was not granted."
-                Log.w("ble", "scan not started: permission not granted")
-                scanning = false
-                return@LaunchedEffect
-            }
-            val flow = bleScan()
-            if (flow == null) {
-                error = "Bluetooth is not available on this device."
-                scanning = false
-                return@LaunchedEffect
-            }
-            val list = RadioList()
-            Log.i("ble", "scan started")
-            coroutineScope {
-                launch {
-                    while (true) {
-                        delay(REFRESH_MILLIS)
-                        radios = list.visible(nowMillis())
-                    }
-                }
-                flow.collect { radio ->
-                    val now = nowMillis()
-                    if (list.onSeen(radio, now)) Log.i("ble", "found ${radio.name ?: "unnamed"} ${radio.address} rssi=${radio.rssi}")
-                    radios = list.visible(now)
-                }
-            }
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Throwable) {
-            Log.e("ble", "scan failed", e)
-            error = e.message ?: e::class.simpleName
-            scanning = false
-        } finally {
-            Log.i("ble", "scan stopped")
-        }
-    }
+    val scan = remember { BleScan() }
+    LaunchedEffect(scan.scanning) { if (scan.scanning) scan.scanUntilStopped() }
 
     Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         FilledTonalButton(
             {
                 onInteract()
-                scanning = !scanning
+                scan.scanning = !scan.scanning
             },
             Modifier.fillMaxWidth().heightIn(min = MinTouch),
-        ) { Text(if (scanning) "Stop scanning" else "Scan for Bluetooth radios") }
-        error?.let { ErrorSurface(it) }
-        if (scanning && radios.isEmpty()) {
+        ) { Text(if (scan.scanning) "Stop scanning" else "Scan for Bluetooth radios") }
+        scan.error?.let { ErrorSurface(it) }
+        if (scan.scanning && scan.radios.isEmpty()) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 LoadingIndicator(Modifier.size(LoadingSize))
                 Text("Looking for radios...", style = MaterialTheme.typography.bodyLarge)
             }
         }
-        for (radio in radios) RadioRow(radio, onPick)
+        for (radio in scan.radios) RadioRow(radio, onPick)
+    }
+}
+
+/** A Bluetooth scan's state: whether it runs, the radios seen recently, and why it last stopped on its own. */
+@Stable
+private class BleScan {
+    var scanning by mutableStateOf(false)
+    var radios by mutableStateOf(emptyList<BleRadio>())
+    var error by mutableStateOf<String?>(null)
+
+    fun stop(reason: String?) {
+        error = reason
+        scanning = false
+    }
+}
+
+/** Scans until cancelled; a missing permission, missing Bluetooth or a failure stops it with the reason shown. */
+private suspend fun BleScan.scanUntilStopped() {
+    error = null
+    try {
+        openScan()?.let { collectRadios(it) }
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Throwable) {
+        Log.e("ble", "scan failed", e)
+        stop(e.message ?: e::class.simpleName)
+    } finally {
+        Log.i("ble", "scan stopped")
+    }
+}
+
+/** The platform's scan once permission is granted, or null with the scan stopped and the reason set. */
+private suspend fun BleScan.openScan(): Flow<BleRadio>? {
+    if (!ensureBlePermissions()) {
+        Log.w("ble", "scan not started: permission not granted")
+        stop("Bluetooth permission was not granted.")
+        return null
+    }
+    val flow = bleScan()
+    if (flow == null) stop("Bluetooth is not available on this device.")
+    return flow
+}
+
+/** Shows each radio as it is seen, and refreshes the list so radios that went quiet drop out. */
+private suspend fun BleScan.collectRadios(flow: Flow<BleRadio>) {
+    val list = RadioList()
+    Log.i("ble", "scan started")
+    coroutineScope {
+        launch {
+            while (true) {
+                delay(REFRESH_MILLIS)
+                radios = list.visible(nowMillis())
+            }
+        }
+        flow.collect { radio ->
+            val now = nowMillis()
+            if (list.onSeen(radio, now)) {
+                Log.i("ble", "found ${radio.name ?: "unnamed"} ${radio.address} rssi=${radio.rssi}")
+            }
+            radios = list.visible(now)
+        }
     }
 }
 
 /** One button that opens the platform's radio chooser; a dismissed chooser is not an error. */
 @Composable
-private fun ChooserSection(chooser: suspend () -> BleRadio?, onPick: (BleRadio) -> Unit, modifier: Modifier, onInteract: () -> Unit) {
+private fun ChooserSection(
+    chooser: suspend () -> BleRadio?,
+    onPick: (BleRadio) -> Unit,
+    modifier: Modifier,
+    onInteract: () -> Unit,
+) {
     val scope = rememberCoroutineScope()
     var choosing by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -171,11 +196,17 @@ private fun RadioRow(radio: BleRadio, onPick: (BleRadio) -> Unit) {
         Row(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text(radio.name ?: "Unnamed radio", style = MaterialTheme.typography.bodyLarge)
-                Text("Address ending ${addressTail(radio.address)}", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                SecondaryText("Address ending ${addressTail(radio.address)}")
             }
-            Text(signalLabel(radio.rssi), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            SecondaryText(signalLabel(radio.rssi))
         }
     }
+}
+
+/** Body text in the secondary color: the detail lines of a radio or port row. */
+@Composable
+internal fun SecondaryText(text: String) {
+    Text(text, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
 }
 
 /** An error in an errorContainer card that a screen reader announces when it appears. */

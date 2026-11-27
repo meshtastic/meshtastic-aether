@@ -2,6 +2,9 @@
 
 package org.meshtastic.aether.ui
 
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -16,6 +19,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.contentDescription
@@ -23,20 +27,26 @@ import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 
+private const val ONE_SECOND_MS = 1_000
+
 /**
- * The pending automatic connect: [text] over a determinate wavy bar at [progress] (0 to 1), then Connect now and Cancel.
- * [announce] marks the line as a polite live region, so a screen reader hears it once and not on every tick.
+ * The [pending] automatic connect: its line over a determinate wavy bar that fills as the countdown runs, then Connect
+ * now ([onNow], absent while the fields describe no link) and Cancel. The first second's line is a polite live region,
+ * so a screen reader hears it once and not on every tick.
  */
 @Composable
-internal fun CountdownBanner(
-    text: String,
-    progress: () -> Float,
-    onNow: (() -> Unit)?,
-    onCancel: () -> Unit,
-    modifier: Modifier = Modifier,
-    announce: Boolean = false,
-) {
-    Surface(modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surfaceContainerHigh) {
+internal fun CountdownBanner(pending: PendingConnect, onNow: (() -> Unit)?, modifier: Modifier = Modifier) {
+    val seconds = pending.countdown.secondsLeft
+    val total = pending.totalSeconds.coerceAtLeast(1)
+    val target = ((total - seconds + 1).coerceAtMost(total)).toFloat() / total
+    val progress by animateFloatAsState(target, tween(ONE_SECOND_MS, easing = LinearEasing))
+    val text = pending.text(seconds)
+    val announce = seconds == pending.totalSeconds
+    Surface(
+        modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.large,
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+    ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(
                 text,
@@ -46,10 +56,10 @@ internal fun CountdownBanner(
                     if (announce) liveRegion = LiveRegionMode.Polite
                 },
             )
-            LinearWavyProgressIndicator(progress, Modifier.fillMaxWidth())
+            LinearWavyProgressIndicator({ progress }, Modifier.fillMaxWidth())
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (onNow != null) FilledTonalButton(onNow, Modifier.heightIn(min = MinTouch)) { Text("Connect now") }
-                TextButton(onCancel, Modifier.heightIn(min = MinTouch)) { Text("Cancel") }
+                TextButton(pending.countdown::cancel, Modifier.heightIn(min = MinTouch)) { Text("Cancel") }
             }
         }
     }

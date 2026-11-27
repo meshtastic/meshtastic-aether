@@ -107,9 +107,9 @@ private fun PortRow(port: SerialRadio, onPick: (SerialRadio) -> Unit) {
         Row(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text(port.label, style = MaterialTheme.typography.bodyLarge)
-                Text(port.path.substringAfterLast('/'), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                SecondaryText(port.path.substringAfterLast('/'))
             }
-            Text(if (port.likelyMeshtastic) "Meshtastic" else "Other device", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            SecondaryText(if (port.likelyMeshtastic) "Meshtastic" else "Other device")
         }
     }
 }

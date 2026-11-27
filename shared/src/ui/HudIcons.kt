@@ -5,8 +5,7 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.graphics.vector.PathBuilder
-import androidx.compose.ui.graphics.vector.path
+import androidx.compose.ui.graphics.vector.addPathNodes
 import androidx.compose.ui.unit.dp
 import org.meshtastic.aether.theme.PaletteChoice
 
@@ -18,189 +17,91 @@ private const val STROKE = 2f
 private fun icon(name: String, build: ImageVector.Builder.() -> Unit): ImageVector =
     ImageVector.Builder(name, 24.dp, 24.dp, VIEWPORT, VIEWPORT).apply(build).build()
 
-private fun ImageVector.Builder.stroked(block: PathBuilder.() -> Unit) = path(
+/** Strokes SVG path data, in the 24 unit viewport, with round caps and joins. */
+private fun ImageVector.Builder.stroked(pathData: String) = addPath(
+    addPathNodes(pathData),
     fill = null,
     stroke = INK,
     strokeLineWidth = STROKE,
     strokeLineCap = StrokeCap.Round,
     strokeLineJoin = StrokeJoin.Round,
-    pathBuilder = block,
 )
 
-private fun ImageVector.Builder.filled(block: PathBuilder.() -> Unit) = path(fill = INK, pathBuilder = block)
+/** Fills SVG path data, in the 24 unit viewport. */
+private fun ImageVector.Builder.filled(pathData: String) = addPath(addPathNodes(pathData), fill = INK)
 
-private fun PathBuilder.speaker() {
-    moveTo(3f, 9.5f)
-    lineTo(7f, 9.5f)
-    lineTo(12f, 5f)
-    lineTo(12f, 19f)
-    lineTo(7f, 14.5f)
-    lineTo(3f, 14.5f)
-    close()
-}
+private const val SPEAKER = "M3 9.5 L7 9.5 L12 5 L12 19 L7 14.5 L3 14.5 Z"
 
-/** The HUD toolbar's icons, drawn here as vectors: the app takes no icon library. */
+/** The HUD toolbar's icons, drawn here as SVG path data: the app takes no icon library. */
 internal object HudIcons {
     val VolumeOn: ImageVector by lazy {
         icon("VolumeOn") {
-            filled { speaker() }
-            stroked {
-                moveTo(15.5f, 9f)
-                arcTo(4f, 4f, 0f, false, true, 15.5f, 15f)
-                moveTo(18f, 6.5f)
-                arcTo(8f, 8f, 0f, false, true, 18f, 17.5f)
-            }
+            filled(SPEAKER)
+            stroked("M15.5 9 A4 4 0 0 1 15.5 15 M18 6.5 A8 8 0 0 1 18 17.5")
         }
     }
 
     val VolumeOff: ImageVector by lazy {
         icon("VolumeOff") {
-            filled { speaker() }
-            stroked {
-                moveTo(16f, 9.5f)
-                lineTo(21f, 14.5f)
-                moveTo(21f, 9.5f)
-                lineTo(16f, 14.5f)
-            }
+            filled(SPEAKER)
+            stroked("M16 9.5 L21 14.5 M21 9.5 L16 14.5")
         }
     }
 
     /** A disc with its left half filled: the standard look. */
     val LookStandard: ImageVector by lazy {
         icon("LookStandard") {
-            stroked {
-                moveTo(12f, 4f)
-                arcTo(8f, 8f, 0f, true, true, 12f, 20f)
-                arcTo(8f, 8f, 0f, true, true, 12f, 4f)
-                close()
-            }
-            filled {
-                moveTo(12f, 4f)
-                arcTo(8f, 8f, 0f, false, false, 12f, 20f)
-                close()
-            }
+            stroked("M12 4 A8 8 0 1 1 12 20 A8 8 0 1 1 12 4 Z")
+            filled("M12 4 A8 8 0 0 0 12 20 Z")
         }
     }
 
     /** A lens with its beam: the projector look. */
     val LookProjector: ImageVector by lazy {
-        icon("LookProjector") {
-            stroked {
-                moveTo(3f, 7f)
-                lineTo(13f, 7f)
-                lineTo(13f, 17f)
-                lineTo(3f, 17f)
-                close()
-                moveTo(13f, 10f)
-                lineTo(21f, 6f)
-                moveTo(13f, 14f)
-                lineTo(21f, 18f)
-            }
-        }
+        icon("LookProjector") { stroked("M3 7 L13 7 L13 17 L3 17 Z M13 10 L21 6 M13 14 L21 18") }
     }
 
     /** A crescent: the OLED night look. */
     val LookOled: ImageVector by lazy {
-        icon("LookOled") {
-            filled {
-                moveTo(20f, 14.5f)
-                arcTo(8f, 8f, 0f, true, true, 9.5f, 4f)
-                arcTo(6.5f, 6.5f, 0f, false, false, 20f, 14.5f)
-                close()
-            }
-        }
+        icon("LookOled") { filled("M20 14.5 A8 8 0 1 1 9.5 4 A6.5 6.5 0 0 0 20 14.5 Z") }
     }
 
+    /** Three slider rows, each a short tick and a long bar. */
     val Drivers: ImageVector by lazy {
         icon("Drivers") {
-            stroked {
-                for (y in listOf(7f, 12f, 17f)) {
-                    moveTo(4f, y)
-                    lineTo(5f, y)
-                    moveTo(9f, y)
-                    lineTo(20f, y)
-                }
-            }
+            stroked("M4 7 L5 7 M9 7 L20 7 M4 12 L5 12 M9 12 L20 12 M4 17 L5 17 M9 17 L20 17")
         }
     }
 
     /** Headphones: a band over two ear cups. */
     val Headphones: ImageVector by lazy {
         icon("Headphones") {
-            stroked {
-                moveTo(4f, 15f)
-                lineTo(4f, 12f)
-                arcTo(8f, 8f, 0f, false, true, 20f, 12f)
-                lineTo(20f, 15f)
-                moveTo(4f, 15f)
-                lineTo(6.5f, 15f)
-                lineTo(6.5f, 20f)
-                lineTo(4f, 20f)
-                close()
-                moveTo(20f, 15f)
-                lineTo(17.5f, 15f)
-                lineTo(17.5f, 20f)
-                lineTo(20f, 20f)
-                close()
-            }
+            stroked(
+                "M4 15 L4 12 A8 8 0 0 1 20 12 L20 15 " +
+                    "M4 15 L6.5 15 L6.5 20 L4 20 Z M20 15 L17.5 15 L17.5 20 L20 20 Z",
+            )
         }
     }
 
     /** A check mark: the selected item in a menu. */
     val Check: ImageVector by lazy {
-        icon("Check") {
-            stroked {
-                moveTo(5f, 12.5f)
-                lineTo(10f, 17.5f)
-                lineTo(19f, 7f)
-            }
-        }
+        icon("Check") { stroked("M5 12.5 L10 17.5 L19 7") }
     }
 
     val Fullscreen: ImageVector by lazy {
         icon("Fullscreen") {
-            stroked {
-                moveTo(4f, 9f)
-                lineTo(4f, 4f)
-                lineTo(9f, 4f)
-                moveTo(15f, 4f)
-                lineTo(20f, 4f)
-                lineTo(20f, 9f)
-                moveTo(20f, 15f)
-                lineTo(20f, 20f)
-                lineTo(15f, 20f)
-                moveTo(9f, 20f)
-                lineTo(4f, 20f)
-                lineTo(4f, 15f)
-            }
+            stroked("M4 9 L4 4 L9 4 M15 4 L20 4 L20 9 M20 15 L20 20 L15 20 M9 20 L4 20 L4 15")
         }
     }
 
     /** The power glyph: Disconnect. */
     val Disconnect: ImageVector by lazy {
-        icon("Disconnect") {
-            stroked {
-                moveTo(12f, 3f)
-                lineTo(12f, 11f)
-                moveTo(7f, 6.5f)
-                arcTo(8f, 8f, 0f, true, false, 17f, 6.5f)
-            }
-        }
+        icon("Disconnect") { stroked("M12 3 L12 11 M7 6.5 A8 8 0 1 0 17 6.5") }
     }
 
     /** An arrow down into a tray: an update is ready. */
     val Update: ImageVector by lazy {
-        icon("Update") {
-            stroked {
-                moveTo(12f, 4f)
-                lineTo(12f, 15f)
-                moveTo(7.5f, 10.5f)
-                lineTo(12f, 15f)
-                lineTo(16.5f, 10.5f)
-                moveTo(5f, 19.5f)
-                lineTo(19f, 19.5f)
-            }
-        }
+        icon("Update") { stroked("M12 4 L12 15 M7.5 10.5 L12 15 L16.5 10.5 M5 19.5 L19 19.5") }
     }
 
     fun look(choice: PaletteChoice): ImageVector = when (choice) {

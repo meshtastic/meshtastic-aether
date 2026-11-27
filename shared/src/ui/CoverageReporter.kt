@@ -17,7 +17,8 @@ internal class CoverageReporter(
 
     fun onEvent(e: MeshEvent, nowMillis: Long) {
         coverage.add(e)
-        if (e is MeshEvent.Link && isLinked(e.state) && nextMillis == Long.MIN_VALUE) nextMillis = nowMillis + FIRST_MILLIS
+        val firstLinkUp = e is MeshEvent.Link && isLinked(e.state) && nextMillis == Long.MIN_VALUE
+        if (firstLinkUp) nextMillis = nowMillis + FIRST_MILLIS
     }
 
     fun tick(nowMillis: Long) {
