@@ -14,7 +14,7 @@ Every CI build carries its label (`X.Y.Z` or `X.Y.Z-SNAPSHOT-<sha>`), its build 
 
 ## Web deploys
 
-Every snapshot deploys its web build to aether-snapshot.meshtastic.org (`deploy-web` in `snapshot.yml`), and a release dispatches `web-stable.yml`, which deploys the release's web zip to aether.meshtastic.org. Both go through [`.github/actions/vercel-deploy`](.github/actions/vercel-deploy/action.yml) as prebuilt static output. Each job runs in a GitHub environment (`web-snapshot`, `web-stable`) that admits only `main` and holds the `VERCEL_TOKEN` secret and the `VERCEL_ORG_ID` and `VERCEL_PROJECT_ID` variables for its Vercel project. To retry or roll back the stable site, run `gh workflow run web-stable.yml --repo meshtastic/meshtastic-aether -f tag=vX.Y.Z`.
+Every snapshot deploys its web build to aether-snapshot.meshtastic.org (`deploy-web` in `snapshot.yml`), and a release dispatches `web-stable.yml`, which deploys the release's web zip to aether.meshtastic.org. Both go through [`.github/actions/vercel-deploy`](.github/actions/vercel-deploy/action.yml) as prebuilt static output. Each job runs in a GitHub environment (`web-snapshot`, `web-stable`) that admits only `main` and holds the `VERCEL_TOKEN` secret and the `VERCEL_ORG_ID` and `VERCEL_PROJECT_ID` variables for its Vercel project. The web build runs a pinned Binaryen `wasm-opt -O3` over `webApp.wasm` before it is zipped (17 MB to 8.3 MB), with the newest wasm proposals disabled so current Chrome can compile it. To retry or roll back the stable site, run `gh workflow run web-stable.yml --repo meshtastic/meshtastic-aether -f tag=vX.Y.Z`.
 
 ## Changelog
 

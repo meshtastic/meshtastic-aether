@@ -155,5 +155,8 @@ jobs:
       # web-stable.yml deploys the release's web zip to aether.meshtastic.org. It runs on main, the
       # only ref its web-stable environment admits.
       - name: Dispatch web deploy
-        continue-on-error: true
-        run: gh workflow run web-stable.yml --ref main -f "tag=v$VERSION"
+        run: |
+          if ! gh workflow run web-stable.yml --ref main -f "tag=v$VERSION"; then
+            echo "::warning::The web deploy was not dispatched; run web-stable.yml with tag v$VERSION."
+            echo "The web deploy to aether.meshtastic.org was **not dispatched**: run \`gh workflow run web-stable.yml -f tag=v$VERSION\`." >> "$GITHUB_STEP_SUMMARY"
+          fi

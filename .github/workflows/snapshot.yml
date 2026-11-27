@@ -141,6 +141,8 @@ jobs:
   deploy-web:
     name: Deploy aether-snapshot.meshtastic.org
     needs: [prepare, build]
+    # A failed desktop or Android job must not hold the site back: the web artifact exists once its own job passed.
+    if: ${{ !cancelled() && needs.prepare.outputs.newer == 'true' && contains(fromJSON('["success","failure"]'), needs.build.result) }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     # The environment holds the Vercel token and ids, and admits only main.
@@ -171,3 +173,8 @@ jobs:
           vercel_token: ${{ secrets.VERCEL_TOKEN }}
           vercel_org_id: ${{ vars.VERCEL_ORG_ID }}
           vercel_project_id: ${{ vars.VERCEL_PROJECT_ID }}
+
+      - name: Check the site serves the new build
+        run: |
+          curl -fsSI https://aether-snapshot.meshtastic.org/webApp.wasm | head -1
+          curl -fsS https://aether-snapshot.meshtastic.org/ | grep -q webApp.mjs

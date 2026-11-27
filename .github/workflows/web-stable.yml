@@ -63,6 +63,11 @@ jobs:
           vercel_org_id: ${{ vars.VERCEL_ORG_ID }}
           vercel_project_id: ${{ vars.VERCEL_PROJECT_ID }}
 
+      - name: Check the site serves the new build
+        run: |
+          curl -fsSI https://aether.meshtastic.org/webApp.wasm | head -1
+          curl -fsS https://aether.meshtastic.org/ | grep -q webApp.mjs
+
       - name: Summarize
         env:
           TAG: ${{ inputs.tag }}
