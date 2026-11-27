@@ -172,6 +172,7 @@ class StartInstantTest {
     fun `a missing or malformed instant is rejected`() {
         assertFailsWith<IllegalArgumentException> { parseArgs(listOf("sparse", "1", "o.wav", "--at")) }
         assertFailsWith<IllegalArgumentException> { parseArgs(listOf("sparse", "1", "o.wav", "--at", "sunday")) }
+        assertFailsWith<IllegalArgumentException> { parseArgs(listOf("analyze", "x.wav", "--at", "2026-11-29T23:00:00Z")) }
     }
 }
 
