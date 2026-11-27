@@ -1,0 +1,8 @@
+# Applied by the modules with a JVM target: the detekt plugin reads the JVM compile classpath, which android/app,
+# ios/app and wasm-js/app modules do not have. It analyzes a module's JVM sources (src, src@jvm and the aliases that
+# include jvm), not src@android, src@ios or src@wasmJs.
+plugins:
+  detekt:
+    enabled: true
+    configFile: detekt.yml # relative to this template
+    buildUponDefaultConfig: true
