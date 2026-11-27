@@ -319,6 +319,15 @@ class SceneModel(internal val sampleRate: Int) {
     /** The integrated rotation as of the last [update]: yaw is the unwrapped angle, pitch is tilt plus wobble. */
     val rotation: RotationState get() = turning.rotation
 
+    // The background gradient sways around the centre, faster with a rougher texture; the rate eases and the phase
+    // integrates, so a texture change bends the motion and never jumps it.
+    private var swayRate = NEUTRAL_SWAY_MOVE
+    private var swayTarget = NEUTRAL_SWAY_MOVE
+    private var swayPhase = 0.0
+
+    /** The gradient's horizontal sway, -[SWAY_WIDTH]..[SWAY_WIDTH] of the screen width. */
+    val sway: Double get() = sin(swayPhase) * SWAY_WIDTH
+
     private val cloudClock = PhaseClock()
     internal val driftClock = PhaseClock()
     internal val orbBreathClock = PhaseClock()
@@ -412,6 +421,7 @@ class SceneModel(internal val sampleRate: Int) {
         hueTarget = HUE_SPAN * sin(2 * PI * pitchClass / SEMITONES_PER_OCTAVE) +
             (texture.brightness - NEUTRAL_BRIGHTNESS) * BRIGHTNESS_HUE
         padTarget = (texture.layerLevels[Voice.Pad] ?: 0f).toDouble().coerceIn(0.0, 1.0)
+        swayTarget = SWAY_MOVE + SWAY_MOVE_PER_TEXTURE * (texture.detune + texture.noise)
     }
 
     private fun enqueue(e: MeshEvent.PacketHeard, dueFrame: Long) {
@@ -443,6 +453,8 @@ class SceneModel(internal val sampleRate: Int) {
         haze *= exp(-dtSeconds / HAZE_TAU_SECONDS)
         hueShift += (hueTarget - hueShift) * (1 - exp(-dtSeconds / HUE_TAU_SECONDS))
         padLevel += (padTarget - padLevel) * (1 - exp(-dtSeconds / PAD_TAU_SECONDS))
+        swayRate += (swayTarget - swayRate) * (1 - exp(-dtSeconds / HUE_TAU_SECONDS))
+        swayPhase = (swayPhase + SWAY_RATE * swayRate * dtSeconds).mod(2 * PI)
         val satTarget = if (linked) 1.0 else UNLINKED_SATURATION
         saturation += (satTarget - saturation) * (1 - exp(-dtSeconds / SATURATION_TAU_SECONDS))
         val anchorPeriod = if (linked) ANCHOR_PERIOD_SECONDS else UNLINKED_ANCHOR_PERIOD_SECONDS
@@ -554,6 +566,15 @@ class SceneModel(internal val sampleRate: Int) {
         private const val UNLINKED_SATURATION = 0.2
         private const val SATURATION_TAU_SECONDS = 3.0
         private const val HUE_TAU_SECONDS = 40.0
+
+        /** Sway speed: [SWAY_RATE] times [SWAY_MOVE] plus [SWAY_MOVE_PER_TEXTURE] per unit of detune and noise. */
+        const val SWAY_WIDTH = 0.15
+        private const val SWAY_RATE = 0.021
+        private const val SWAY_MOVE = 0.4
+        private const val SWAY_MOVE_PER_TEXTURE = 1.2
+
+        /** The move at the synth's neutral texture (detune 0.2, noise 0.1), before the first texture arrives. */
+        private const val NEUTRAL_SWAY_MOVE = SWAY_MOVE + SWAY_MOVE_PER_TEXTURE * (0.2 + 0.1)
         private const val PAD_TAU_SECONDS = 6.0
         private const val HUE_SPAN = 24.0
         private const val BRIGHTNESS_HUE = 20.0

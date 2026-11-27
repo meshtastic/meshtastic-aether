@@ -25,9 +25,18 @@ private const val GUST_SECONDS = 3.0
 private const val GUST_SEND = 0.6f
 private const val GUST_BRIGHTNESS = 0.3f
 
-/** A warming crossing sounds the Lydian raised fourth, a cooling one the Aeolian minor sixth. */
-private const val LYDIAN_COLOR_SEMITONE = 6
-private const val AEOLIAN_COLOR_SEMITONE = 8
+/**
+ * A warming crossing sounds the brightest color the scale holds (the Lydian raised fourth first), a cooling one the
+ * darkest (the Aeolian minor sixth first). The lists share no interval, so the two directions never sound alike, and
+ * neither holds the minor second.
+ */
+private val WARM_COLORS = intArrayOf(6, 9, 4, 2, 7)
+private val COOL_COLORS = intArrayOf(8, 10, 3, 5, 0)
+
+/** The color tone for a temperature crossing in [mode], in semitones above the key: always a tone of the scale. */
+internal fun colorSemitone(mode: Mode, rising: Boolean): Int =
+    (if (rising) WARM_COLORS else COOL_COLORS).firstOrNull { it in mode.semitones }
+        ?: if (rising) WARM_COLORS.last() else COOL_COLORS.last()
 private const val COLOR_VELOCITY = 0.25f
 private const val COLOR_SEND = 0.8f
 private const val COLOR_SECONDS = 3.0
@@ -110,7 +119,7 @@ internal class WeatherGestures(private val score: Score, private val mood: MeshM
         if (length <= 0) return
         lowSwellUntilMs = Long.MIN_VALUE
         score.notes += NoteEvent(
-            nowFrame, Voice.Pad, score.keyHz * Theory.justRatio(score.chord.rootSemitone) / 2, LOW_SWELL_VELOCITY, 0f,
+            nowFrame, Voice.Pad, score.keyHz * score.chord.ratio(score.chord.rootSemitone) / 2, LOW_SWELL_VELOCITY, 0f,
             LOW_SWELL_SEND, length, LOW_SWELL_BRIGHTNESS,
         )
     }
@@ -130,10 +139,10 @@ internal class WeatherGestures(private val score: Score, private val mood: MeshM
 
     private fun playColors(nowFrame: Long) {
         for (dir in pendingColors) {
-            val semitone = if (dir > 0) LYDIAN_COLOR_SEMITONE else AEOLIAN_COLOR_SEMITONE
+            val semitone = colorSemitone(score.chord.mode, rising = dir > 0)
             score.emit(
                 NoteEvent(
-                    nowFrame, Voice.Bell, score.keyHz * Theory.justRatio(semitone) * 2, COLOR_VELOCITY, 0f, COLOR_SEND,
+                    nowFrame, Voice.Bell, score.keyHz * score.chord.ratio(semitone) * 2, COLOR_VELOCITY, 0f, COLOR_SEND,
                     score.sec(COLOR_SECONDS), COLOR_BRIGHTNESS, null,
                 ),
             )

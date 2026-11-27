@@ -96,7 +96,7 @@ internal class Bed(
 
     private fun playDrone(at: Long) {
         score.notes += NoteEvent(
-            at, Voice.Drone, score.keyHz * Theory.justRatio(score.chord.rootSemitone) / 2, DRONE_VELOCITY, 0f,
+            at, Voice.Drone, score.keyHz * score.chord.ratio(score.chord.rootSemitone) / 2, DRONE_VELOCITY, 0f,
             DRONE_SEND, score.clip(at, score.sec(Score.SWELL_SECONDS)), DRONE_BRIGHTNESS,
         )
     }

@@ -87,7 +87,7 @@ fun ambientColorScheme(): ColorScheme = darkColorScheme(
 
 /**
  * Every color the ambient scene and its overlay draw. [dimFloor] is the dimmest the scene gets at the deepest night
- * (1.0 is never dimmed).
+ * (1.0 is never dimmed). [trueBlack] marks a look whose black must stay off, so it is drawn without dither.
  */
 data class AmbientPalette(
     val backgroundTop: Color,
@@ -97,6 +97,7 @@ data class AmbientPalette(
     val anchor: Color,
     val text: Color,
     val dimFloor: Double,
+    val trueBlack: Boolean = false,
 ) {
     /** Scene brightness multiplier at [minuteOfDay]: 1.0 from 07:00 to 22:00, [dimFloor] from 00:00 to 05:00. */
     fun dim(minuteOfDay: Int): Double {
@@ -155,6 +156,7 @@ private val OLED_NIGHT = AmbientPalette(
     anchor = Brand.Accent,
     text = Brand.Neutral200,
     dimFloor = 0.25,
+    trueBlack = true,
 )
 
 val LocalAmbientPalette = staticCompositionLocalOf { PaletteChoice.Standard.palette }

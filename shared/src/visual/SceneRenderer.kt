@@ -16,10 +16,8 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.dp
 import org.meshtastic.aether.mesh.PacketKind
 import org.meshtastic.aether.music.Rng
-import org.meshtastic.aether.music.Texture
 import org.meshtastic.aether.theme.AmbientPalette
 import org.meshtastic.aether.ui.AmbientEngine
-import kotlin.math.sin
 import kotlin.math.sqrt
 
 private const val DITHER_SIZE = 96
@@ -27,19 +25,16 @@ private const val DITHER_SEED = 77L
 
 /**
  * The dither's strength, baked into the tile: a per-draw alpha on the shader brush costs a full-screen offscreen pass
- * on a weak GPU.
+ * on a weak GPU. White at two of 255 lifts a dark pixel by up to two code values and black leaves it, enough to break
+ * a band and no more.
  */
-private const val DITHER_ALPHA = 0.03f
+private const val DITHER_ALPHA_CODE = 2
+private const val ALPHA_SHIFT = 24
+private const val WHITE_RGB = 0xFFFFFF
+private const val WHITE_SHARE = 0.5
 
-// The background gradient sways around the centre, faster with a rougher texture (neutral detune and noise without
-// one).
+/** The background gradient sways around the centre; [SceneModel.sway] integrates its phase. */
 private const val GRADIENT_CENTER = 0.5f
-private const val SWAY_MOVE = 0.4f
-private const val SWAY_MOVE_PER_TEXTURE = 1.2f
-private const val NEUTRAL_DETUNE = 0.2f
-private const val NEUTRAL_NOISE = 0.1f
-private const val SWAY_RATE = 0.021
-private const val SWAY_WIDTH = 0.15
 private const val BOTTOM_HUE_OFFSET_DEG = 20.0
 
 private const val MIN_HAZE = 0.005
@@ -105,8 +100,8 @@ internal class SceneRenderer {
         with(scope) {
             scene.aspect = size.width.toDouble() / size.height.coerceAtLeast(1f)
             sat = scene.saturation
-            drawBackground(scene, palette, engine.texture, t)
-            drawRect(ditherBrush)
+            drawBackground(scene, palette, t)
+            if (!palette.trueBlack) drawRect(ditherBrush)
             screen.begin(scene, size.width, size.height)
             dp1 = 1.dp.toPx()
             drawHaze(scene, palette)
@@ -119,11 +114,10 @@ internal class SceneRenderer {
         }
     }
 
-    private fun DrawScope.drawBackground(scene: SceneModel, palette: AmbientPalette, tex: Texture?, t: Double) {
+    private fun DrawScope.drawBackground(scene: SceneModel, palette: AmbientPalette, t: Double) {
         val hueDeg = timeHueOffset(scene.minuteOfDay) + scene.hueShift
         val breathe = scene.fieldBreath(t)
-        val move = SWAY_MOVE + SWAY_MOVE_PER_TEXTURE * ((tex?.detune ?: NEUTRAL_DETUNE) + (tex?.noise ?: NEUTRAL_NOISE))
-        val sway = (sin(t * SWAY_RATE * move) * SWAY_WIDTH).toFloat()
+        val sway = scene.sway.toFloat()
         val top = shiftColor(palette.backgroundTop, hueDeg, sat, dim * breathe)
         val bottom = shiftColor(palette.backgroundBottom, hueDeg + BOTTOM_HUE_OFFSET_DEG, sat, dim * breathe)
         drawRect(
@@ -257,18 +251,29 @@ internal class SceneRenderer {
     }
 }
 
-/** Per-pixel noise tile; laid over the gradient at low alpha so projectors and OLEDs do not band. */
+/** The dither tile's pixels as ARGB: half white and half black at a faint alpha, so the gradient does not band. */
+internal fun ditherPixels(): IntArray {
+    val rng = Rng(DITHER_SEED)
+    val alpha = DITHER_ALPHA_CODE shl ALPHA_SHIFT
+    return IntArray(DITHER_SIZE * DITHER_SIZE) {
+        val white = rng.nextDouble() < WHITE_SHARE
+        alpha or if (white) WHITE_RGB else 0
+    }
+}
+
+/**
+ * The dither tile; laid over the gradient so projectors and LCDs do not band. A [AmbientPalette.trueBlack] look
+ * draws none: any white dither lights a black pixel, and black dither cannot move one so dark.
+ */
 private fun ditherTile(): ImageBitmap {
     val bmp = ImageBitmap(DITHER_SIZE, DITHER_SIZE)
     val canvas = Canvas(bmp)
-    val rng = Rng(DITHER_SEED)
     val paint = Paint()
-    for (y in 0 until DITHER_SIZE) {
-        for (x in 0 until DITHER_SIZE) {
-            val v = rng.nextDouble().toFloat()
-            paint.color = Color(v, v, v, DITHER_ALPHA)
-            canvas.drawRect(Rect(x.toFloat(), y.toFloat(), x + 1f, y + 1f), paint)
-        }
+    ditherPixels().forEachIndexed { i, argb ->
+        val x = i % DITHER_SIZE
+        val y = i / DITHER_SIZE
+        paint.color = Color(argb)
+        canvas.drawRect(Rect(x.toFloat(), y.toFloat(), x + 1f, y + 1f), paint)
     }
     return bmp
 }

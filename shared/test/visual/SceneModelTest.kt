@@ -5,6 +5,7 @@ import org.meshtastic.aether.mesh.LinkState
 import org.meshtastic.aether.mesh.MeshEvent
 import org.meshtastic.aether.mesh.PacketKind
 import kotlin.math.PI
+import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.hypot
 import kotlin.math.sin
@@ -499,5 +500,23 @@ class SceneModelTest {
             return hypot(o.phOx, o.phOy)
         }
         assertTrue(offsetAfter(true) > offsetAfter(false) + 0.01, "the packet adds a visible kick")
+    }
+    // Regression: the sway was sin(t * rate * move) with move stepping on each texture update, so after hours of
+    // playback one texture change jumped the gradient across the screen.
+    @Test
+    fun `a texture change after hours bends the background sway without a jump`() {
+        val s = scene()
+        fun tex(rough: Float) = org.meshtastic.aether.music.Texture(
+            220.0, 0.5f, 0.5f, 0.5f, rough, 0.2f, rough, mapOf(org.meshtastic.aether.music.Voice.Pad to 0.5f),
+        )
+        s.onTexture(tex(0.1f))
+        val second = sr.toLong()
+        for (t in 1..6 * 3600) s.update(t * second)
+        val before = s.sway
+        s.onTexture(tex(0.9f))
+        s.update(6 * 3600 * second + second / 60)
+        // One 60 fps frame at the fastest move (0.4 + 1.2 * 1.8) moves the sway by at most 0.15 * 0.021 * 2.56 / 60.
+        assertTrue(abs(s.sway - before) < 1e-3, "sway jumped from $before to ${s.sway}")
+        assertTrue(abs(s.sway) <= SceneModel.SWAY_WIDTH + 1e-12)
     }
 }

@@ -96,7 +96,7 @@ object Ornaments {
     fun pitchHz(node: Long, chord: Chord, rootHz: Double): Double = pitchHz(role(node), band(node), chord, rootHz)
 
     fun pitchHz(role: Int, band: Int, chord: Chord, rootHz: Double): Double =
-        rootHz * Theory.justRatio(chord.roleSemitone(role)) * 2.0.pow(band)
+        rootHz * chord.ratio(chord.roleSemitone(role)) * 2.0.pow(band)
 
     /** SNR -20..10 dB maps to 0.25..0.6 (under 9 dB of loudness); null (unknown) is the middle of the range. */
     fun velocityFor(snr: Float?): Float {

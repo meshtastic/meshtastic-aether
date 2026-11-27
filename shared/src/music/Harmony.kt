@@ -8,20 +8,56 @@ class Chord(val mode: Mode, val rootStep: Int, val voicing: List<Int>) {
 
     val rootSemitone: Int get() = mode.semitoneOfStep(rootStep)
 
-    /** Pitch class (0..11) of chord role 0 root, 1 third, 2 fifth, 3 seventh, 4 ninth. */
-    fun roleSemitone(role: Int): Int = mode.semitoneOfStep(rootStep + 2 * role).mod(Theory.SEMITONES_PER_OCTAVE)
+    /**
+     * Pitch class (0..11) of chord role 0 root, 1 third, 2 fifth, 3 seventh, 4 ninth. Where the ninth would be a minor
+     * ninth (the chord on the mode's Phrygian degree), role 4 doubles the fifth: a semitone over the root is the one
+     * tension a node's hash should never land on.
+     */
+    fun roleSemitone(role: Int): Int {
+        val step = if (role == NINTH && minorNinth()) rootStep + 2 * FIFTH else rootStep + 2 * role
+        return mode.semitoneOfStep(step).mod(Theory.SEMITONES_PER_OCTAVE)
+    }
+
+    private fun minorNinth(): Boolean =
+        (mode.semitoneOfStep(rootStep + 2 * NINTH) - rootSemitone).mod(Theory.SEMITONES_PER_OCTAVE) == 1
+
+    /**
+     * Ratio factor per pitch class 0..11: a comma shift for this chord's tones (see [Tuning]), 1 elsewhere. The voices,
+     * which the bed sustains for minutes, are tuned first; the ninth role's tone, an ornament, is tuned against them
+     * at a quarter weight so it never out-votes the bed.
+     */
+    private val factors: DoubleArray by lazy {
+        val voices = voiceSemitones.map { it.mod(Theory.SEMITONES_PER_OCTAVE) }.distinct()
+        val ninth = roleSemitone(NINTH)
+        val tones = if (ninth in voices) voices else voices + ninth
+        val f = DoubleArray(Theory.SEMITONES_PER_OCTAVE) { 1.0 }
+        Tuning.shifts(tones, lightFrom = voices.size).forEachIndexed { i, shift -> f[tones[i]] = Tuning.factor(shift) }
+        f
+    }
+
+    /** Just ratio of [semitone] above the key, tuned for this chord: pure intervals between its tones. */
+    fun ratio(semitone: Int): Double =
+        Theory.justRatio(semitone) * factors[semitone.mod(Theory.SEMITONES_PER_OCTAVE)]
 
     companion object {
         /** Chord roles a node can play: root, third, fifth, seventh and ninth. */
         const val ROLES = 5
+        private const val FIFTH = 2
+        private const val NINTH = 4
     }
 }
 
 class Harmony(seed: Long, initialMode: Mode = Mode.Ionian) {
     private val rng = Rng.stream(seed, 1)
 
+    /** A placeholder until the first [next]; it never sounds. */
     var current: Chord = Chord(initialMode, 0, INITIAL_VOICING)
         private set
+
+    private var started = false
+
+    /** Chords since the tonic last sounded; the home pull on the tonic grows with it. */
+    private var sinceTonic = 0
 
     /**
      * The next chord in [mode]: a new root that is never diminished, voices led by the smallest total step motion.
@@ -31,12 +67,18 @@ class Harmony(seed: Long, initialMode: Mode = Mode.Ionian) {
     fun next(mode: Mode): Chord {
         val n = mode.size
         val prev = rescaled(current, n)
+        if (!started) {
+            started = true
+            current = Chord(mode, 0, lead(prev.voicing, 0, n))
+            return current
+        }
         val scale = n / DIATONIC_NOTES.toDouble()
         val candidates = (0 until n).filter { it != prev.rootStep && (n != DIATONIC_NOTES || !diminished(mode, it)) }
         val weights = candidates.map { root ->
             val mean = lead(prev.voicing, root, n).average()
             val drift = maxOf(0.0, kotlin.math.abs(mean - CENTRE * scale) - 2.0 * scale)
-            WEIGHTS[(root - prev.rootStep).mod(n)] * exp(-RECENTRE * drift)
+            val home = if (root == 0) 1.0 + HOME_PULL * minOf(sinceTonic, HOME_CAP) else 1.0
+            WEIGHTS[(root - prev.rootStep).mod(n)] * exp(-RECENTRE * drift) * home
         }
         var pick = rng.nextDouble() * weights.sum()
         var root = candidates.last()
@@ -48,6 +90,7 @@ class Harmony(seed: Long, initialMode: Mode = Mode.Ionian) {
             }
         }
         current = Chord(mode, root, lead(prev.voicing, root, n))
+        sinceTonic = if (root == 0) 0 else sinceTonic + 1
         return current
     }
 
@@ -117,6 +160,15 @@ class Harmony(seed: Long, initialMode: Mode = Mode.Ionian) {
         const val CENTRE = 10.0
         const val BAND = 5.0
         const val WANDER = 2.0
+
+        /**
+         * Each chord away from the tonic adds this much to its weight, so the key is confirmed by a home chord every
+         * few changes instead of only implied by the pitch set.
+         */
+        const val HOME_PULL = 1.0
+
+        /** The pull stops growing here, so it never outweighs [RECENTRE]'s hold on the register. */
+        const val HOME_CAP = 6
 
         /** Strictly stepwise leading can only drift, so roots whose voicing moves toward [CENTRE] are favoured. */
         const val RECENTRE = 0.7

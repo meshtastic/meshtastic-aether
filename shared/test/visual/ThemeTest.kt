@@ -133,4 +133,12 @@ class ThemeTest {
         assertTrue(orbHaloAlpha(SceneModel.IDLE_FLOOR) > 0f)
         assertTrue(orbHaloAlpha(1.0) < orbCoreAlpha(1.0))
     }
+    // Regression: the dither tile was random grey at alpha 0.03, which lifted pixels by up to 7.6 of 255.
+    @Test
+    fun `the dither lifts a dark pixel by at most two code values`() {
+        // Source-over of white at alpha a lifts code c by a * (255 - c) / 255, at most a at black.
+        val pixels = ditherPixels()
+        for (px in pixels) assertTrue((px ushr 24) in 1..2, "dither alpha ${px ushr 24} of 255")
+        assertTrue(pixels.any { it and 0xFFFFFF == 0xFFFFFF } && pixels.any { it and 0xFFFFFF == 0 })
+    }
 }

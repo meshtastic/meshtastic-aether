@@ -50,7 +50,7 @@ internal class Score(val sampleRate: Int, val form: Form, val harmony: Harmony) 
     fun clip(start: Long, wanted: Long): Long = min(wanted, nextTickFrame - start)
 
     /** Pads sit whole octaves from the key so they stay in tune with the drone and bells at every minute of the day. */
-    fun padHz(semitone: Int): Double = keyHz * Theory.justRatio(semitone) * 2.0.pow(registerShift)
+    fun padHz(semitone: Int): Double = keyHz * chord.ratio(semitone) * 2.0.pow(registerShift)
 
     fun levels(frame: Long): Map<Voice, Float> = form.levels(frame / sampleRate.toDouble())
 
