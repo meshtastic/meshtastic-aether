@@ -1,0 +1,1 @@
+- The ring at the center of the scene wears the connected node's own color.

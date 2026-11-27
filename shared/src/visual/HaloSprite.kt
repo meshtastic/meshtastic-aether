@@ -87,6 +87,6 @@ private const val ANCHOR_FILL_BREATH_ALPHA = 0.08f
 internal fun anchorRingAlpha(breath: Float): Float =
     ANCHOR_RING_ALPHA + ANCHOR_RING_BREATH_ALPHA * breath.coerceIn(0f, 1f)
 
-/** Opacity of the soft accent fill inside the anchor ring. */
+/** Opacity of the soft fill inside the anchor ring. */
 internal fun anchorFillAlpha(breath: Float): Float =
     ANCHOR_FILL_ALPHA + ANCHOR_FILL_BREATH_ALPHA * breath.coerceIn(0f, 1f)
