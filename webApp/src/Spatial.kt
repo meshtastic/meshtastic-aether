@@ -15,6 +15,9 @@ private external fun probe(found: (Int) -> Unit)
 @JsFun("(mode, onFrame, onEnd) => window.aetherSpatial.start(mode, onFrame, onEnd)")
 private external fun start(mode: Int, onFrame: () -> Boolean, onEnd: () -> Unit)
 
+@JsFun("() => window.aetherSpatial.stop()")
+private external fun stop()
+
 @JsFun("(sprites, lines) => window.aetherSpatial.reserve(sprites, lines)")
 private external fun reserve(spriteFloats: Int, lineFloats: Int)
 
@@ -32,7 +35,10 @@ internal fun probeSpatial(found: (Int) -> Unit) = probe(found)
  * call from a click.
  */
 internal fun enterSpatial(mode: Int, source: SpatialSource) {
-    start(mode, onFrame = { !source.closed && push(source.frame()) }, onEnd = {})
+    // The frame check is a fallback: a browser stops XR frames while system UI covers the session, so closing the source
+    // ends the session directly, and the session's end releases the source.
+    source.whenClosed(::stop)
+    start(mode, onFrame = { !source.closed && push(source.frame()) }, onEnd = source::close)
 }
 
 private fun push(frame: SpatialFrame): Boolean {

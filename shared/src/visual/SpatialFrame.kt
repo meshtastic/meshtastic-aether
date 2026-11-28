@@ -281,8 +281,19 @@ class SpatialSource internal constructor(private val engine: AmbientEngine, priv
     var closed = false
         private set
 
-    internal fun close() {
+    private var onClose: (() -> Unit)? = null
+
+    /** Ends this view: the session it showed has ended or the host left it. Safe to call more than once. */
+    fun close() {
+        if (closed) return
         closed = true
+        onClose?.invoke()
+        onClose = null
+    }
+
+    /** Runs [action] once when this view closes, at once if it already has; a host uses it to end its XR session. */
+    fun whenClosed(action: () -> Unit) {
+        if (closed) action() else onClose = action
     }
 
     /** Advances the scene and returns this frame of it. */

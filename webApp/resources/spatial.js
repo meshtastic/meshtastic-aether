@@ -64,6 +64,7 @@ void main() {
   const background = [0, 0, 0];
   let session = null;
   let starting = false;
+  let stopAsked = false;
 
   function program(gl, vs, fs) {
     const p = gl.createProgram();
@@ -152,6 +153,10 @@ void main() {
       session = null;
       onEnd();
     });
+    if (stopAsked) {
+      xr.end();
+      return;
+    }
     const canvas = document.createElement('canvas');
     const gl = canvas.getContext('webgl2', { xrCompatible: true, alpha: true, antialias: true });
     await gl.makeXRCompatible();
@@ -214,6 +219,7 @@ void main() {
     start(mode, onFrame, onEnd) {
       if (session || starting) return;
       starting = true;
+      stopAsked = false;
       // Runs once however the attempt ends: a session can end while setup is pending and setup then still reject.
       let ended = false;
       const finish = () => {
@@ -228,6 +234,10 @@ void main() {
           if (session) session.end(); else finish();
         })
         .finally(() => { starting = false; });
+    },
+    // Ends the session now, without waiting for a frame; a start still asking for its session ends once it has one.
+    stop() {
+      if (session) session.end(); else if (starting) stopAsked = true;
     },
     reserve(spriteFloats, lineFloats) {
       if (spriteFloats > sprites.length) sprites = new Float32Array(spriteFloats);

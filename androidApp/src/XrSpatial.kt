@@ -72,19 +72,24 @@ internal class XrSpatialHost(private val activity: ComponentActivity) {
     private var view: XrSpatial? = null
     private var starting = false
 
+    /** The latest view asked for while the session starts; a press for a new connection replaces an older one. */
+    private var pending: SpatialSource? = null
+
     fun enter(source: SpatialSource) {
         view?.let {
             it.enter(source)
             return
         }
+        pending = source
         if (starting) return
         starting = true
         activity.lifecycleScope.launch {
             try {
-                view = start()?.also { if (!source.closed) it.enter(source) }
+                view = start()?.also { started -> pending?.takeUnless { it.closed }?.let(started::enter) }
             } catch (e: IllegalStateException) {
                 Log.w(TAG, "spatial view failed to start: $e")
             } finally {
+                pending = null
                 starting = false
             }
         }
@@ -122,6 +127,7 @@ internal class XrSpatial(private val session: Session, material: KhronosUnlitMat
 
     private var source: SpatialSource? = null
     private var wasFull = false
+    private var sawFull = false
     private var waited = 0
 
     init {
@@ -146,8 +152,10 @@ internal class XrSpatial(private val session: Session, material: KhronosUnlitMat
 
     fun enter(next: SpatialSource) {
         val showing = source != null
+        source?.takeIf { it !== next }?.close()
         source = next
         wasFull = false
+        sawFull = false
         waited = 0
         session.scene.requestFullSpace()
         if (!showing) Choreographer.getInstance().postFrameCallback(this)
@@ -155,10 +163,11 @@ internal class XrSpatial(private val session: Session, material: KhronosUnlitMat
 
     override fun doFrame(frameTimeNanos: Long) {
         val current = source ?: return
-        // Full Space arrives a few frames after the request; leaving it later ends the view.
+        // Full Space arrives a few frames after the request; leaving it later ends the view, placed or not yet.
         val full = SpatialCapability.SPATIAL_3D_CONTENT in session.scene.spatialCapabilities
-        if (current.closed || (wasFull && !full)) {
-            exit(backToHome = full)
+        if (full) sawFull = true
+        if (current.closed || (sawFull && !full)) {
+            exit(current, backToHome = full)
             return
         }
         // Placed once the head is tracked, since an untracked pose centres the cloud on the panel rather than the
@@ -185,8 +194,9 @@ internal class XrSpatial(private val session: Session, material: KhronosUnlitMat
     }
 
     /** Hides the cloud and restores the environment; [backToHome] when the view ended with the app still in Full Space. */
-    private fun exit(backToHome: Boolean) {
+    private fun exit(ended: SpatialSource, backToHome: Boolean) {
         source = null
+        ended.close()
         root.setEnabled(false)
         session.scene.spatialEnvironment.preferredSpatialEnvironment = null
         if (backToHome) session.scene.requestHomeSpace()
