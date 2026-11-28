@@ -55,6 +55,16 @@ class SpatialFrameTest {
     }
 
     @Test
+    fun `turning the frame by the facing yaw puts north where the viewer looks`() {
+        // A +y turn by t degrees takes north (0, -1) in x, z to (-sin t, -cos t).
+        for ((fx, fz) in listOf(0f to -1f, -1f to 0f, 1f to 0f, 0f to 1f, 0.6f to -0.8f)) {
+            val t = SpatialLayout.facingYawDegrees(fx, fz) * PI / 180.0
+            assertEquals(fx.toDouble(), -sin(t), 1e-6, "x facing $fx, $fz")
+            assertEquals(fz.toDouble(), -cos(t), 1e-6, "z facing $fx, $fz")
+        }
+    }
+
+    @Test
     fun `a point pushed far below the plane stops above the floor`() {
         val out = FloatArray(3)
         SpatialLayout.place(0.5, 0.0, 3.0, 1.0, out)

@@ -13,7 +13,10 @@ internal const val SPATIAL_NONE = 0
 private external fun probe(found: (Int) -> Unit)
 
 @JsFun("(mode, onFrame, onEnd) => window.aetherSpatial.start(mode, onFrame, onEnd)")
-private external fun start(mode: Int, onFrame: () -> Unit, onEnd: () -> Unit)
+private external fun start(mode: Int, onFrame: () -> Boolean, onEnd: () -> Unit): Boolean
+
+@JsFun("() => window.aetherSpatial.stop()")
+private external fun stop()
 
 @JsFun("(sprites, lines) => window.aetherSpatial.reserve(sprites, lines)")
 private external fun reserve(spriteFloats: Int, lineFloats: Int)
@@ -27,12 +30,19 @@ private external fun commit(sprites: Int, lineVertices: Int, r: Float, g: Float,
 /** Reports what `spatial.js` can open in this browser: [SPATIAL_NONE], or the mode to hand [enterSpatial]. */
 internal fun probeSpatial(found: (Int) -> Unit) = probe(found)
 
-/** Opens the WebXR session for [mode] and feeds it [source]'s frame before each one it draws; call from a click. */
+/**
+ * Opens the WebXR session for [mode] and feeds it [source]'s frame before each one it draws, until the source closes;
+ * call from a click.
+ */
 internal fun enterSpatial(mode: Int, source: SpatialSource) {
-    start(mode, onFrame = { push(source.frame()) }, onEnd = {})
+    // The frame check is a fallback: a browser stops XR frames while system UI covers the session, so closing the source
+    // ends the session directly, and the session's end releases the source.
+    val accepted = start(mode, onFrame = { !source.closed && push(source.frame()) }, onEnd = source::close)
+    // A press while a session is open or opening is turned away: release its source without stopping that session.
+    if (accepted) source.whenClosed(::stop) else source.close()
 }
 
-private fun push(frame: SpatialFrame) {
+private fun push(frame: SpatialFrame): Boolean {
     val spriteFloats = frame.spriteCount * SpatialFrame.SPRITE_STRIDE
     val lineFloats = frame.lineVertexCount * SpatialFrame.LINE_STRIDE
     reserve(frame.sprites.size, frame.lines.size)
@@ -41,4 +51,5 @@ private fun push(frame: SpatialFrame) {
     val lines = frame.lines
     for (i in 0 until lineFloats) put(true, i, lines[i])
     commit(frame.spriteCount, frame.lineVertexCount, frame.background[0], frame.background[1], frame.background[2])
+    return true
 }

@@ -4,6 +4,7 @@ import androidx.compose.ui.graphics.Color
 import org.meshtastic.aether.theme.AmbientPalette
 import org.meshtastic.aether.ui.AmbientEngine
 import kotlin.math.PI
+import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.hypot
 import kotlin.math.sin
@@ -41,6 +42,15 @@ object SpatialLayout {
 
     /** A layout point this close to the centre has no bearing and is placed due north. */
     private const val NO_BEARING = 1e-9
+
+    /**
+     * Degrees to turn the frame about +y (counter-clockwise seen from above) so its -z, north, points along a viewer's
+     * horizontal facing ([forwardX], [forwardZ]).
+     */
+    fun facingYawDegrees(forwardX: Float, forwardZ: Float): Float =
+        (atan2(-forwardX.toDouble(), -forwardZ.toDouble()) * DEGREES_PER_RADIAN).toFloat()
+
+    private const val DEGREES_PER_RADIAN = 180.0 / PI
 
     /** Metres from the viewer for a point [layoutRadius] (0..1) from the layout's centre. */
     fun distance(layoutRadius: Double): Double =
@@ -238,6 +248,20 @@ class SpatialFrame internal constructor() {
     companion object {
         const val SPRITE_STRIDE = 9
         const val LINE_STRIDE = 7
+
+        // Offsets into a sprite after its x, y, z.
+        const val SPRITE_RADIUS = 3
+        const val SPRITE_RED = 4
+        const val SPRITE_GREEN = 5
+        const val SPRITE_BLUE = 6
+        const val SPRITE_ALPHA = 7
+        const val SPRITE_CRISP = 8
+
+        // Offsets into a line vertex after its x, y, z.
+        const val LINE_RED = 3
+        const val LINE_GREEN = 4
+        const val LINE_BLUE = 5
+        const val LINE_ALPHA = 6
         private const val INITIAL_SPRITES = 256
         private const val INITIAL_LINE_VERTICES = 512
         private const val XYZ = 3
@@ -248,14 +272,49 @@ class SpatialFrame internal constructor() {
 
 /**
  * One session's cloud for a headset or AR view. [frame] advances the scene to the audio clock and returns it placed
- * around the viewer; call it once per displayed frame, on the thread that runs the app's UI.
+ * around the viewer; call it once per displayed frame, on the thread that runs the app's UI. A renderer that sees
+ * [closed] tears its view down: the session it showed has ended.
  */
 class SpatialSource internal constructor(private val engine: AmbientEngine, private val palette: AmbientPalette) {
     private val out = SpatialFrame()
 
+    var closed = false
+        private set
+
+    private var onClose: (() -> Unit)? = null
+
+    /** Ends this view: the session it showed has ended or the host left it. Safe to call more than once. */
+    fun close() {
+        if (closed) return
+        closed = true
+        onClose?.invoke()
+        onClose = null
+    }
+
+    /** Runs [action] once when this view closes, at once if it already has; a host uses it to end its XR session. */
+    fun whenClosed(action: () -> Unit) {
+        if (closed) action() else onClose = action
+    }
+
+    /** Advances the scene and returns this frame of it. */
     fun frame(): SpatialFrame {
         engine.scene.update(engine.playbackFrame())
         out.fill(engine.scene, palette, engine.playbackSeconds())
         return out
+    }
+}
+
+/** The spatial views one session opened; [closeAll] ends them when the session does. */
+internal class SpatialViews {
+    private val open = ArrayList<SpatialSource>()
+
+    fun open(engine: AmbientEngine, palette: AmbientPalette): SpatialSource {
+        open.removeAll { it.closed }
+        return SpatialSource(engine, palette).also { open += it }
+    }
+
+    fun closeAll() {
+        for (s in open) s.close()
+        open.clear()
     }
 }

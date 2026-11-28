@@ -64,6 +64,7 @@ void main() {
   const background = [0, 0, 0];
   let session = null;
   let starting = false;
+  let stopAsked = false;
 
   function program(gl, vs, fs) {
     const p = gl.createProgram();
@@ -152,6 +153,10 @@ void main() {
       session = null;
       onEnd();
     });
+    if (stopAsked) {
+      xr.end();
+      return;
+    }
     const canvas = document.createElement('canvas');
     const gl = canvas.getContext('webgl2', { xrCompatible: true, alpha: true, antialias: true });
     await gl.makeXRCompatible();
@@ -167,8 +172,11 @@ void main() {
     let space = null;
     const passthrough = mode === 'immersive-ar';
     const frame = (_time, xrFrame) => {
+      if (!onFrame()) {
+        xr.end();
+        return;
+      }
       xr.requestAnimationFrame(frame);
-      onFrame();
       if (!space) {
         const first = xrFrame.getViewerPose(base);
         if (!first) return;
@@ -206,10 +214,12 @@ void main() {
       const can = (mode) => xr.isSessionSupported(mode).catch(() => false);
       can('immersive-ar').then((ar) => ar ? found(1) : can('immersive-vr').then((vr) => found(vr ? 2 : 0)));
     },
-    // Opens a session from a click; onFrame fills the arrays before each frame, onEnd runs when the session closes.
+    // Opens a session from a click; onFrame fills the arrays before each frame and returns false to end the session,
+    // onEnd runs when the session closes. Returns false, and calls nothing, when a session is already open or opening.
     start(mode, onFrame, onEnd) {
-      if (session || starting) return;
+      if (session || starting) return false;
       starting = true;
+      stopAsked = false;
       // Runs once however the attempt ends: a session can end while setup is pending and setup then still reject.
       let ended = false;
       const finish = () => {
@@ -224,6 +234,11 @@ void main() {
           if (session) session.end(); else finish();
         })
         .finally(() => { starting = false; });
+      return true;
+    },
+    // Ends the session now, without waiting for a frame; a start still asking for its session ends once it has one.
+    stop() {
+      if (session) session.end(); else if (starting) stopAsked = true;
     },
     reserve(spriteFloats, lineFloats) {
       if (spriteFloats > sprites.length) sprites = new Float32Array(spriteFloats);
