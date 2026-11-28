@@ -1,6 +1,7 @@
 package org.meshtastic.aether.ui
 
 import org.meshtastic.aether.ble.BleRadio
+import org.meshtastic.aether.midi.MidiChoice
 import org.meshtastic.aether.theme.PaletteChoice
 import org.meshtastic.aether.update.UpdateTrack
 import kotlin.test.Test
@@ -97,6 +98,26 @@ class SettingsTest {
         assertNull(Settings(store).savedPalette)
         Settings(store).palette = PaletteChoice.Standard
         assertEquals(PaletteChoice.Standard, Settings(store).savedPalette)
+    }
+
+    // The MIDI choices come back on the next launch; a hand-edited or older value must not open a bad output or set a
+    // delay the scheduler cannot honor.
+    @Test
+    fun `the midi choices read back and an out of range value reads as the nearest valid one`() {
+        val store = MemoryStore()
+        assertEquals(MidiChoice(), Settings(store).midi)
+        val choice = MidiChoice(output = "Surge XT", playAlongside = true, releaseSeconds = 8.0, latencyMillis = 40)
+        Settings(store).midi = choice
+        assertEquals(choice, Settings(store).midi)
+        store.put("midi_latency", "900")
+        store.put("midi_release", "3.7")
+        store.put("midi_output", " ")
+        val read = Settings(store).midi
+        assertEquals(MidiChoice.MAX_LATENCY, read.latencyMillis)
+        assertEquals(MidiChoice.DEFAULT_RELEASE, read.releaseSeconds)
+        assertNull(read.output)
+        Settings(store).midi = read.copy(output = null)
+        assertNull(store.get("midi_output"))
     }
 
     @Test

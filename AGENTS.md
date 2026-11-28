@@ -4,7 +4,7 @@ This project uses the [Kotlin Toolchain](https://kotlin-toolchain.org/) (a dedic
 
 ## Global constraints
 
-- No dependency beyond the meshtastic-sdk, kotlinx-coroutines and JetBrains Compose, plus `androidx.activity` in the Android entry point; anything else is written here on platform APIs, so every audio sink is `expect`/`actual` on platform APIs with no third-party audio library.
+- No dependency beyond the meshtastic-sdk, kotlinx-coroutines and JetBrains Compose (with its Navigation 3 UI and Material 3 adaptive libraries), plus `androidx.activity` in the Android entry point; anything else is written here on platform APIs, so every audio sink is `expect`/`actual` on platform APIs with no third-party audio library.
 - Ported code is MIT, BSD, Apache-2.0 or public domain, with its notice in `NOTICE`. Never port Shadertoy code (non-commercial license), Faust `vital_rev` or `kb_rom_rev1` (GPL-3.0-only).
 - `shared/src` (commonMain) is pure Kotlin and compiles for jvm, android, iosArm64, iosSimulatorArm64 and wasmJs.
 - Time is the audio sample counter (`Long` frames); phases and clocks are `Double` or `Long`, never `Float`.

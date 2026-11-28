@@ -18,6 +18,8 @@ dependencies:
   - $compose.foundation
   - $libs.compose.material3
   - $libs.compose.navigationevent
+  - $libs.navigation3.ui
+  - $libs.compose.adaptive.navigation3
   - $compose.ui
   - $libs.kotlinx.coroutines.core
   - $libs.meshtastic.sdk.core

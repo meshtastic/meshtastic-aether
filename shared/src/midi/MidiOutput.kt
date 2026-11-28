@@ -17,6 +17,9 @@ interface MidiOutput {
     fun close()
 }
 
+/** Whether Aether can play to MIDI outputs here; the settings screen shows its MIDI section only where it can. */
+expect fun midiSupported(): Boolean
+
 /** The names of the MIDI outputs this platform can open; empty where Aether has no MIDI output yet. */
 expect fun midiOutputNames(): List<String>
 
