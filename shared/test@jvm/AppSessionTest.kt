@@ -1,5 +1,7 @@
 package org.meshtastic.aether
 
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import org.meshtastic.aether.ui.LinkChoice
 import org.meshtastic.aether.ui.MemoryStore
 import org.meshtastic.aether.ui.Settings
@@ -8,7 +10,13 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 
 class AppSessionTest {
-    private fun app() = AppSession(Settings(MemoryStore()), session = null, failure = null, pending = null)
+    private fun app() = AppSession(
+        Settings(MemoryStore()),
+        SessionHost(CoroutineScope(Job())),
+        engineFor = { error("a failed start builds no engine") },
+        failure = null,
+        pending = null,
+    )
 
     // Regression: jSerialComm throws a plain RuntimeException for a port that is gone, which escaped the start and
     // crashed the desktop app when a saved radio was unplugged before its auto-connect.
