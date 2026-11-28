@@ -38,7 +38,7 @@ Material Symbols path data (Apache-2.0), in shared/src/ui/LinkIcons.kt and share
 
   google/material-design-icons  symbols: lan, bluetooth, usb, language, play_arrow, volume_up, volume_off,
                                 contrast, videocam, dark_mode, tune, headphones, check, fullscreen,
-                                power_settings_new, settings, arrow_back, download (Rounded)
+                                power_settings_new, settings, arrow_back, download, view_in_ar (Rounded)
 
 Copyright Google LLC
 
