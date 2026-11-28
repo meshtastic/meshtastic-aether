@@ -81,7 +81,7 @@ cd meshtastic-aether
 
 `.github/workflows/ci.yml` runs the same gate as above on Linux (build every module, shared tests on JVM and Wasm, tools tests, the `BuildInfo` generator tests, detekt, the Kotlin/Native test-name check and the changelog fragment check) and the shared tests on the iOS simulator on macOS. The `./kotlin` wrapper provisions the toolchain and its JDK, and CI caches both under `~/kotlin-cache`.
 
-Renovate follows `.github/renovate.json`, which extends the org's `kmp-library` policy. Non-major updates automerge once the required CI checks pass. Kotlin and Compose in `common.module-template.yaml` are read by regex managers and grouped with the catalog, and Kotlin stays on the meshtastic-sdk's compiler. Update the toolchain itself with `./kotlin update`, which rewrites the wrapper's version and checksum together.
+Renovate follows `.github/renovate.json`, which extends the org's `kmp-library` policy. Non-major updates automerge once the required CI checks pass. Kotlin and Compose in `common.module-template.yaml` are read by regex managers and grouped with the catalog, and Kotlin stays on the meshtastic-sdk's compiler. The toolchain itself is updated by `./kotlin update`, which rewrites the wrapper's version and checksum together: `.github/workflows/toolchain-update.yml` runs it nightly and opens a pull request for a person to merge.
 
 ## Changelog
 
