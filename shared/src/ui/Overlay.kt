@@ -145,7 +145,7 @@ internal fun StatusOverlay(
             }
             if (host.updater != null) {
                 AnimatedVisibility(visible = open && controls.updateOpen, enter = enter, exit = exit) {
-                    UpdatePanel(host.updater, Modifier.holdsHud(controls))
+                    UpdatePanel(host.updater, canBrowse = !input.isTelevision, Modifier.holdsHud(controls))
                 }
             }
             DisconnectHint(armed)

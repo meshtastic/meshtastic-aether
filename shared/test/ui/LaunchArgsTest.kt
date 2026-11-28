@@ -32,6 +32,16 @@ class LaunchArgsTest {
         assertEquals(PaletteChoice.OledNight, b.look)
     }
 
+    // The MIDI output rides along with any link; an empty value is no output, not an output named "".
+    @Test
+    fun `a midi flag names the output and an empty one names none`() {
+        val a = parseLaunchArgs(arrayOf("--demo", "--midi", "Surge XT"))
+        assertEquals("Surge XT", a.midi)
+        assertEquals(LinkChoice.Demo, a.link)
+        assertNull(parseLaunchArgs(arrayOf("--demo", "--midi")).midi)
+        assertNull(parseLaunchArgs(arrayOf("--demo")).midi)
+    }
+
     @Test
     fun `an unreadable look or tcp value is an error and not a choice`() {
         val bad = parseLaunchArgs(arrayOf("--look", "neon"))

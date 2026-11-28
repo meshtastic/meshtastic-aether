@@ -22,6 +22,7 @@ import org.meshtastic.aether.log.Tally
 import org.meshtastic.aether.mesh.LinkState
 import org.meshtastic.aether.mesh.MeshEvent
 import org.meshtastic.aether.mesh.MeshSource
+import org.meshtastic.aether.midi.MidiLiveOutput
 import org.meshtastic.aether.music.Composer
 import org.meshtastic.aether.music.ControlEvent
 import org.meshtastic.aether.music.Day
@@ -32,6 +33,7 @@ import org.meshtastic.aether.mood.ParamValues
 import org.meshtastic.aether.synth.Synth
 import org.meshtastic.aether.visual.SceneModel
 import org.meshtastic.sdk.MeshtasticException
+import kotlin.concurrent.Volatile
 import kotlin.concurrent.atomics.AtomicInt
 import kotlin.concurrent.atomics.AtomicLong
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
@@ -88,30 +90,53 @@ class EngineTiming(
 )
 
 /**
+ * The composer takes a packet on its next tick and quantizes it to a quarter-second grid; so does this estimate of the
+ * frame a packet heard now sounds at, with [rendered] frames rendered and ticks [tickFrames] apart.
+ */
+private fun dueFrame(rendered: Long, tickFrames: Long, sampleRate: Int): Long {
+    val earliest = rendered + tickFrames
+    val grid = (Ornaments.GRID_SECONDS * sampleRate).toLong()
+    return -((-earliest).floorDiv(grid)) * grid
+}
+
+/**
+ * What an engine does besides playing: [pinFormFull] holds the long form at its full level (demo mode), [failureText]
+ * turns a failed link open into the line the person sees (the raw exception goes to the log only), and [midi] opens a
+ * MIDI output at the sink's rate that also plays the music: the engine opens it when it starts running and closes it
+ * once everything it started has stopped.
+ */
+class EngineOptions(
+    val pinFormFull: Boolean = false,
+    val failureText: (Throwable) -> String = { unreachableText(null) },
+    val midi: ((sampleRate: Int) -> MidiLiveOutput?)? = null,
+)
+
+/**
  * MeshSource -> Composer -> Synth -> AudioSink on one clock: the count of frames the synth has rendered. A dedicated
  * coroutine on [composerContext] owns the composer: events reach it through a channel, and each tick it fills
  * `[rendered, rendered + lookahead)`, hands the notes to the synth and the same notes back to the main thread
  * through a second channel. The scene and the status are touched only by the coroutine that calls [run]. A packet's
- * ripple fires when the sink's playback frame reaches the frame its note was scheduled for. [pinFormFull] holds the
- * long form at its full level (demo mode). [failureText] turns a failed link open into the line the person sees; the
- * raw exception goes
- * to the log only. The engine starts silent: the app raises [volume].
+ * ripple fires when the sink's playback frame reaches the frame its note was scheduled for. The engine starts silent:
+ * the app raises [volume].
  */
 class AmbientEngine(
     private val source: MeshSource,
     private val sink: AudioSink,
     seed: Long,
     timing: EngineTiming,
-    pinFormFull: Boolean = false,
-    private val failureText: (Throwable) -> String = { unreachableText(null) },
+    options: EngineOptions = EngineOptions(),
 ) {
+    private val failureText = options.failureText
+    private val openMidi = options.midi
+
+    @Volatile private var midi: MidiLiveOutput? = null
     private val tickMillis = timing.tickMillis
     private val now = timing.now
     private val composerContext = timing.composerContext
     private val sampleRate = sink.sampleRate
     private val lookaheadFrames = timing.lookaheadMillis.toLong() * sampleRate / MILLIS_PER_SECOND
     private val tickFrames = tickMillis * sampleRate / MILLIS_PER_SECOND
-    private val composer = Composer(seed, sampleRate, pinFormFull)
+    private val composer = Composer(seed, sampleRate, options.pinFormFull)
     private val synth = Synth(sampleRate)
     private val rendered = AtomicLong(0L)
     private val gainBits = AtomicInt(0f.toRawBits())
@@ -174,7 +199,21 @@ class AmbientEngine(
      * Runs until cancelled; [afterStart] opens a live link once the sink and source collector are up. A failure is
      * shown and retried with backoff, and a lost link is re-opened the same way.
      */
-    suspend fun run(afterStart: suspend () -> Unit = {}): Nothing = coroutineScope {
+    suspend fun run(afterStart: suspend () -> Unit = {}): Nothing {
+        val output = openMidi?.invoke(sampleRate)
+        midi = output
+        try {
+            runPlaying(afterStart)
+        } finally {
+            // runPlaying returns only once the composer, the output's one user, has stopped, started or not.
+            output?.let {
+                it.close()
+                Log.i(TAG, "midi ${it.name} closed: ${it.stats.notes} notes, ${it.stats.fallbacks} fallbacks")
+            }
+        }
+    }
+
+    private suspend fun runPlaying(afterStart: suspend () -> Unit): Nothing = coroutineScope {
         Log.i(TAG, "start sampleRate=$sampleRate lookaheadMs=${lookaheadFrames * MILLIS_PER_SECOND / sampleRate}")
         val firstTick = CompletableDeferred<Unit>()
         launch(composerContext) { composerLoop(firstTick) }
@@ -234,7 +273,7 @@ class AmbientEngine(
 
     /** Main thread: the scene sees the event now, the composer on its next tick. */
     private fun onEvent(e: MeshEvent) {
-        scene.onEvent(e, if (e is MeshEvent.PacketHeard) dueFrameFor() else 0L)
+        scene.onEvent(e, if (e is MeshEvent.PacketHeard) dueFrame(rendered.load(), tickFrames, sampleRate) else 0L)
         inbound.trySend(e)
         if (e is MeshEvent.Link) {
             if (e.state != status.link) Log.i(TAG, "link ${status.link} -> ${e.state}")
@@ -242,15 +281,6 @@ class AmbientEngine(
             scene.linked = isLinked(e.state)
             link.value = e.state
         }
-    }
-
-    /**
-     * The composer takes a packet on its next tick and quantizes it to a quarter-second grid; so does this estimate.
-     */
-    private fun dueFrameFor(): Long {
-        val earliest = rendered.load() + tickFrames
-        val grid = (Ornaments.GRID_SECONDS * sampleRate).toLong()
-        return -((-earliest).floorDiv(grid)) * grid
     }
 
     /** Main thread: shows what the composer scheduled. */
@@ -292,6 +322,10 @@ class AmbientEngine(
         val renderedNow = rendered.load()
         val out = composer.advance(renderedNow, lookaheadFrames, moment)
         synth.schedule(out)
+        midi?.let {
+            it.schedule(out)
+            it.pump(renderedNow, sink.playbackTimestamp())
+        }
         notesThisMinute += out.notes.size
         var texture: Texture? = null
         for (c in out.controls) if (c is ControlEvent.SetTexture) texture = c.texture

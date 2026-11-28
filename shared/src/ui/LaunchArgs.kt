@@ -12,6 +12,7 @@ class LaunchArgs(
     val fullscreen: Boolean,
     val look: PaletteChoice? = null,
     val ask: Boolean = false,
+    val midi: String? = null,
 )
 
 /** `standard`, `projector` or `oled` (also `oled-night`), any case; null for anything else. */
@@ -30,7 +31,8 @@ fun resolveLook(flag: PaletteChoice?, saved: PaletteChoice?, fullscreenLaunch: B
  * `--demo` starts the demo, `--serial PORT` opens a USB serial radio, `--tcp host[:port]` connects at launch (port
  * defaults to the phone API's 4403), `--replay` loops the bundled capture, `--fullscreen` opens fullscreen,
  * `--look standard|projector|oled` picks the look, `--ask` ignores the saved link and any `--demo`, `--replay` or
- * `--tcp` and shows the connect screen. A bad `--tcp` or `--look` value is an error to show, not a choice.
+ * `--tcp` and shows the connect screen, `--midi NAME` also plays to the MIDI output whose name is or contains NAME.
+ * A bad `--tcp` or `--look` value is an error to show, not a choice.
  */
 fun parseLaunchArgs(args: Array<String>): LaunchArgs {
     val fullscreen = "--fullscreen" in args
@@ -42,7 +44,8 @@ fun parseLaunchArgs(args: Array<String>): LaunchArgs {
     } else {
         launchLink(args)
     }
-    return LaunchArgs(launch.link, launch.error, fullscreen, look, ask)
+    val midi = valueAfter(args, "--midi")?.trim()?.takeIf { it.isNotEmpty() }
+    return LaunchArgs(launch.link, launch.error, fullscreen, look, ask, midi)
 }
 
 /** The link a launch flag asks for, or the error its bad value is; both null when no flag names a link. */

@@ -21,6 +21,7 @@ This project uses the [Kotlin Toolchain](https://kotlin-toolchain.org/) (a dedic
 ## Branding rules
 
 - Colors come from the brand palette in the design standards (`design/standards`, section 7), and `shared/test/theme/PaletteSourceTest.kt` enforces it.
+- UI icons are Material Symbols Rounded path data (weight 400, unfilled), embedded through `symbol()` in `LinkIcons.kt` and `HudIcons.kt` and listed in `NOTICE`; never hand-draw one, and take the path from the symbol's Android XML (its 0..960 box).
 - The icon is its own glyph with the Meshtastic M mark on its orb. The mark is the official artwork (`meshtastic/design` `logo/svg`, kept as `M_MARK_PATH` in `AetherGlyph.kt` and as paths in `branding/*.svg` and the Android vectors): scale and place it only, in the dark-on-green colorway; never redraw, distort or recolor it.
 - `branding/*.svg` are the sources, and `scripts/icons.sh` regenerates every raster asset; the Android icon is hand-ported XML.
 - The theme is dark-only, a documented waiver of the light theme and dynamic color.
