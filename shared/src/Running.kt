@@ -70,8 +70,9 @@ private const val SAVE_DEBOUNCE_MS = 500L
 private const val HINT_SHOW_MS = 8_000L
 private const val STATUS_TICK_MS = 1_000L
 private val StatusShift = 12.dp
-private const val STATUS_ALPHA = 0.6f
-private const val HINT_ALPHA = 0.5f
+/** The status line's and the hint's alpha over the scene; text at either must still reach 4.5:1 on every palette. */
+internal const val STATUS_ALPHA = 0.6f
+internal const val HINT_ALPHA = 0.6f
 
 /** A running [session]: the scene, its keys and pointer, and the HUD; [onStop] returns to the connect screen. */
 @Composable
