@@ -34,11 +34,15 @@ sealed interface Command {
     data class Analyze(val wav: String) : Command
 
     data class Video(val spec: VideoSpec, val out: String) : Command
+
+    data class Midi(val spec: MidiSpec, val out: String) : Command
 }
 
 const val USAGE = "usage: RenderWav <silent|sparse|busy> <hours> <outPath> [seed] [--at <UTC instant>]  |  " +
     "RenderWav analyze <wav>  |  RenderWav video <seconds> <out.mp4> [--nodes N] [--speed X] [--seed N] " +
-    "[--at <UTC instant>] [--warmup S] [--fps N] [--size WxH] [--look standard|projector|oled]"
+    "[--at <UTC instant>] [--warmup S] [--fps N] [--size WxH] [--look standard|projector|oled]  |  " +
+    "RenderWav midi <seconds> <out.mid> [--nodes N] [--speed X] [--seed N] [--at <UTC instant>] " +
+    "[--range 48|2] [--layout one|two, where two needs an output per track] [--allowance S]"
 
 private const val AT_FLAG = "--at"
 
@@ -58,8 +62,11 @@ internal fun startEpochMs(all: List<String>, at: Int): Long {
     }
 }
 
-fun parseArgs(all: List<String>): Command =
-    if (all.firstOrNull() == "video") parseVideoArgs(all) else parseRenderOrAnalyze(all)
+fun parseArgs(all: List<String>): Command = when (all.firstOrNull()) {
+    "video" -> parseVideoArgs(all)
+    "midi" -> parseMidiArgs(all)
+    else -> parseRenderOrAnalyze(all)
+}
 
 private fun parseRenderOrAnalyze(all: List<String>): Command {
     require(all.isNotEmpty()) { USAGE }
@@ -114,15 +121,16 @@ internal fun momentAt(epochMs: Long): LocalMoment {
 
 @OptIn(ExperimentalCoroutinesApi::class)
 internal fun generateEvents(
-    density: Density,
+    nodes: Int,
+    speed: Double,
     seed: Long,
     durationMs: Long,
     startEpochMs: Long = START_EPOCH_MS,
 ): List<MeshEvent> {
-    if (density.nodes == 0) return emptyList()
+    if (nodes == 0) return emptyList()
     val out = ArrayList<MeshEvent>()
     runTest(timeout = kotlin.time.Duration.INFINITE) {
-        val src = SimulatedMeshSource(seed, density.nodes, density.speed) { startEpochMs + currentTime }
+        val src = SimulatedMeshSource(seed, nodes, speed) { startEpochMs + currentTime }
         val flow: Flow<MeshEvent> = src.events
         withTimeoutOrNull(durationMs) { flow.collect { out += it } }
     }
@@ -182,7 +190,8 @@ private class PcmChunkWriter(private val raf: RandomAccessFile) {
 
 fun render(cmd: Command.Render): RenderSummary {
     val frames = (cmd.hours * SECONDS_PER_HOUR * SAMPLE_RATE).toLong()
-    val events = generateEvents(cmd.density, cmd.seed, (cmd.hours * MILLIS_PER_HOUR).toLong(), cmd.startEpochMs)
+    val durationMs = (cmd.hours * MILLIS_PER_HOUR).toLong()
+    val events = generateEvents(cmd.density.nodes, cmd.density.speed, cmd.seed, durationMs, cmd.startEpochMs)
     val composer = Composer(cmd.seed, SAMPLE_RATE)
     val synth = Synth(SAMPLE_RATE)
     val header = wavBytes(FloatArray(0), SAMPLE_RATE)
@@ -278,6 +287,11 @@ fun main(args: Array<String>) {
             val pictures = renderVideo(cmd.spec, cmd.out)
             val secs = (System.nanoTime() - t0) / NANOS_PER_SECOND
             println("rendered $pictures pictures in ${"%.1f".format(secs)} s -> ${cmd.out}")
+        }
+        is Command.Midi -> {
+            val r = renderMidi(cmd.spec)
+            java.io.File(cmd.out).writeBytes(r.bytes)
+            println("${formatMidiStats(r.stats)} -> ${cmd.out}")
         }
     }
 }
