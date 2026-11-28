@@ -1,5 +1,8 @@
 package org.meshtastic.aether
 
+import org.meshtastic.aether.midi.MidiChoice
+import org.meshtastic.aether.midi.midiOutputNames
+import org.meshtastic.aether.midi.midiSupported
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -45,6 +48,7 @@ import org.meshtastic.aether.ui.ConnectContext
 import org.meshtastic.aether.ui.ConnectScreen
 import org.meshtastic.aether.ui.ConnectTarget
 import org.meshtastic.aether.ui.Countdown
+import org.meshtastic.aether.ui.MidiSettingsState
 import org.meshtastic.aether.ui.HudIcon
 import org.meshtastic.aether.ui.HudIcons
 import org.meshtastic.aether.ui.LinkChoice
@@ -98,7 +102,10 @@ data class HostWindow(
 )
 
 /** The app's saved settings and the platform it runs on; a test supplies a fake store. */
-internal class AppEnvironment(val settings: Settings, val platform: Platform, val midi: String? = null)
+internal class AppEnvironment(val settings: Settings, val platform: Platform, val midi: String? = null) {
+    /** The saved MIDI choices, with a `--midi` launch flag naming the output in place of the saved one. */
+    fun midiChoice(): MidiChoice = settings.midi.let { saved -> if (midi != null) saved.copy(output = midi) else saved }
+}
 
 /** The look in force; a pick is saved for the next launch. */
 @Stable
@@ -177,6 +184,13 @@ private class SettingsNav(private val settings: Settings) {
     var open by mutableStateOf(false)
     var track by mutableStateOf(settings.updateTrack ?: UpdateTrack.of(BuildInfo.CHANNEL))
         private set
+    var midi by mutableStateOf(settings.midi)
+        private set
+
+    fun chooseMidi(next: MidiChoice) {
+        midi = next
+        settings.midi = next
+    }
 
     fun choose(next: UpdateTrack) {
         track = next
@@ -213,6 +227,7 @@ private fun SettingsPane(nav: SettingsNav, platform: Platform) {
         onBack = { nav.open = false },
         modifier = Modifier.windowInsetsPadding(WindowInsets.safeDrawing),
         focusBack = platform.isTelevision || platform.hasKeyboard,
+        midi = if (midiSupported()) MidiSettingsState(nav.midi, remember { midiOutputNames() }, nav::chooseMidi) else null,
     )
 }
 

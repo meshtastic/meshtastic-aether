@@ -34,6 +34,8 @@ private fun outputDevices(): List<MidiDevice> = MidiSystem.getMidiDeviceInfo().m
     }
 }
 
+actual fun midiSupported(): Boolean = true
+
 actual fun midiOutputNames(): List<String> = outputDevices().map { it.deviceInfo.name }
 
 actual fun openMidiOutput(name: String): MidiOutput? {

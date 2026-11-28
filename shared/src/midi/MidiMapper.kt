@@ -116,6 +116,9 @@ internal class SentNotes {
  */
 class MidiMapper(sampleRate: Int, val config: MidiConfig = MidiConfig()) : NoteSink {
     val stats = MidiStats()
+
+    /** The viewer's volume, 0..1: it scales every note's velocity. */
+    var gain = 1f
     private val queue = EventQueue()
     private val parts = List(config.parts) { MidiPart(it, config, queue, stats, sampleRate) }
     private val pending = ArrayList<NoteEvent>()
@@ -194,7 +197,7 @@ class MidiMapper(sampleRate: Int, val config: MidiConfig = MidiConfig()) : NoteS
         val tuned = if (note.voice == Voice.Breath) null else MidiPitch.tune(hz, config.bendRange)
         val meshBed = note.node != null && (note.voice == Voice.Drone || note.voice == Voice.Shimmer)
         val level = if (meshBed) 1f else levelAt(note.voice, note.atFrame)
-        val velocity = (note.velocity * level * MAX_VELOCITY).roundToInt()
+        val velocity = (note.velocity * level * gain * MAX_VELOCITY).roundToInt()
         if (tuned == null || velocity < 1) {
             stats.skipped++
             return

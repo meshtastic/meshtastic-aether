@@ -103,12 +103,14 @@ private fun dueFrame(rendered: Long, tickFrames: Long, sampleRate: Int): Long {
  * What an engine does besides playing: [pinFormFull] holds the long form at its full level (demo mode), [failureText]
  * turns a failed link open into the line the person sees (the raw exception goes to the log only), and [midi] opens a
  * MIDI output at the sink's rate that also plays the music: the engine opens it when it starts running and closes it
- * once everything it started has stopped.
+ * once everything it started has stopped. While that output is open, [midiMutesBuiltIn] silences the built-in synth;
+ * an output that fails to open leaves it playing.
  */
 class EngineOptions(
     val pinFormFull: Boolean = false,
     val failureText: (Throwable) -> String = { unreachableText(null) },
     val midi: ((sampleRate: Int) -> MidiLiveOutput?)? = null,
+    val midiMutesBuiltIn: Boolean = true,
 )
 
 /**
@@ -130,6 +132,9 @@ class AmbientEngine(
     private val openMidi = options.midi
 
     @Volatile private var midi: MidiLiveOutput? = null
+
+    @Volatile private var builtInSilent = false
+    private val midiMutesBuiltIn = options.midiMutesBuiltIn
     private val tickMillis = timing.tickMillis
     private val now = timing.now
     private val composerContext = timing.composerContext
@@ -178,7 +183,7 @@ class AmbientEngine(
 
     private val renderer = BlockRenderer { out, frames ->
         synth.render(out, frames)
-        val target = Float.fromBits(gainBits.load())
+        val target = if (builtInSilent) 0f else Float.fromBits(gainBits.load())
         var g = smoothedGain
         for (i in 0 until frames) {
             g += (target - g) * GAIN_GLIDE
@@ -202,6 +207,7 @@ class AmbientEngine(
     suspend fun run(afterStart: suspend () -> Unit = {}): Nothing {
         val output = openMidi?.invoke(sampleRate)
         midi = output
+        builtInSilent = output != null && midiMutesBuiltIn
         try {
             runPlaying(afterStart)
         } finally {
@@ -323,6 +329,7 @@ class AmbientEngine(
         val out = composer.advance(renderedNow, lookaheadFrames, moment)
         synth.schedule(out)
         midi?.let {
+            it.gain = Float.fromBits(gainBits.load())
             it.schedule(out)
             it.pump(renderedNow, sink.playbackTimestamp())
         }

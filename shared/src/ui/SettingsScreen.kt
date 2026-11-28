@@ -90,7 +90,7 @@ internal class TrackedUpdates(
 /**
  * Settings: which builds the app follows for updates, and a check on demand. [updates] is null where updates come
  * another way (an app store, iOS, the web) or on a local build, and the screen then says so instead of offering a
- * choice.
+ * choice. [midi] is null where Aether cannot play to MIDI, and the MIDI section is left out.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -99,6 +99,7 @@ internal fun SettingsScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
     focusBack: Boolean = false,
+    midi: MidiSettingsState? = null,
 ) {
     val backFocus = remember { FocusRequester() }
     LaunchedEffect(Unit) { if (focusBack) runCatching { backFocus.requestFocus() } }
@@ -128,6 +129,10 @@ internal fun SettingsScreen(
                     )
                 } else {
                     UpdateSettings(updates)
+                }
+                if (midi != null) {
+                    SectionHeading("MIDI output")
+                    MidiSettings(midi)
                 }
                 SectionHeading("About")
                 AboutSection()
