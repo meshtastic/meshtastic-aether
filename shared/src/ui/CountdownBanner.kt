@@ -61,7 +61,7 @@ internal fun CountdownBanner(pending: PendingConnect, onNow: (() -> Unit)?, modi
             )
             // The line above says the time left; the bar's per-second progress would only repeat it.
             LinearWavyProgressIndicator({ progress }, Modifier.fillMaxWidth().clearAndSetSemantics {})
-            // Spaced as a standard button group; not `ButtonGroup`, which composes an unplaced, unnamed overflow button.
+            // Spaced as a standard button group; `ButtonGroup` would compose an unplaced, unnamed overflow button.
             Row(horizontalArrangement = ButtonGroupDefaults.HorizontalArrangement) {
                 if (onNow != null) {
                     FilledTonalButton(onNow, ButtonDefaults.shapes(), Modifier.heightIn(min = MinTouch)) {

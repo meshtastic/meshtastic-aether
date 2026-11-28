@@ -58,7 +58,7 @@ internal fun segmentsFitLabels(width: Dp, count: Int): Boolean {
 
 /**
  * A connected single-select group of toggle buttons. Each shows its icon and label when every segment has room, and
- * only its icon otherwise, named by the label for a screen reader and, with [tooltips], in a tooltip. The selected one
+ * only its icon otherwise, named by the label for a screen reader and in a tooltip. The selected one
  * reports `selected`; while [onStartFocus] is set it takes focus and then calls it, so a D-pad or keyboard user starts
  * on the current choice.
  */
@@ -69,7 +69,6 @@ internal fun LinkTypeChooser(
     onSelect: (LinkKind) -> Unit,
     modifier: Modifier = Modifier,
     onStartFocus: (() -> Unit)? = null,
-    tooltips: Boolean = true,
 ) {
     val selectedFocus = remember { FocusRequester() }
     if (onStartFocus != null) {
@@ -91,7 +90,7 @@ internal fun LinkTypeChooser(
                     else -> ButtonGroupDefaults.connectedMiddleButtonShapes()
                 }
                 val checked = kind == selected
-                ChooserTooltip(kind.label, tooltips && !labeled, Modifier.weight(1f)) {
+                ChooserTooltip(kind.label, !labeled, Modifier.weight(1f)) {
                     ToggleButton(
                         checked = checked,
                         onCheckedChange = { onSelect(kind) },
