@@ -37,23 +37,37 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.testTag
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
 private val ChooserHeight = 48.dp
-private val ChooserPadding = PaddingValues(horizontal = 4.dp)
+private val ChooserInset = 4.dp
+private val ChooserPadding = PaddingValues(horizontal = ChooserInset)
+
+/** Room kept beside a label so it does not run into the segment's rounded ends. */
+private val LabelSlack = 8.dp
 
 /** Tags each visible chooser label, which a screen reader skips; tests find the labels by it. */
 internal const val LINK_LABEL_TAG = "linkLabel"
 
-/** The narrowest segment that holds an icon and the longest label on one line; below it the segments are icons. */
-internal val LabeledSegmentWidth = 120.dp
-
-/** Whether [count] connected segments sharing [width] each fit an icon and its label. */
-internal fun segmentsFitLabels(width: Dp, count: Int): Boolean {
+/** Whether [count] connected segments sharing [width] each fit [content], an icon beside the longest label. */
+internal fun segmentsFitLabels(width: Dp, count: Int, content: Dp): Boolean {
     val gaps = ButtonGroupDefaults.ConnectedSpaceBetween * (count - 1).coerceAtLeast(0)
-    return (width - gaps) / count.coerceAtLeast(1) >= LabeledSegmentWidth
+    return (width - gaps) / count.coerceAtLeast(1) >= content
+}
+
+/** The width an icon and the longest of [labels] take in a segment, measured at the current font scale. */
+@Composable
+private fun labeledContentWidth(labels: List<String>): Dp {
+    val measurer = rememberTextMeasurer()
+    val style = MaterialTheme.typography.labelLarge
+    val density = LocalDensity.current
+    val longest = labels.maxOfOrNull { measurer.measure(it, style, maxLines = 1, softWrap = false).size.width } ?: 0
+    return ChooserInset * 2 + ToggleButtonDefaults.IconSize + ToggleButtonDefaults.IconSpacing + LabelSlack +
+        with(density) { longest.toDp() }
 }
 
 /**
@@ -77,8 +91,9 @@ internal fun LinkTypeChooser(
             onStartFocus()
         }
     }
+    val content = labeledContentWidth(kinds.map { it.label })
     BoxWithConstraints(modifier.fillMaxWidth()) {
-        val labeled = segmentsFitLabels(maxWidth, kinds.size)
+        val labeled = segmentsFitLabels(maxWidth, kinds.size, content)
         Row(
             Modifier.fillMaxWidth().selectableGroup(),
             horizontalArrangement = Arrangement.spacedBy(ButtonGroupDefaults.ConnectedSpaceBetween),

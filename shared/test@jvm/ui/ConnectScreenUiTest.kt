@@ -2,6 +2,7 @@ package org.meshtastic.aether.ui
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -32,6 +33,8 @@ import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.v2.runComposeUiTest
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -52,21 +55,25 @@ class ConnectScreenUiTest {
         onKind: (LinkKind) -> Unit = {},
         secureWebSocket: Boolean = false,
         serial: Boolean = false,
+        fontScale: Float = 1f,
     ) = setContent {
+        val density = LocalDensity.current
         AmbientTheme {
-            Box(Modifier.size(width.dp, height.dp)) {
-                ConnectScreen(
-                    chosen::add,
-                    ConnectContext(pending, failure, LinkChoice.Tcp("node.local", 4403), lastKind),
-                    target = ConnectTarget(
-                        supportsTcp = true,
-                        bluetooth = false,
-                        serial = serial,
-                        secureWebSocket = secureWebSocket,
-                        focusChooser = focusChooser,
-                    ),
-                    onKind = onKind,
-                )
+            CompositionLocalProvider(LocalDensity provides Density(density.density, fontScale)) {
+                Box(Modifier.size(width.dp, height.dp)) {
+                    ConnectScreen(
+                        chosen::add,
+                        ConnectContext(pending, failure, LinkChoice.Tcp("node.local", 4403), lastKind),
+                        target = ConnectTarget(
+                            supportsTcp = true,
+                            bluetooth = false,
+                            serial = serial,
+                            secureWebSocket = secureWebSocket,
+                            focusChooser = focusChooser,
+                        ),
+                        onKind = onKind,
+                    )
+                }
             }
         }
     }
@@ -281,6 +288,14 @@ class ConnectScreenUiTest {
             assertEquals(listOf(label), node.config[SemanticsProperties.ContentDescription], "$label is named once")
             assertFalse(node.config.contains(SemanticsProperties.Text), "$label is read twice")
         }
+    }
+
+    // Regression: at 200% text, which the design standards require, the labels drew past their segments.
+    @Test
+    fun `at double text size the same chooser falls back to icons`() = runComposeUiTest {
+        show(width = 800, height = 600, fontScale = 2f)
+        onAllNodesWithTag(LINK_LABEL_TAG, useUnmergedTree = true).assertCountEquals(0)
+        onNode(hasContentDescription("WebSocket") and hasClickAction()).assertExists()
     }
 
     // Regression: the heading said only Connect, so with an icon-only chooser nothing on screen named the chosen link.
