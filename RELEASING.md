@@ -39,7 +39,7 @@ The Android files are signed when these repository secrets exist, and ship unsig
 3. Every manifest carries `X.Y.Z` (`scripts/version.sh check`).
 4. `scripts/changelog.sh notes X.Y.Z` finds a non-empty section. It becomes the GitHub Release body verbatim.
 5. The whole CI workflow passes on this commit, the iOS simulator tests included.
-6. It builds the release APK and AAB (and checks the APK's `versionName`), a desktop executable jar on Linux and on macOS (each jar bundles its own OS's native libraries), and the web build.
+6. It builds the release APK and AAB (and checks the APK's `versionName`), a desktop executable jar on Linux and on macOS (each jar bundles its own OS's native libraries), a desktop installer on each matching runner (a deb on Linux, a dmg on macOS, an msi on Windows, from `scripts/package-desktop.sh`), and the web build.
 7. It tags `vX.Y.Z` and publishes the GitHub Release with every file. A dry run stops before this step and leaves the files as workflow artifacts.
 
 The iOS app is not attached: an `.ipa` needs a signing identity and provisioning profile.

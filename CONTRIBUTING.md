@@ -62,21 +62,24 @@ cd meshtastic-aether
 | Task | Command |
 |---|---|
 | Build every target that compiles on this OS | `./kotlin build` |
-| Full check (runs the tests) | `./kotlin check` |
+| Full check (the tests and detekt) | `./kotlin check` |
+| Lint only; a finding is fixed in code, never baselined | `./kotlin check detekt` |
 | Shared tests on the JVM | `./kotlin test -m shared -p jvm` |
 | Shared tests on Wasm, when shared code changed (check the output for `ERROR` lines) | `./kotlin test -m shared -p wasmJs` |
 | Tools tests | `./kotlin test -m tools -p jvm` |
+| `BuildInfo` generator tests | `./kotlin test -m build-info` |
 | Build the iOS app (macOS) | `./kotlin build -m iosApp` |
 | Run the desktop app | `./kotlin run -m desktopApp` |
 | Run the web app | `./kotlin run -m webApp` |
 | Render the simulated mesh to a WAV file | `./kotlin run -m tools -- sparse 1 /tmp/sparse.wav` |
+| Render a demo video offline (needs ffmpeg) | `./kotlin run -m tools -- video 90 /tmp/demo.mp4` |
 | List the modules | `./kotlin show modules` |
 
 [`README.md`](README.md) lists the launch flags and the other run targets.
 
 ## CI and dependency updates
 
-`.github/workflows/ci.yml` runs the same gate as above on Linux (build every module, shared tests on JVM and Wasm, tools tests, the Kotlin/Native test-name check and the changelog fragment check) and the shared tests on the iOS simulator on macOS. The `./kotlin` wrapper provisions the toolchain and its JDK, and CI caches both under `~/kotlin-cache`.
+`.github/workflows/ci.yml` runs the same gate as above on Linux (build every module, shared tests on JVM and Wasm, tools tests, the `BuildInfo` generator tests, detekt, the Kotlin/Native test-name check and the changelog fragment check) and the shared tests on the iOS simulator on macOS. The `./kotlin` wrapper provisions the toolchain and its JDK, and CI caches both under `~/kotlin-cache`.
 
 Renovate follows `.github/renovate.json`, which extends the org's `kmp-library` policy. Non-major updates automerge once the required CI checks pass. Kotlin and Compose in `common.module-template.yaml` are read by regex managers and grouped with the catalog, and Kotlin stays on the meshtastic-sdk's compiler. The toolchain itself is updated by `./kotlin update`, which rewrites the wrapper's version and checksum together: `.github/workflows/toolchain-update.yml` runs it nightly and opens a pull request for a person to merge.
 
