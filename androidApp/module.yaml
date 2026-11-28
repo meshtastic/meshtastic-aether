@@ -9,6 +9,7 @@ dependencies:
   - $libs.androidx.xr.scenecore
   - $libs.androidx.xr.runtime
   - $libs.androidx.xr.arcore
+  - $libs.arcore
 
 settings:
   compose: enabled

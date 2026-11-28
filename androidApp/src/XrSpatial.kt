@@ -62,8 +62,8 @@ private const val INDEX_BYTES = 4
 private const val REACH_METERS = SpatialLayout.FAR_METERS.toFloat() + 1f
 
 /**
- * The Android XR host for the spatial view, or null off a headset, so phones and TVs never create a session or ask for
- * ARCore. The XR session is created on the first [XrSpatialHost.enter], not at launch.
+ * The Android XR host for the spatial view, or null off a headset, where phones take [phoneArSpatialHost] instead. The
+ * XR session is created on the first [XrSpatialHost.enter], not at launch.
  */
 internal fun xrSpatialHost(activity: ComponentActivity): XrSpatialHost? =
     if (activity.packageManager.hasSystemFeature(XR_SPATIAL_FEATURE, MIN_SPATIAL_API)) XrSpatialHost(activity) else null
