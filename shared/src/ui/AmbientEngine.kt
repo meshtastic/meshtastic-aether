@@ -22,6 +22,7 @@ import org.meshtastic.aether.log.Tally
 import org.meshtastic.aether.mesh.LinkState
 import org.meshtastic.aether.mesh.MeshEvent
 import org.meshtastic.aether.mesh.MeshSource
+import org.meshtastic.aether.midi.MidiLiveOutput
 import org.meshtastic.aether.music.Composer
 import org.meshtastic.aether.music.ControlEvent
 import org.meshtastic.aether.music.Day
@@ -88,30 +89,40 @@ class EngineTiming(
 )
 
 /**
+ * What an engine does besides playing: [pinFormFull] holds the long form at its full level (demo mode), [failureText]
+ * turns a failed link open into the line the person sees (the raw exception goes to the log only), and [midi] also
+ * plays the music to a MIDI output, which the engine closes when it stops.
+ */
+class EngineOptions(
+    val pinFormFull: Boolean = false,
+    val failureText: (Throwable) -> String = { unreachableText(null) },
+    val midi: MidiLiveOutput? = null,
+)
+
+/**
  * MeshSource -> Composer -> Synth -> AudioSink on one clock: the count of frames the synth has rendered. A dedicated
  * coroutine on [composerContext] owns the composer: events reach it through a channel, and each tick it fills
  * `[rendered, rendered + lookahead)`, hands the notes to the synth and the same notes back to the main thread
  * through a second channel. The scene and the status are touched only by the coroutine that calls [run]. A packet's
- * ripple fires when the sink's playback frame reaches the frame its note was scheduled for. [pinFormFull] holds the
- * long form at its full level (demo mode). [failureText] turns a failed link open into the line the person sees; the
- * raw exception goes
- * to the log only. The engine starts silent: the app raises [volume].
+ * ripple fires when the sink's playback frame reaches the frame its note was scheduled for. The engine starts silent:
+ * the app raises [volume].
  */
 class AmbientEngine(
     private val source: MeshSource,
     private val sink: AudioSink,
     seed: Long,
     timing: EngineTiming,
-    pinFormFull: Boolean = false,
-    private val failureText: (Throwable) -> String = { unreachableText(null) },
+    options: EngineOptions = EngineOptions(),
 ) {
+    private val failureText = options.failureText
+    private val midi = options.midi
     private val tickMillis = timing.tickMillis
     private val now = timing.now
     private val composerContext = timing.composerContext
     private val sampleRate = sink.sampleRate
     private val lookaheadFrames = timing.lookaheadMillis.toLong() * sampleRate / MILLIS_PER_SECOND
     private val tickFrames = tickMillis * sampleRate / MILLIS_PER_SECOND
-    private val composer = Composer(seed, sampleRate, pinFormFull)
+    private val composer = Composer(seed, sampleRate, options.pinFormFull)
     private val synth = Synth(sampleRate)
     private val rendered = AtomicLong(0L)
     private val gainBits = AtomicInt(0f.toRawBits())
@@ -270,11 +281,18 @@ class AmbientEngine(
     }
 
     private suspend fun composerLoop(firstTick: CompletableDeferred<Unit>) {
-        tick()
-        firstTick.complete(Unit)
-        while (true) {
-            delay(tickMillis)
+        try {
             tick()
+            firstTick.complete(Unit)
+            while (true) {
+                delay(tickMillis)
+                tick()
+            }
+        } finally {
+            midi?.let {
+                it.close()
+                Log.i(TAG, "midi ${it.name} closed: ${it.stats.notes} notes, ${it.stats.fallbacks} fallbacks")
+            }
         }
     }
 
@@ -292,6 +310,10 @@ class AmbientEngine(
         val renderedNow = rendered.load()
         val out = composer.advance(renderedNow, lookaheadFrames, moment)
         synth.schedule(out)
+        midi?.let {
+            it.schedule(out)
+            it.pump(renderedNow, sink.playbackTimestamp())
+        }
         notesThisMinute += out.notes.size
         var texture: Texture? = null
         for (c in out.controls) if (c is ControlEvent.SetTexture) texture = c.texture
