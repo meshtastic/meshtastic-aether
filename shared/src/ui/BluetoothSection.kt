@@ -9,10 +9,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SegmentedListItem
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -69,6 +72,7 @@ internal fun BluetoothSection(
                 onInteract()
                 scan.scanning = !scan.scanning
             },
+            ButtonDefaults.shapes(),
             Modifier.fillMaxWidth().heightIn(min = MinTouch),
         ) { Text(if (scan.scanning) "Stop scanning" else "Scan for Bluetooth radios") }
         scan.error?.let { ErrorSurface(it) }
@@ -78,7 +82,7 @@ internal fun BluetoothSection(
                 Text("Looking for radios...", style = MaterialTheme.typography.bodyLarge)
             }
         }
-        for (radio in scan.radios) RadioRow(radio, onPick)
+        PickList(scan.radios, ::radioRow, onPick)
     }
 }
 
@@ -181,6 +185,7 @@ private fun ChooserSection(
                     }
                 }
             },
+            ButtonDefaults.shapes(),
             Modifier.fillMaxWidth().heightIn(min = MinTouch),
             enabled = !choosing,
         ) { Text("Choose a Bluetooth radio") }
@@ -189,31 +194,29 @@ private fun ChooserSection(
 }
 
 private val LoadingSize = 48.dp
-private val RowHeight = 56.dp
 
+/** What a [PickList] row shows: its [title], the [detail] under it and the [trailing] status. */
+internal class PickRow(val title: String, val detail: String, val trailing: String)
+
+/** Found radios or ports as one contained list, each row picking its item, the rows joined by segmented gaps. */
 @Composable
-private fun RadioRow(radio: BleRadio, onPick: (BleRadio) -> Unit) {
-    Surface(
-        { onPick(radio) },
-        Modifier.fillMaxWidth().heightIn(min = RowHeight),
-        shape = MaterialTheme.shapes.medium,
-        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-    ) {
-        Row(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Text(radio.name ?: "Unnamed radio", style = MaterialTheme.typography.bodyLarge)
-                SecondaryText("Address ending ${addressTail(radio.address)}")
-            }
-            SecondaryText(signalLabel(radio.rssi))
+internal fun <T> PickList(items: List<T>, row: (T) -> PickRow, onPick: (T) -> Unit) {
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap)) {
+        items.forEachIndexed { index, item ->
+            val shown = row(item)
+            SegmentedListItem(
+                onClick = { onPick(item) },
+                shapes = ListItemDefaults.segmentedShapes(index, items.size),
+                supportingContent = { Text(shown.detail) },
+                trailingContent = { Text(shown.trailing) },
+                content = { Text(shown.title) },
+            )
         }
     }
 }
 
-/** Body text in the secondary color: the detail lines of a radio or port row. */
-@Composable
-internal fun SecondaryText(text: String) {
-    Text(text, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-}
+private fun radioRow(radio: BleRadio) =
+    PickRow(radio.name ?: "Unnamed radio", "Address ending ${addressTail(radio.address)}", signalLabel(radio.rssi))
 
 /** An error in an errorContainer card that a screen reader announces when it appears. */
 @Composable

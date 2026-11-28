@@ -2,6 +2,7 @@ package org.meshtastic.aether.ui
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -20,7 +21,10 @@ import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.isHeading
 import androidx.compose.ui.test.isSelected
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performTextClearance
@@ -29,6 +33,8 @@ import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.v2.runComposeUiTest
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -49,21 +55,25 @@ class ConnectScreenUiTest {
         onKind: (LinkKind) -> Unit = {},
         secureWebSocket: Boolean = false,
         serial: Boolean = false,
+        fontScale: Float = 1f,
     ) = setContent {
+        val density = LocalDensity.current
         AmbientTheme {
-            Box(Modifier.size(width.dp, height.dp)) {
-                ConnectScreen(
-                    chosen::add,
-                    ConnectContext(pending, failure, LinkChoice.Tcp("node.local", 4403), lastKind),
-                    target = ConnectTarget(
-                        supportsTcp = true,
-                        bluetooth = false,
-                        serial = serial,
-                        secureWebSocket = secureWebSocket,
-                        focusChooser = focusChooser,
-                    ),
-                    onKind = onKind,
-                )
+            CompositionLocalProvider(LocalDensity provides Density(density.density, fontScale)) {
+                Box(Modifier.size(width.dp, height.dp)) {
+                    ConnectScreen(
+                        chosen::add,
+                        ConnectContext(pending, failure, LinkChoice.Tcp("node.local", 4403), lastKind),
+                        target = ConnectTarget(
+                            supportsTcp = true,
+                            bluetooth = false,
+                            serial = serial,
+                            secureWebSocket = secureWebSocket,
+                            focusChooser = focusChooser,
+                        ),
+                        onKind = onKind,
+                    )
+                }
             }
         }
     }
@@ -265,6 +275,36 @@ class ConnectScreenUiTest {
             onNodeWithText(label).assertDoesNotExist()
             onNode(hasContentDescription(label) and hasClickAction()).assertWidthIsAtLeast(44.dp)
         }
+        onAllNodesWithTag(LINK_LABEL_TAG, useUnmergedTree = true).assertCountEquals(0)
+    }
+
+    // Regression: the chooser stayed icon-only on a window wide enough for its labels, which M3 connected groups show.
+    @Test
+    fun `a wide chooser shows each label and names each button once`() = runComposeUiTest {
+        show(width = 800, height = 600)
+        onAllNodesWithTag(LINK_LABEL_TAG, useUnmergedTree = true).assertCountEquals(3)
+        for (label in listOf("Network", "WebSocket", "Demo")) {
+            val node = onNode(hasContentDescription(label) and hasClickAction()).fetchSemanticsNode()
+            assertEquals(listOf(label), node.config[SemanticsProperties.ContentDescription], "$label is named once")
+            assertFalse(node.config.contains(SemanticsProperties.Text), "$label is read twice")
+        }
+    }
+
+    // Regression: at 200% text, which the design standards require, the labels drew past their segments.
+    @Test
+    fun `at double text size the same chooser falls back to icons`() = runComposeUiTest {
+        show(width = 800, height = 600, fontScale = 2f)
+        onAllNodesWithTag(LINK_LABEL_TAG, useUnmergedTree = true).assertCountEquals(0)
+        onNode(hasContentDescription("WebSocket") and hasClickAction()).assertExists()
+    }
+
+    // Regression: the heading said only Connect, so with an icon-only chooser nothing on screen named the chosen link.
+    @Test
+    fun `the pane heading names the chosen link`() = runComposeUiTest {
+        show(width = 360, height = 720)
+        onNode(hasText("Connect over the network") and isHeading()).assertExists()
+        onNode(hasContentDescription("Demo") and hasClickAction()).performClick()
+        onNode(hasText("Play the demo") and isHeading()).assertExists()
     }
 
     // Regression: touch targets under 44 dp are hard to hit with gloves or on a phone.

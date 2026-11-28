@@ -11,6 +11,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.ButtonGroupDefaults
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.LinearWavyProgressIndicator
@@ -59,9 +61,16 @@ internal fun CountdownBanner(pending: PendingConnect, onNow: (() -> Unit)?, modi
             )
             // The line above says the time left; the bar's per-second progress would only repeat it.
             LinearWavyProgressIndicator({ progress }, Modifier.fillMaxWidth().clearAndSetSemantics {})
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (onNow != null) FilledTonalButton(onNow, Modifier.heightIn(min = MinTouch)) { Text("Connect now") }
-                TextButton(pending.countdown::cancel, Modifier.heightIn(min = MinTouch)) { Text("Cancel") }
+            // Spaced as a standard button group; `ButtonGroup` would compose an unplaced, unnamed overflow button.
+            Row(horizontalArrangement = ButtonGroupDefaults.HorizontalArrangement) {
+                if (onNow != null) {
+                    FilledTonalButton(onNow, ButtonDefaults.shapes(), Modifier.heightIn(min = MinTouch)) {
+                        Text("Connect now")
+                    }
+                }
+                TextButton(pending.countdown::cancel, ButtonDefaults.shapes(), Modifier.heightIn(min = MinTouch)) {
+                    Text("Cancel")
+                }
             }
         }
     }

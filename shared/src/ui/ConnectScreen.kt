@@ -201,7 +201,7 @@ internal fun ConnectScreen(
     }
     val slots = ConnectSlots(
         banner = active?.let { p -> { CountdownBanner(p, onNow = link?.let { l -> { choose(selected, l) } }) } },
-        heading = { PaneHeading(selected, kinds.size > 1) },
+        heading = { PaneHeading(selected) },
         chooser = {
             LinkTypeChooser(kinds, selected, onSelect = {
                 cancelPending()
