@@ -48,16 +48,16 @@ object SpatialLayout {
 
     /**
      * Writes the place of the layout point ([x] east, [y] south, [z] toward the flat view's camera when negative) into
-     * [out] at [at] as x, y, z metres; [breath] swells the distance. Returns the layout radius, clamped to 0..1.
+     * [out] as x, y, z metres; [breath] swells the distance. Returns the layout radius, clamped to 0..1.
      */
-    fun place(x: Double, y: Double, z: Double, breath: Double, out: FloatArray, at: Int): Double {
+    fun place(x: Double, y: Double, z: Double, breath: Double, out: FloatArray): Double {
         val r = hypot(x, y)
         val d = distance(r) * breath
         val east = if (r < NO_BEARING) 0.0 else x / r
         val south = if (r < NO_BEARING) -1.0 else y / r
-        out[at] = (east * d).toFloat()
-        out[at + 1] = (EYE_METERS - z * HEIGHT_REACH_METERS).coerceAtLeast(MIN_HEIGHT_METERS).toFloat()
-        out[at + 2] = (south * d).toFloat()
+        out[0] = (east * d).toFloat()
+        out[1] = (EYE_METERS - z * HEIGHT_REACH_METERS).coerceAtLeast(MIN_HEIGHT_METERS).toFloat()
+        out[2] = (south * d).toFloat()
         return r.coerceIn(0.0, 1.0)
     }
 }
@@ -72,7 +72,10 @@ private const val PULSE_HEAD_RADIUS = 0.012f
  * reads on a dark field and over a camera image. The arrays are reused and grow only when the mesh does.
  */
 class SpatialFrame internal constructor() {
-    /** [spriteCount] round sprites that face the viewer, [SPRITE_STRIDE] floats each: x, y, z, radius in metres, r, g, b, a, then 1 for a crisp disc or 0 for a halo fading to its rim. */
+    /**
+     * [spriteCount] round sprites that face the viewer, [SPRITE_STRIDE] floats each: x, y, z, radius in metres, r, g,
+     * b, a, then 1 for a crisp disc or 0 for a halo fading to its rim.
+     */
     var sprites = FloatArray(SPRITE_STRIDE * INITIAL_SPRITES)
         private set
     var spriteCount = 0
@@ -114,14 +117,8 @@ class SpatialFrame internal constructor() {
 
     /** Fills [out] with where [node] is (null or our own node is the anchor, on the floor); false when unknown. */
     private fun resolve(scene: SceneModel, node: Long?, out: FloatArray): Boolean {
-        if (node == null || node == scene.anchor?.node) {
-            out[0] = 0f
-            out[1] = 0f
-            out[2] = 0f
-            return true
-        }
-        val o = scene.orb(node) ?: return false
-        placeOrb(scene, o, out)
+        val o = if (node == null || node == scene.anchor?.node) null else scene.orb(node) ?: return false
+        if (o == null) out.fill(0f) else placeOrb(scene, o, out)
         return true
     }
 
@@ -131,7 +128,6 @@ class SpatialFrame internal constructor() {
         o.shownZ + o.zOffset + scene.driftZ(o.node),
         scene.cloudBreath,
         out,
-        0,
     )
 
     private fun addEdges(scene: SceneModel, palette: AmbientPalette) {

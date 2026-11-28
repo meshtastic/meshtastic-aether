@@ -57,7 +57,7 @@ class SpatialFrameTest {
     @Test
     fun `a point pushed far below the plane stops above the floor`() {
         val out = FloatArray(3)
-        SpatialLayout.place(0.5, 0.0, 3.0, 1.0, out, 0)
+        SpatialLayout.place(0.5, 0.0, 3.0, 1.0, out)
         assertEquals(SpatialLayout.MIN_HEIGHT_METERS.toFloat(), out[1])
     }
 

@@ -97,7 +97,10 @@ internal object HudIcons {
     /** A headset visor: the spatial view. */
     val Spatial: ImageVector by lazy {
         icon("Spatial") {
-            stroked("M5 8 L19 8 A2 2 0 0 1 21 10 L21 15 A2 2 0 0 1 19 17 L15.5 17 L12 14 L8.5 17 L5 17 A2 2 0 0 1 3 15 L3 10 A2 2 0 0 1 5 8 Z")
+            stroked(
+                "M5 8 L19 8 A2 2 0 0 1 21 10 L21 15 A2 2 0 0 1 19 17 L15.5 17 L12 14 L8.5 17 L5 17 " +
+                    "A2 2 0 0 1 3 15 L3 10 A2 2 0 0 1 5 8 Z",
+            )
         }
     }
 
