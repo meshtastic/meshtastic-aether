@@ -15,6 +15,7 @@ import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.SeekBar
 import android.widget.TextView
@@ -61,7 +62,10 @@ private const val AVAILABILITY_RETRIES = 25
 /** A tracked upward plane at least this far under the camera is taken as the floor. */
 private const val FLOOR_BELOW_CAMERA_METERS = 0.5f
 
-/** Frames to look for the floor before keeping the assumed eye height and turning plane finding off. */
+/**
+ * Frames to look for the floor before keeping the assumed eye height. Plane finding stays on: reconfiguring the session
+ * pauses every anchor for seconds while it relocalizes.
+ */
 private const val FLOOR_SEARCH_FRAMES = 900
 
 /** A camera forward with less horizontal reach than this (looking at the floor or the sky) has no usable heading. */
@@ -75,6 +79,11 @@ private const val PREF_BRIGHTNESS = "camera_brightness"
 private const val NEAR_CLIP = 0.05f
 private const val FAR_CLIP = 30f
 private const val HINT_ALPHA = 0.8f
+
+/** The HUD's idle time: the controls hide after this long untouched. */
+private const val CONTROLS_IDLE_MS = 15_000L
+private const val CONTROLS_FADE_IN_MS = 200L
+private const val CONTROLS_FADE_OUT_MS = 500L
 private const val TEXT_PAD_DP = 16
 
 /**
@@ -121,6 +130,13 @@ internal class PhoneArHost(private val activity: ComponentActivity) : DefaultLif
 
     override fun onPause(owner: LifecycleOwner) {
         view?.pause()
+    }
+
+    override fun onDestroy(owner: LifecycleOwner) {
+        handler.removeCallbacksAndMessages(null)
+        view?.close()
+        pending?.close()
+        pending = null
     }
 
     /** Takes the next step toward an open view; each step that waits on the person or ARCore calls this again. */
@@ -186,6 +202,18 @@ internal class PhoneArView(
     private var closed = false
     private var resumed = false
     private var shownTracking: Boolean? = null
+    private val handler = Handler(Looper.getMainLooper())
+    private var controls: List<View> = emptyList()
+    private var controlsShown = false
+
+    private val hideControls = Runnable {
+        handler.removeCallbacksAndMessages(null)
+        controlsShown = false
+        for (view in controls) {
+            view.animate().cancel()
+            view.animate().alpha(0f).setDuration(CONTROLS_FADE_OUT_MS).withEndAction { view.visibility = View.INVISIBLE }.start()
+        }
+    }
 
     private val back = object : OnBackPressedCallback(true) {
         override fun handleOnBackPressed() = source.close()
@@ -229,18 +257,35 @@ internal class PhoneArView(
                     renderer.cameraBrightness = value.toFloat() / BRIGHTNESS_STEPS
                 }
 
-                override fun onStartTrackingTouch(bar: SeekBar) = Unit
+                override fun onStartTrackingTouch(bar: SeekBar) = handler.removeCallbacks(hideControls)
 
                 override fun onStopTrackingTouch(bar: SeekBar) {
                     prefs.edit().putFloat(PREF_BRIGHTNESS, renderer.cameraBrightness).apply()
+                    showControls()
                 }
             })
         }
+        val icon = ImageView(activity).apply {
+            setImageResource(R.drawable.ic_brightness)
+            alpha = HINT_ALPHA
+            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+        }
+        val slider = LinearLayout(activity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(pad * 2, pad, pad, 0)
+            addView(icon, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+            addView(brightness, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        }
+        brightness.setPadding(pad, pad, pad, pad)
         val bottom = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
-            addView(brightness, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+            addView(slider, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
             addView(disclosure, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         }
+        controls = listOf(hint, bottom)
+        // Like the HUD: a tap shows the controls or hides them, and they hide themselves after a while untouched.
+        surface.setOnClickListener { if (controlsShown) hideControls.run() else showControls() }
         root.addView(surface, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
         root.addView(hint, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP))
         root.addView(bottom, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM))
@@ -259,6 +304,7 @@ internal class PhoneArView(
         if (closed) return false
         resume()
         if (closed) return false
+        showControls()
         Choreographer.getInstance().postFrameCallback(this)
         Log.i(TAG, "view open")
         return true
@@ -270,10 +316,22 @@ internal class PhoneArView(
         renderer.stage(source.frame())
         val tracking = renderer.tracking
         if (tracking != shownTracking) {
+            // Losing the cloud brings the help back, since it says how to find it again.
+            if (shownTracking == true && !tracking) showControls()
             shownTracking = tracking
-            hint.visibility = if (tracking) View.INVISIBLE else View.VISIBLE
         }
         Choreographer.getInstance().postFrameCallback(this)
+    }
+
+    private fun showControls() {
+        handler.removeCallbacks(hideControls)
+        controlsShown = true
+        for (view in controls) {
+            view.animate().cancel()
+            view.visibility = View.VISIBLE
+            view.animate().alpha(1f).setDuration(CONTROLS_FADE_IN_MS).start()
+        }
+        handler.postDelayed(hideControls, CONTROLS_IDLE_MS)
     }
 
     /** Camera first, then the GL thread, so its first frame has a running session. */
@@ -297,11 +355,13 @@ internal class PhoneArView(
         resumed = false
         surface.onPause()
         session.pause()
+        renderer.replace = true
     }
 
     fun close() {
         if (closed) return
         closed = true
+        handler.removeCallbacksAndMessages(null)
         Choreographer.getInstance().removeFrameCallback(this)
         back.remove()
         if (resumed) surface.onPause()
@@ -339,6 +399,9 @@ internal class PhoneArRenderer(private val session: Session, private val activit
         private set
 
     private var anchor: Anchor? = null
+
+    /** Set from the UI thread when the view pauses; the next tracked frame places the cloud again. */
+    @Volatile var replace = false
     private var loggedCamera: TrackingState? = null
     private var loggedAnchor: TrackingState? = null
     private var floorLocked = false
@@ -462,10 +525,14 @@ internal class PhoneArRenderer(private val session: Session, private val activit
             tracking = false
             return
         }
-        // ARCore stops an anchor for good when it cannot relocalize, as after a pause: place the cloud again.
-        if (anchorState == TrackingState.STOPPED) {
+        // After a pause, or when ARCore stops the anchor for good, the cloud is placed again around the phone as it is now
+        // rather than waiting for the old anchor to relocalize.
+        if (replace || anchorState == TrackingState.STOPPED) {
+            replace = false
             anchor?.detach()
             anchor = null
+            floorLocked = false
+            floorSearch = 0
         }
         val pose = camera.displayOrientedPose
         if (anchor == null) anchor = session.createAnchor(placement(pose, pose.ty() - SpatialLayout.EYE_METERS.toFloat()))
@@ -518,7 +585,6 @@ internal class PhoneArRenderer(private val session: Session, private val activit
         } else {
             Log.i(TAG, "no floor found; keeping the assumed eye height")
         }
-        session.configure(session.config.apply { planeFindingMode = Config.PlaneFindingMode.DISABLED })
     }
 
     private fun upload() {
