@@ -79,7 +79,13 @@ internal fun checkStatus(state: UpdateState, runningCode: Long = BuildInfo.CODE)
 
 /** What the update controls edit: the [updater], the [track] it follows, and [onTrack] to follow another. */
 @Stable
-internal class TrackedUpdates(val updater: Updater, val track: UpdateTrack, val onTrack: (UpdateTrack) -> Unit)
+internal class TrackedUpdates(
+    val updater: Updater,
+    val track: UpdateTrack,
+    val onTrack: (UpdateTrack) -> Unit,
+    /** False on a TV, which has no browser to open the download page in. */
+    val canBrowse: Boolean = true,
+)
 
 /**
  * Settings: which builds the app follows for updates, and a check on demand. [updates] is null where updates come
@@ -121,7 +127,7 @@ internal fun SettingsScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 } else {
-                    UpdateSettings(updates.updater, updates.track, updates.onTrack)
+                    UpdateSettings(updates)
                 }
                 SectionHeading("About")
                 AboutSection()
@@ -141,7 +147,10 @@ private fun SectionHeading(text: String) {
 }
 
 @Composable
-private fun UpdateSettings(updater: Updater, track: UpdateTrack, onTrack: (UpdateTrack) -> Unit) {
+private fun UpdateSettings(updates: TrackedUpdates) {
+    val updater = updates.updater
+    val track = updates.track
+    val onTrack = updates.onTrack
     val state by updater.update.collectAsState()
     val scope = rememberCoroutineScope()
     val tracks = UpdateTrack.entries
@@ -169,6 +178,7 @@ private fun UpdateSettings(updater: Updater, track: UpdateTrack, onTrack: (Updat
         supportingContent = { Text(checkStatus(state), Modifier.semantics { liveRegion = LiveRegionMode.Polite }) },
         content = { Text("Check for updates") },
     )
+    offered(state)?.let { UpdateActions(updater, it, updates.canBrowse) }
     Text(
         "Switching from Snapshot to Release never downgrades: " +
             "the next release that is newer than this build is offered.",
