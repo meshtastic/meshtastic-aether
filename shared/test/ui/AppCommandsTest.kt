@@ -38,31 +38,4 @@ class AppCommandsTest {
         assertEquals(0, calls)
         assertFalse(commands.sessionRunning)
     }
-
-    // Regression: a stop from the notification while the activity is in the background left the session reported as
-    // running until the next recomposition so the playback service never stopped.
-    @Test
-    fun `a stop runs the session's stop and reports no session before any recomposition`() {
-        val commands = AppCommands()
-        var runningWhenStopped: Boolean? = null
-        commands.register(disconnect = {}, toggleMute = {}, stop = { runningWhenStopped = commands.sessionRunning })
-        commands.stop()
-        assertEquals(false, runningWhenStopped)
-        assertFalse(commands.sessionRunning)
-    }
-
-    // Regression: a pause left over from one session made the next one start silent.
-    @Test
-    fun `a pause is passed to the session and cleared when the session ends`() {
-        val commands = AppCommands()
-        val seen = mutableListOf<Boolean>()
-        commands.register(disconnect = {}, toggleMute = {}, setPaused = { seen += it })
-        commands.pause(true)
-        assertTrue(commands.paused)
-        commands.unregister()
-        assertFalse(commands.paused)
-        commands.pause(true)
-        assertFalse(commands.paused)
-        assertEquals(listOf(true), seen)
-    }
 }

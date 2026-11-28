@@ -31,6 +31,7 @@ import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -90,6 +91,7 @@ data class LaunchOptions(
  * target has none, and [isFullscreen] its state. [hiddenCursor] is a blank pointer icon the app shows after 3 s without
  * pointer movement, null where the host cannot hide the cursor. Then whether a screen reader is on, and the menu
  * commands. [onEnterSpatial] opens the host's headset or AR view of the running session, null where it has none.
+ * [sessions] runs the session where it must outlive the window; null runs it with the window.
  */
 @Immutable
 data class HostWindow(
@@ -99,6 +101,7 @@ data class HostWindow(
     val hiddenCursor: PointerIcon? = null,
     val screenReaderActive: Boolean = false,
     val commands: AppCommands? = null,
+    val sessions: SessionHost? = null,
 )
 
 /** The app's saved settings and the platform it runs on; a test supplies a fake store. */
@@ -138,25 +141,17 @@ internal fun AppRoot(
     launch: LaunchOptions = LaunchOptions(),
     host: HostWindow = HostWindow(),
 ) {
-    val initialLink = if (launch.ask) null else launch.link
     val settingsState = rememberSettingsState(settings)
     val look = remember {
         LookState(resolveLook(launch.look, settings.savedPalette, launch.launchedFullscreen), settings)
     }
     AmbientTheme(look.palette) {
-        val startup = remember { initialLink?.let { runCatching { sessionFor(it) } } }
+        val sessions = host.sessions ?: rememberWindowSessions()
         var started by remember { mutableStateOf(!platform.needsTapToStart) }
-        val saved = remember {
-            val launchLink = initialLink != null
-            autoConnectLink(settings.link, launch.ask, platform.autoConnects, launchLink, launch.startupError != null)
-        }
-        val app = remember {
-            val failure = launch.startupError ?: startup?.exceptionOrNull()?.let(::startFailureText)
-            val pending = saved?.let { PendingConnect(it, Countdown(AUTO_CONNECT_SECONDS)) }
-            AppSession(settings, startup?.getOrNull(), failure, pending)
-        }
-
-        LaunchedEffect(Unit) { if (startup?.isSuccess == true && initialLink != null) settings.link = initialLink }
+        val env = remember { AppEnvironment(settings, platform, launch.midi) }
+        val opening = rememberOpening(settings, launch, env, sessions)
+        val app = opening.app
+        val saved = opening.saved
         val backStack = remember {
             val first = app.session
             mutableStateListOf(
@@ -169,7 +164,6 @@ internal fun AppRoot(
         }
         LaunchedEffect(app.session, started) { if (started) backStack.follow(app.session) }
         AutoConnect(app, started, saved)
-        val env = remember { AppEnvironment(settings, platform, launch.midi) }
         val content = rememberSettingsContent(settingsState, platform, Screen.SettingsHome in backStack)
         val directive = paneDirective()
         val focusBack = platform.isTelevision || platform.hasKeyboard
@@ -191,7 +185,11 @@ internal fun AppRoot(
                     }
                 }
                 settingsEntries(backStack, { content }, { showsTwoPanes(directive) }, focusBack, safeArea)
-                entry<Screen.Playing> { key -> Running(key.session, env, look, host, app::stop) }
+                entry<Screen.Playing> { key ->
+                    sessions.running?.takeIf { it.session === key.session }?.let { running ->
+                        Running(running, env, look, host, app::stop)
+                    }
+                }
             }
         }
     }
@@ -240,6 +238,48 @@ private fun rememberSettingsContent(state: SettingsState, platform: Platform, op
     )
 }
 
+
+/** The app's session state and the saved link it counts down to, or null when none. */
+private class Opening(val app: AppSession, val saved: LinkChoice?)
+
+/**
+ * Starts the launch link, or picks the saved link to count down to. A window that comes back to a session [sessions]
+ * already runs shows it and starts nothing, though its launch extras arrive again.
+ */
+@Composable
+private fun rememberOpening(
+    settings: Settings,
+    launch: LaunchOptions,
+    env: AppEnvironment,
+    sessions: SessionHost,
+): Opening {
+    val platform = env.platform
+    val resumed = remember { sessions.isRunning }
+    val initialLink = if (launch.ask || resumed) null else launch.link
+    val startup = remember { initialLink?.let { runCatching { sessionFor(it) } } }
+    val opening = remember {
+        val launchError = launch.startupError.takeUnless { resumed }
+        val saved = if (resumed) {
+            null
+        } else {
+            autoConnectLink(settings.link, launch.ask, platform.autoConnects, initialLink != null, launchError != null)
+        }
+        val failure = launchError ?: startup?.exceptionOrNull()?.let(::startFailureText)
+        val pending = saved?.let { PendingConnect(it, Countdown(AUTO_CONNECT_SECONDS)) }
+        val app = AppSession(settings, sessions, { createEngine(it, platform, env.midiChoice()) }, failure, pending)
+        startup?.getOrNull()?.let(app::begin)
+        Opening(app, saved)
+    }
+    LaunchedEffect(Unit) { if (startup?.isSuccess == true && initialLink != null) settings.link = initialLink }
+    return opening
+}
+
+/** A session host that lives as long as this window: closing the window ends its session. */
+@Composable
+private fun rememberWindowSessions(): SessionHost {
+    val scope = rememberCoroutineScope()
+    return remember { SessionHost(scope) }
+}
 
 /** Counts a saved link down once the app has started, then starts it, unless the countdown was cancelled. */
 @Composable

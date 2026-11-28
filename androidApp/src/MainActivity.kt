@@ -61,7 +61,7 @@ class MainActivity : ComponentActivity() {
                         }
                     },
                     onEnterSpatial = xr?.let { it::enter },
-                    commands = Playback.commands,
+                    sessions = Playback.sessions,
                 ),
             )
         }
@@ -69,15 +69,9 @@ class MainActivity : ComponentActivity() {
         // another app (the auto-connect countdown) gets its service on the next return to the foreground.
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
-                snapshotFlow { Playback.commands.sessionRunning }.collect { running -> if (running) startPlayback() }
+                snapshotFlow { Playback.sessions.isRunning }.collect { running -> if (running) startPlayback() }
             }
         }
-    }
-
-    override fun onDestroy() {
-        // The session lives in this activity's composition and ends with it.
-        stopService(Intent(this, PlaybackService::class.java))
-        super.onDestroy()
     }
 
     private fun startPlayback() {
