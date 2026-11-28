@@ -13,6 +13,16 @@ import kotlin.concurrent.withLock
 private const val TAG = "midi"
 private const val BYTE_MASK = 0xFF
 private const val CLOSE_JOIN_MILLIS = 500L
+private const val STATUS_MASK = 0xF0
+private const val CHANNEL_MASK = 0x0F
+private const val KEY_MASK = 0x7F
+private const val NOTE_ON = 0x90
+private const val NOTE_OFF = 0x80
+private const val CONTROL = 0xB0
+private const val PITCH_BEND = 0xE0
+private const val SUSTAIN = 0x40
+private const val OFF_VELOCITY = 0x40
+private const val CENTER_MSB = 0x40
 
 /** Every device that takes messages, the Java software synth included; sequencers are not outputs. */
 private fun outputDevices(): List<MidiDevice> = MidiSystem.getMidiDeviceInfo().mapNotNull { info ->
@@ -68,7 +78,9 @@ private object OpenDevices {
 
 /**
  * `javax.sound.midi` sends at once and ignores timestamps on most devices, so a thread holds each message until its
- * time on `System.nanoTime`, the clock the audio sink's timestamps use.
+ * time on `System.nanoTime`, the clock the audio sink's timestamps use. The port remembers the notes it sent and has
+ * not ended: a JVM exit (a signal, a logout, a window close that exits before the engine closes its output) ends them
+ * from a shutdown hook, with sustain off and centred bends, so nothing is left sounding on the receiver.
  */
 private class JvmMidiOutput(
     override val name: String,
@@ -79,10 +91,19 @@ private class JvmMidiOutput(
     private val changed = lock.newCondition()
     private val queue = TimedQueue()
     private var closing = false
+    private val wire = ReentrantLock()
+    private val sounding = HashSet<Int>()
+    private val used = HashSet<Int>()
+    private var dead = false
+    private val exitHook = Thread(::silence, "aether-midi-exit")
     private val thread = Thread(::run, "aether-midi").apply {
         isDaemon = true
         priority = Thread.MAX_PRIORITY
         start()
+    }
+
+    init {
+        Runtime.getRuntime().addShutdownHook(exitHook)
     }
 
     override fun send(data: ByteArray, atNanos: Long) = lock.withLock {
@@ -98,15 +119,53 @@ private class JvmMidiOutput(
             changed.signal()
         }
         thread.join(CLOSE_JOIN_MILLIS)
+        wire.withLock { dead = true }
+        try {
+            Runtime.getRuntime().removeShutdownHook(exitHook)
+        } catch (e: IllegalStateException) {
+            Log.d(TAG, "the JVM is exiting, so the exit hook ends the notes: ${e.message}")
+        }
         receiver.close()
         OpenDevices.close(device)
+    }
+
+    /** Sends [data] unless the port is closed, keeping the sounding notes and the channels used. */
+    private fun transmit(data: ByteArray) = wire.withLock {
+        if (dead) return@withLock
+        receiver.send(ShortMessage(byte(data, 0), byte(data, 1), byte(data, 2)), -1)
+        val status = byte(data, 0) and STATUS_MASK
+        val channel = byte(data, 0) and CHANNEL_MASK
+        used += channel
+        val id = (channel shl Byte.SIZE_BITS) or byte(data, 1)
+        if (status == NOTE_ON && byte(data, 2) > 0) sounding += id else if (status == NOTE_OFF) sounding -= id
+    }
+
+    /** The exit hook: drops what is queued, ends every sounding note, releases sustain and centres every bend. */
+    private fun silence() {
+        lock.withLock {
+            closing = true
+            queue.clear()
+            changed.signal()
+        }
+        wire.withLock {
+            if (dead) return@withLock
+            for (id in sounding) {
+                receiver.send(ShortMessage(NOTE_OFF or (id shr Byte.SIZE_BITS), id and KEY_MASK, OFF_VELOCITY), -1)
+            }
+            for (ch in used) {
+                receiver.send(ShortMessage(CONTROL or ch, SUSTAIN, 0), -1)
+                receiver.send(ShortMessage(PITCH_BEND or ch, 0, CENTER_MSB), -1)
+            }
+            sounding.clear()
+            dead = true
+        }
     }
 
     private fun run() {
         val due = ArrayList<ByteArray>()
         while (true) {
             val last = lock.withLock { awaitDue(due) }
-            for (data in due) receiver.send(ShortMessage(byte(data, 0), byte(data, 1), byte(data, 2)), -1)
+            for (data in due) transmit(data)
             due.clear()
             if (last) return
         }

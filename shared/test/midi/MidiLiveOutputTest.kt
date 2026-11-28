@@ -49,6 +49,27 @@ class MidiLiveOutputTest {
         assertEquals(playsAt(2L * SR - SR / 20), bend.first)
     }
 
+    // The composer stamps notes at the frame it has rendered to, and the sink pulls in uneven blocks; placed up to
+    // that frame, a note that arrives a tick later can sound before one already placed and is pushed late.
+    @Test
+    fun `notes stamped at the frame the engine has rendered to are never shifted or late`() {
+        val port = FakeMidiOutput()
+        val live = MidiLiveOutput(port, SR)
+        var rendered = 0L
+        var k = 0
+        while (rendered < 30L * SR) {
+            val now = rendered.toDouble() / SR
+            live.schedule(ComposerOutput(listOf(bell(now, 261.6255653005986 * (1 + k % 5 * 0.25), 0.3), bell(now + 0.35, 392.0, 0.3)), emptyList()))
+            live.pump(rendered, FrameTime(rendered - BUFFER, playsAt(rendered - BUFFER)))
+            rendered += SR / 40 + (k % 3) * SR / 40
+            k++
+        }
+        live.close()
+        assertEquals(0, live.stats.shifted)
+        assertEquals(0, live.stats.late)
+        assertTrue(live.stats.notes > 1000)
+    }
+
     // A note-on the port's thread has not yet sent when the engine stops would go out after the close's note-offs and
     // hang on the receiver.
     @Test
