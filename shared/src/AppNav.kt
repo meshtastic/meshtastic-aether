@@ -19,6 +19,7 @@ import androidx.navigation3.runtime.EntryProviderScope
 import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.ui.NavDisplay
 import org.meshtastic.aether.ui.PaneChrome
+import org.meshtastic.aether.ui.PaneInput
 import org.meshtastic.aether.ui.SettingsContent
 import org.meshtastic.aether.ui.SettingsList
 import org.meshtastic.aether.ui.SettingsTopic
@@ -91,18 +92,19 @@ internal fun EntryProviderScope<Screen>.settingsEntries(
     backStack: MutableList<Screen>,
     content: () -> SettingsContent,
     twoPanes: () -> Boolean,
-    focusBack: Boolean,
+    input: PaneInput,
     modifier: Modifier,
 ) {
     entry<Screen.SettingsHome>(metadata = { ListDetailSceneStrategy.listPane(detailPlaceholder = { NoTopic() }) }) {
         val selected = if (twoPanes()) backStack.shownTopic() else null
-        val chrome = PaneChrome(backStack::closeSettings, focusBack)
+        val chrome = PaneChrome(backStack::closeSettings, input)
         SettingsList(content(), selected, backStack::showTopic, chrome, modifier)
     }
     entry<Screen.SettingsDetail>(metadata = { ListDetailSceneStrategy.detailPane() }) { key ->
         val beside = twoPanes()
         val pop: () -> Unit = { backStack.removeAt(backStack.lastIndex) }
-        SettingsTopicPane(key.topic, content(), PaneChrome(pop, focusBack && !beside, !beside), modifier)
+        val topicInput = PaneInput(focusBack = input.focusBack && !beside, tooltips = input.tooltips)
+        SettingsTopicPane(key.topic, content(), PaneChrome(pop, topicInput, showBack = !beside), modifier)
     }
 }
 
