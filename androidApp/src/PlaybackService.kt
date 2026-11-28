@@ -83,15 +83,15 @@ class PlaybackService : Service() {
             NotificationChannel(CHANNEL, getString(R.string.playback_channel), NotificationManager.IMPORTANCE_LOW),
         )
         registerReceiver(noisy, IntentFilter(AudioManager.ACTION_AUDIO_BECOMING_NOISY))
-        audio.requestAudioFocus(focus)
         scope.launch {
             snapshotFlow { sessions.isRunning to sessions.paused }.collect { (running, paused) ->
-                if (!running) {
-                    stopSelf()
-                } else {
-                    // An unpause from the app itself takes focus back too; asking again while holding it is a no-op.
-                    if (!paused) audio.requestAudioFocus(focus)
-                    publish(paused)
+                when {
+                    !running -> stopSelf()
+                    // Every unpause, the first play included, needs focus: refused during a call, the session stays
+                    // silent until the person plays it again.
+                    !paused && audio.requestAudioFocus(focus) != AudioManager.AUDIOFOCUS_REQUEST_GRANTED ->
+                        pause(resume = false)
+                    else -> publish(paused)
                 }
             }
         }
@@ -104,10 +104,20 @@ class PlaybackService : Service() {
             ACTION_STOP -> sessions.stop()
         }
         val notification = notification(sessions.paused)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
-        } else {
-            startForeground(NOTIFICATION_ID, notification)
+        // The system may refuse the foreground state (a start it no longer allows from the background, or a stale
+        // notification action after the session ended): stop instead of crashing the process.
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
+            } else {
+                startForeground(NOTIFICATION_ID, notification)
+            }
+        } catch (e: IllegalStateException) {
+            Log.w(TAG, "foreground refused", e)
+            stopSelf()
+        } catch (e: SecurityException) {
+            Log.w(TAG, "foreground refused", e)
+            stopSelf()
         }
         return START_NOT_STICKY
     }

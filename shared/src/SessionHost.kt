@@ -43,9 +43,13 @@ class SessionHost internal constructor(private val scope: CoroutineScope, privat
     private var volume = 0f
     private var fade = 0f
 
-    /** Ends any running session, then plays [session] on [engine], fading in from silence. */
+    /**
+     * Plays [session] on [engine], fading in from silence, in place of any running session. It never passes through not
+     * running, which would stop Android's foreground service under the new session.
+     */
     internal fun start(session: Session, engine: AmbientEngine) {
-        stop()
+        val previous = running
+        paused = false
         fade = 0f
         val started = now()
         val job = scope.launch {
@@ -63,6 +67,7 @@ class SessionHost internal constructor(private val scope: CoroutineScope, privat
             }
         }
         running = RunningSession(session, engine, job, this)
+        previous?.job?.cancel()
         apply()
     }
 

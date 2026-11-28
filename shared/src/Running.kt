@@ -163,8 +163,9 @@ private fun performAction(
     sessions: SessionHost,
     disconnect: () -> Unit,
 ): Boolean {
-    // While the system holds a pause, mute or play-pause brings the sound back in one press.
-    if (action == KeyAction.ToggleMute && sessions.paused) {
+    // While the system holds a pause, mute or play-pause brings the sound back in one press; a muted viewer's press
+    // unmutes as usual, which ends the pause too.
+    if (action == KeyAction.ToggleMute && sessions.paused && !controls.muted) {
         sessions.pause(false)
         return true
     }

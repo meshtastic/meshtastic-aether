@@ -149,11 +149,12 @@ internal fun AppRoot(
         val sessions = host.sessions ?: rememberWindowSessions()
         var started by remember { mutableStateOf(!platform.needsTapToStart) }
         val env = remember { AppEnvironment(settings, platform, launch.midi) }
-        val opening = rememberOpening(settings, launch, env, sessions)
+        val opening = rememberOpening(settings, launch, env, sessions, started)
         val app = opening.app
         val saved = opening.saved
         val backStack = remember {
-            val first = app.session
+            // The launch link's session starts from an effect: open on its screen rather than flash the connect screen.
+            val first = app.session ?: opening.launched
             mutableStateListOf(
                 when {
                     !started -> Screen.TapToStart
@@ -240,7 +241,7 @@ private fun rememberSettingsContent(state: SettingsState, platform: Platform, op
 
 
 /** The app's session state and the saved link it counts down to, or null when none. */
-private class Opening(val app: AppSession, val saved: LinkChoice?)
+private class Opening(val app: AppSession, val saved: LinkChoice?, val launched: Session?)
 
 /**
  * Starts the launch link, or picks the saved link to count down to. A window that comes back to a session [sessions]
@@ -252,6 +253,7 @@ private fun rememberOpening(
     launch: LaunchOptions,
     env: AppEnvironment,
     sessions: SessionHost,
+    started: Boolean,
 ): Opening {
     val platform = env.platform
     val resumed = remember { sessions.isRunning }
@@ -267,10 +269,15 @@ private fun rememberOpening(
         val failure = launchError ?: startup?.exceptionOrNull()?.let(::startFailureText)
         val pending = saved?.let { PendingConnect(it, Countdown(AUTO_CONNECT_SECONDS)) }
         val app = AppSession(settings, sessions, { createEngine(it, platform, env.midiChoice()) }, failure, pending)
-        startup?.getOrNull()?.let(app::begin)
-        Opening(app, saved)
+        Opening(app, saved, startup?.getOrNull())
     }
-    LaunchedEffect(Unit) { if (startup?.isSuccess == true && initialLink != null) settings.link = initialLink }
+    // Started from an effect, not while composing, so an abandoned composition leaves no session running; and only
+    // once the app has started, so a browser hears nothing before its tap.
+    LaunchedEffect(started) {
+        val launched = opening.launched?.takeIf { started } ?: return@LaunchedEffect
+        if (!sessions.isRunning) opening.app.begin(launched)
+        if (initialLink != null) settings.link = initialLink
+    }
     return opening
 }
 
