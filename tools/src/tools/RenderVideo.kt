@@ -16,6 +16,7 @@ import kotlinx.coroutines.test.runTest
 import org.jetbrains.skia.Bitmap
 import org.meshtastic.aether.audio.AudioSink
 import org.meshtastic.aether.audio.BlockRenderer
+import org.meshtastic.aether.audio.FrameTime
 import org.meshtastic.aether.mesh.SimulatedMeshSource
 import org.meshtastic.aether.theme.LocalAmbientPalette
 import org.meshtastic.aether.theme.PaletteChoice
@@ -68,6 +69,9 @@ class OfflineSink(override val sampleRate: Int) : AudioSink {
     }
 
     override fun playbackFrame(): Long = played
+
+    /** The virtual clock: frame k plays at k / rate seconds. */
+    override fun playbackTimestamp(): FrameTime = FrameTime(played, played * NANOS_PER_SECOND / sampleRate)
 
     /** Renders [frames] into [out] and advances the clock by them; false, with nothing rendered, before [start]. */
     fun pull(out: FloatArray, frames: Int): Boolean {

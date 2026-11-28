@@ -17,6 +17,9 @@ import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.meshtastic.aether.audio.AudioSink
 import org.meshtastic.aether.audio.BlockRenderer
+import org.meshtastic.aether.audio.FrameTime
+import org.meshtastic.aether.midi.FakeMidiOutput
+import org.meshtastic.aether.midi.MidiLiveOutput
 import org.meshtastic.aether.mesh.GeoPoint
 import org.meshtastic.aether.mood.ParamValues
 import org.meshtastic.aether.mesh.LinkState
@@ -30,6 +33,19 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+
+/** Holds work until [runAll]: a composer on it starts only when the test says. */
+private class HeldDispatcher : kotlinx.coroutines.CoroutineDispatcher() {
+    private val held = ArrayList<Runnable>()
+
+    override fun dispatch(context: kotlin.coroutines.CoroutineContext, block: Runnable) {
+        held += block
+    }
+
+    fun runAll() {
+        while (held.isNotEmpty()) held.removeAt(0).run()
+    }
+}
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class AmbientEngineTest {
@@ -48,6 +64,8 @@ class AmbientEngineTest {
         }
 
         override fun playbackFrame(): Long = frame
+
+        override fun playbackTimestamp() = FrameTime(frame, frame * 1_000_000_000L / sampleRate)
     }
 
     private class FlowSource(private val flow: Flow<MeshEvent>) : MeshSource {
@@ -64,6 +82,53 @@ class AmbientEngineTest {
             composerContext = StandardTestDispatcher(testScheduler),
         ),
     )
+
+    // Stopping the engine mid-piece must not leave a held pad or a ringing bell on an external synth.
+    @Test
+    fun `stopping the engine closes its midi output with nothing left sounding`() = runTest {
+        val sink = FakeSink()
+        val port = FakeMidiOutput()
+        val e = AmbientEngine(
+            FlowSource(flow { emit(MeshEvent.Link(LinkState.Simulated, base)); awaitCancellation() }), sink, seed = 11L,
+            timing = EngineTiming(400, now = { base + currentTime }, composerContext = StandardTestDispatcher(testScheduler)),
+            EngineOptions(midi = { MidiLiveOutput(port, it) }),
+        )
+        val job = launch { e.run() }
+        val block = FloatArray(2 * 4_800)
+        val driver = launch {
+            while (true) {
+                delay(100)
+                sink.renderer?.render(block, 4_800)
+                sink.frame += 4_800
+                port.now = sink.frame * 1_000_000_000L / sink.sampleRate
+                port.deliver()
+            }
+        }
+        advanceTimeBy(45_000)
+        assertTrue(port.sounding.isNotEmpty(), "nothing was sounding when the engine stopped")
+        driver.cancel()
+        job.cancelAndJoin()
+        assertTrue(port.closed)
+        assertTrue(port.sounding.isEmpty(), "still sounding: ${port.sounding}")
+    }
+
+    // An engine stopped before its composer first runs (a session left at once) must still release the port it opened.
+    @Test
+    fun `an engine stopped before its composer starts still closes its midi output`() = runTest {
+        val port = FakeMidiOutput()
+        val composer = HeldDispatcher()
+        val e = AmbientEngine(
+            FlowSource(flow { awaitCancellation() }), FakeSink(), 11L,
+            EngineTiming(400, now = { base + currentTime }, composerContext = composer),
+            EngineOptions(midi = { MidiLiveOutput(port, it) }),
+        )
+        val job = launch { e.run() }
+        runCurrent()
+        job.cancel()
+        composer.runAll()
+        job.join()
+        assertTrue(port.closed)
+    }
 
     // Regression: the engine used to leave the scene always "linked", so a lost link never desaturated the field.
     @Test
@@ -133,7 +198,7 @@ class AmbientEngineTest {
         val e = AmbientEngine(
             FlowSource(flow { awaitCancellation() }), FakeSink(), 11L,
             EngineTiming(400, now = { base + currentTime }, composerContext = StandardTestDispatcher(testScheduler)),
-            pinFormFull = true,
+            EngineOptions(pinFormFull = true),
         )
         val job = launch { e.run() }
         runCurrent()
@@ -174,7 +239,7 @@ class AmbientEngineTest {
         val e = AmbientEngine(
             FlowSource(flow { awaitCancellation() }), FakeSink(), 11L,
             EngineTiming(400, now = { base + currentTime }, composerContext = StandardTestDispatcher(testScheduler)),
-            failureText = { unreachableText("node.local:4403") },
+            EngineOptions(failureText = { unreachableText("node.local:4403") }),
         )
         val refused = java.net.ConnectException("Connection refused: no route")
         val job = launch { e.run { throw MeshtasticException.Transport("TCP connect failed: ${refused.message}", refused) } }

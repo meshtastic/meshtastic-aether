@@ -67,7 +67,8 @@ private const val SECOND_MS = 1_000L
 /**
  * How the host launched the app. [link] skips the connect screen; [startupError] is a launch argument the host could
  * not read, shown as a failure on the connect screen. [look] is a launch flag that overrides the saved look; with no
- * flag and nothing saved a [launchedFullscreen] start uses the Projector look.
+ * flag and nothing saved a [launchedFullscreen] start uses the Projector look. [midi] names a MIDI output the music
+ * also plays to.
  */
 @Immutable
 data class LaunchOptions(
@@ -76,6 +77,7 @@ data class LaunchOptions(
     val look: PaletteChoice? = null,
     val launchedFullscreen: Boolean = false,
     val ask: Boolean = false,
+    val midi: String? = null,
 )
 
 /**
@@ -94,7 +96,7 @@ data class HostWindow(
 )
 
 /** The app's saved settings and the platform it runs on; a test supplies a fake store. */
-internal class AppEnvironment(val settings: Settings, val platform: Platform)
+internal class AppEnvironment(val settings: Settings, val platform: Platform, val midi: String? = null)
 
 /** The look in force; a pick is saved for the next launch. */
 @Stable
@@ -158,7 +160,10 @@ internal fun AppRoot(
                 current == null -> saveable.SaveableStateProvider("connect") {
                     ConnectPane(app, settings, platform) { settingsNav.openFrom(app) }
                 }
-                else -> Running(current, remember { AppEnvironment(settings, platform) }, look, host, app::stop)
+                else -> {
+                    val env = remember { AppEnvironment(settings, platform, launch.midi) }
+                    Running(current, env, look, host, app::stop)
+                }
             }
         }
     }

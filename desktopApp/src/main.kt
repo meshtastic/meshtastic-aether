@@ -18,6 +18,7 @@ import androidx.compose.ui.window.WindowState
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import org.meshtastic.aether.log.Log
+import org.meshtastic.aether.midi.midiOutputNames
 import org.meshtastic.aether.ui.AppCommands
 import org.meshtastic.aether.ui.parseLaunchArgs
 import org.meshtastic.aether.update.DesktopLaunch
@@ -83,6 +84,10 @@ fun main(args: Array<String>) {
     // macOS names the menu bar's app menu and the Dock entry from this, read once when AWT starts; without it they
     // show the JVM class.
     System.setProperty("apple.awt.application.name", APP_NAME)
+    if ("--midi-list" in args) {
+        midiOutputNames().forEach(::println)
+        return
+    }
     val appArgs = DesktopLaunch.afterUpdate(args)
     DesktopLaunch.args = appArgs
     val launch = parseLaunchArgs(appArgs.toTypedArray())
@@ -119,6 +124,7 @@ fun main(args: Array<String>) {
                     look = launch.look,
                     launchedFullscreen = launch.fullscreen,
                     ask = launch.ask,
+                    midi = launch.midi,
                 ),
                 host = HostWindow(
                     onToggleFullscreen = toggleFullscreen,
