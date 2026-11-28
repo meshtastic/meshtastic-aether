@@ -4,6 +4,7 @@ import androidx.compose.ui.graphics.Color
 import org.meshtastic.aether.theme.AmbientPalette
 import org.meshtastic.aether.ui.AmbientEngine
 import kotlin.math.PI
+import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.hypot
 import kotlin.math.sin
@@ -41,6 +42,15 @@ object SpatialLayout {
 
     /** A layout point this close to the centre has no bearing and is placed due north. */
     private const val NO_BEARING = 1e-9
+
+    /**
+     * Degrees to turn the frame about +y (counter-clockwise seen from above) so its -z, north, points along a viewer's
+     * horizontal facing ([forwardX], [forwardZ]).
+     */
+    fun facingYawDegrees(forwardX: Float, forwardZ: Float): Float =
+        (atan2(-forwardX.toDouble(), -forwardZ.toDouble()) * DEGREES_PER_RADIAN).toFloat()
+
+    private const val DEGREES_PER_RADIAN = 180.0 / PI
 
     /** Metres from the viewer for a point [layoutRadius] (0..1) from the layout's centre. */
     fun distance(layoutRadius: Double): Double =

@@ -4,6 +4,7 @@ import android.view.Choreographer
 import androidx.activity.ComponentActivity
 import androidx.lifecycle.lifecycleScope
 import androidx.xr.arcore.ArDevice
+import androidx.xr.arcore.TrackingState
 import androidx.xr.runtime.Config
 import androidx.xr.runtime.DeviceTrackingMode
 import androidx.xr.runtime.Session
@@ -36,7 +37,6 @@ import org.meshtastic.aether.visual.SpatialMesh
 import org.meshtastic.aether.visual.SpatialSource
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
-import kotlin.math.atan2
 
 private const val TAG = "xr"
 private const val XR_SPATIAL_FEATURE = "android.software.xr.api.spatial"
@@ -148,7 +148,8 @@ internal class XrSpatial(private val session: Session, material: KhronosUnlitMat
             exit()
             return
         }
-        if (full && !wasFull) {
+        // Placed only once the head is tracked: an untracked pose would centre the cloud on the panel, not the viewer.
+        if (full && !wasFull && ArDevice.getInstance(session).state.value.trackingState == TrackingState.TRACKING) {
             wasFull = true
             root.setPose(rootPose())
             root.setEnabled(true)
@@ -178,11 +179,10 @@ internal class XrSpatial(private val session: Session, material: KhronosUnlitMat
         val device = ArDevice.getInstance(session).state.value.devicePose
         val head = session.scene.perceptionSpace.transformPoseTo(device, session.scene.activitySpace)
         val forward = head.forward
-        val yaw = atan2(-forward.x, -forward.z)
         val at = head.translation
         return Pose(
             Vector3(at.x, at.y - SpatialLayout.EYE_METERS.toFloat(), at.z),
-            Quaternion.fromAxisAngle(Vector3.Up, Math.toDegrees(yaw.toDouble()).toFloat()),
+            Quaternion.fromAxisAngle(Vector3.Up, SpatialLayout.facingYawDegrees(forward.x, forward.z)),
         )
     }
 
