@@ -26,6 +26,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import org.meshtastic.aether.midi.MidiChoice
@@ -121,6 +124,7 @@ private fun ToggleRow(label: String, detail: String, checked: Boolean, onChange:
     SegmentedListItem(
         checked = checked,
         onCheckedChange = onChange,
+        modifier = Modifier.semantics { role = Role.Switch },
         shapes = ListItemDefaults.segmentedShapes(0, 1),
         trailingContent = { Switch(checked = checked, onCheckedChange = null) },
         supportingContent = { Text(detail) },
@@ -132,7 +136,7 @@ private fun ToggleRow(label: String, detail: String, checked: Boolean, onChange:
 @Composable
 private fun ReleasePicker(state: MidiSettingsState) {
     val releases = MidiChoice.RELEASES
-    Text("Release", style = MaterialTheme.typography.titleSmall)
+    Text("Release", Modifier.semantics { heading() }, style = MaterialTheme.typography.titleSmall)
     Column(
         Modifier.fillMaxWidth().selectableGroup(),
         verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap),
@@ -158,7 +162,11 @@ private fun ReleasePicker(state: MidiSettingsState) {
 @Composable
 private fun LatencySlider(state: MidiSettingsState) {
     val millis = state.choice.latencyMillis
-    Text("MIDI delay: ${latencyLabel(millis)}", style = MaterialTheme.typography.titleSmall)
+    Text(
+        "MIDI delay: ${latencyLabel(millis)}",
+        Modifier.semantics { heading() },
+        style = MaterialTheme.typography.titleSmall,
+    )
     val steps = (MidiChoice.MAX_LATENCY - MidiChoice.MIN_LATENCY) / MidiChoice.LATENCY_STEP - 1
     Slider(
         value = millis.toFloat(),

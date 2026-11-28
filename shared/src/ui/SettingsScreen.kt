@@ -40,6 +40,10 @@ import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -111,14 +115,21 @@ internal fun topicSummary(topic: SettingsTopic, content: SettingsContent): Strin
     SettingsTopic.About -> "Licenses, privacy and links"
 }
 
+/** How Settings is driven: [focusBack] puts focus on Back for a remote or keyboard, [tooltips] for a pointer. */
+@Immutable
+internal class PaneInput(val focusBack: Boolean = false, val tooltips: Boolean = false)
+
 /**
- * How a settings pane sits: [onBack] leaves it, [focusBack] puts focus on Back for a remote or keyboard, and [showBack]
- * is false for a topic beside its list, whose list's Back closes settings.
+ * How a settings pane sits: [onBack] leaves it, [input] says how it is driven, and [showBack] is false for a topic
+ * beside its list, whose list's Back closes settings.
  */
 @Immutable
-internal class PaneChrome(val onBack: () -> Unit, val focusBack: Boolean = false, val showBack: Boolean = true)
+internal class PaneChrome(val onBack: () -> Unit, val input: PaneInput = PaneInput(), val showBack: Boolean = true)
 
-/** The settings list, the list pane of the settings scene: one row per topic, [selected] marked while shown beside. */
+/**
+ * The settings list, the list pane of the settings scene: one row per topic, [selected] marked while shown beside.
+ * The rows navigate, so they read as buttons; a selectable row would read as a radio button.
+ */
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 internal fun SettingsList(
@@ -131,14 +142,23 @@ internal fun SettingsList(
     SettingsScaffold("Settings", chrome, modifier) {
         val topics = content.topics
         Column(
-            Modifier.fillMaxWidth().selectableGroup(),
+            Modifier.fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap),
         ) {
             topics.forEachIndexed { index, topic ->
+                val shown = topic == selected
                 SegmentedListItem(
-                    selected = topic == selected,
                     onClick = { onTopic(topic) },
                     shapes = ListItemDefaults.segmentedShapes(index, topics.size),
+                    modifier = Modifier.semantics {
+                        role = Role.Button
+                        this.selected = shown
+                    },
+                    colors = if (shown) {
+                        ListItemDefaults.segmentedColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
+                    } else {
+                        ListItemDefaults.segmentedColors()
+                    },
                     supportingContent = { Text(topicSummary(topic, content)) },
                     content = { Text(topic.title) },
                 )
@@ -173,17 +193,19 @@ internal fun SettingsTopicPane(
 @Composable
 private fun SettingsScaffold(title: String, chrome: PaneChrome, modifier: Modifier, body: @Composable () -> Unit) {
     val backFocus = remember { FocusRequester() }
-    LaunchedEffect(chrome.showBack) { if (chrome.focusBack && chrome.showBack) backFocus.requestFocus() }
+    LaunchedEffect(chrome.showBack) { if (chrome.input.focusBack && chrome.showBack) backFocus.requestFocus() }
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     Column(modifier.fillMaxSize().nestedScroll(scrollBehavior.nestedScrollConnection)) {
         LargeFlexibleTopAppBar(
-            title = { Text(title) },
+            title = { Text(title, Modifier.semantics { heading() }) },
             navigationIcon = {
                 if (chrome.showBack) {
-                    IconButton(
-                        chrome.onBack,
-                        Modifier.focusRequester(backFocus).semantics { contentDescription = "Back" },
-                    ) { HudIcon(HudIcons.Back) }
+                    HudTooltip("Back", chrome.input.tooltips) {
+                        IconButton(
+                            chrome.onBack,
+                            Modifier.focusRequester(backFocus).semantics { contentDescription = "Back" },
+                        ) { HudIcon(HudIcons.Back) }
+                    }
                 }
             },
             scrollBehavior = scrollBehavior,

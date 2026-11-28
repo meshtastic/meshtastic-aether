@@ -88,7 +88,7 @@ internal fun HudToolbar(controls: Controls, host: HudHost, input: HudInput, stac
 }
 
 @Composable
-private fun HudTooltip(label: String, enabled: Boolean, content: @Composable () -> Unit) {
+internal fun HudTooltip(label: String, enabled: Boolean, content: @Composable () -> Unit) {
     if (!enabled) {
         content()
         return

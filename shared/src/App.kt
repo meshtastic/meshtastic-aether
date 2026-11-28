@@ -1,6 +1,7 @@
 package org.meshtastic.aether
 
 import androidx.compose.runtime.mutableStateListOf
+import org.meshtastic.aether.ui.PaneInput
 import org.meshtastic.aether.ui.SettingsContent
 import org.meshtastic.aether.midi.MidiChoice
 import org.meshtastic.aether.midi.midiOutputNames
@@ -130,6 +131,10 @@ fun App(launch: LaunchOptions = LaunchOptions(), host: HostWindow = HostWindow()
     AppRoot(settings, platform, launch, host)
 }
 
+/** How [platform] drives Settings: focus on Back for a remote or keyboard, tooltips where there is a keyboard. */
+private fun paneInput(platform: Platform) =
+    PaneInput(focusBack = platform.isTelevision || platform.hasKeyboard, tooltips = platform.hasKeyboard)
+
 /** The safe drawing area a settings pane keeps inside. */
 private val SafeArea: Modifier @Composable get() = Modifier.windowInsetsPadding(WindowInsets.safeDrawing)
 
@@ -167,7 +172,7 @@ internal fun AppRoot(
         AutoConnect(app, started, saved)
         val content = rememberSettingsContent(settingsState, platform, Screen.SettingsHome in backStack)
         val directive = paneDirective()
-        val focusBack = platform.isTelevision || platform.hasKeyboard
+        val input = paneInput(platform)
         val safeArea = SafeArea
 
         Box(Modifier.fillMaxSize().background(LocalAmbientPalette.current.backgroundBottom)) {
@@ -185,7 +190,7 @@ internal fun AppRoot(
                         backStack.add(Screen.SettingsHome)
                     }
                 }
-                settingsEntries(backStack, { content }, { showsTwoPanes(directive) }, focusBack, safeArea)
+                settingsEntries(backStack, { content }, { showsTwoPanes(directive) }, input, safeArea)
                 entry<Screen.Playing> { key ->
                     sessions.running?.takeIf { it.session === key.session }?.let { running ->
                         Running(running, env, look, host, app::stop)
