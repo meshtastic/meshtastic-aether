@@ -20,7 +20,10 @@ import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.isHeading
 import androidx.compose.ui.test.isSelected
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performTextClearance
@@ -265,6 +268,28 @@ class ConnectScreenUiTest {
             onNodeWithText(label).assertDoesNotExist()
             onNode(hasContentDescription(label) and hasClickAction()).assertWidthIsAtLeast(44.dp)
         }
+        onAllNodesWithTag(LINK_LABEL_TAG, useUnmergedTree = true).assertCountEquals(0)
+    }
+
+    // Regression: the chooser stayed icon-only on a window wide enough for its labels, which M3 connected groups show.
+    @Test
+    fun `a wide chooser shows each label and names each button once`() = runComposeUiTest {
+        show(width = 800, height = 600)
+        onAllNodesWithTag(LINK_LABEL_TAG, useUnmergedTree = true).assertCountEquals(3)
+        for (label in listOf("Network", "WebSocket", "Demo")) {
+            val node = onNode(hasContentDescription(label) and hasClickAction()).fetchSemanticsNode()
+            assertEquals(listOf(label), node.config[SemanticsProperties.ContentDescription], "$label is named once")
+            assertFalse(node.config.contains(SemanticsProperties.Text), "$label is read twice")
+        }
+    }
+
+    // Regression: the heading said only Connect, so with an icon-only chooser nothing on screen named the chosen link.
+    @Test
+    fun `the pane heading names the chosen link`() = runComposeUiTest {
+        show(width = 360, height = 720)
+        onNode(hasText("Connect over the network") and isHeading()).assertExists()
+        onNode(hasContentDescription("Demo") and hasClickAction()).performClick()
+        onNode(hasText("Play the demo") and isHeading()).assertExists()
     }
 
     // Regression: touch targets under 44 dp are hard to hit with gloves or on a phone.

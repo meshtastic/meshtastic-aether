@@ -157,11 +157,16 @@ private fun Brand() {
     )
 }
 
+/** The pane's title, naming the chosen link so it reads even when the chooser shows only icons. */
+internal fun paneHeading(kind: LinkKind): String = when (kind) {
+    LinkKind.Network -> "Connect over the network"
+    LinkKind.Bluetooth -> "Connect over Bluetooth"
+    LinkKind.Serial -> "Connect over USB"
+    LinkKind.WebSocket -> "Connect to a node's WebSocket"
+    LinkKind.Demo -> "Play the demo"
+}
+
 @Composable
-internal fun PaneHeading(kind: LinkKind, direct: Boolean) {
-    val text = when {
-        kind == LinkKind.WebSocket && !direct -> "Connect to a node's WebSocket"
-        else -> "Connect"
-    }
-    Text(text, style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { heading() })
+internal fun PaneHeading(kind: LinkKind) {
+    Text(paneHeading(kind), style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { heading() })
 }

@@ -1,3 +1,5 @@
+@file:OptIn(ExperimentalMaterial3ExpressiveApi::class)
+
 package org.meshtastic.aether.ui
 
 import androidx.compose.foundation.layout.Arrangement
@@ -7,7 +9,9 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Button
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -133,6 +137,7 @@ private fun Modifier.errorSemantics(message: String?): Modifier =
 internal fun PrimaryButton(selected: LinkKind, link: LinkChoice?, onConnect: (LinkChoice) -> Unit) {
     Button(
         { link?.let(onConnect) },
+        ButtonDefaults.shapes(),
         Modifier.fillMaxWidth().heightIn(min = MinTouch),
         enabled = link != null,
     ) {

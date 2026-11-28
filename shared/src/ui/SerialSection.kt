@@ -7,13 +7,12 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -77,6 +76,7 @@ internal fun SerialSection(
                 onInteract()
                 request++
             },
+            ButtonDefaults.shapes(),
             Modifier.fillMaxWidth().heightIn(min = MinTouch),
             enabled = !looking,
         ) { Text(if (ports == null) "Find USB radios" else "Look again") }
@@ -90,28 +90,15 @@ internal fun SerialSection(
         val found = ports
         if (found != null && !looking) {
             if (found.isEmpty()) Text(NO_SERIAL_PORTS, style = MaterialTheme.typography.bodyLarge)
-            for (port in found) PortRow(port, onPick)
+            PickList(found, ::portRow, onPick)
         }
     }
 }
 
 private val LoadingSize = 48.dp
-private val RowHeight = 56.dp
 
-@Composable
-private fun PortRow(port: SerialRadio, onPick: (SerialRadio) -> Unit) {
-    Surface(
-        { onPick(port) },
-        Modifier.fillMaxWidth().heightIn(min = RowHeight),
-        shape = MaterialTheme.shapes.medium,
-        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-    ) {
-        Row(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Text(port.label, style = MaterialTheme.typography.bodyLarge)
-                SecondaryText(port.path.substringAfterLast('/'))
-            }
-            SecondaryText(if (port.likelyMeshtastic) "Meshtastic" else "Other device")
-        }
-    }
-}
+private fun portRow(port: SerialRadio) = PickRow(
+    port.label,
+    port.path.substringAfterLast('/'),
+    if (port.likelyMeshtastic) "Meshtastic" else "Other device",
+)
