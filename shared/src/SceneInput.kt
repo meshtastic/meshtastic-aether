@@ -16,6 +16,8 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.ui.focus.FocusManager
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -75,11 +77,16 @@ internal fun CursorAutoHide(input: SceneInput) {
     DisposableEffect(Unit) { onDispose { input.cursorVisible = true } }
 }
 
-/** Keys on the scene: any key counts as input, Back closes the HUD, and the rest go through [perform]. */
+/**
+ * Keys on the scene: any key counts as input, Back closes the HUD, and the rest go through [perform]. With the HUD open,
+ * Up and Down first move [focus] to a control in that direction, so the update panel above the toolbar is reachable;
+ * with none there they change the volume as usual.
+ */
 internal fun Modifier.sceneKeys(
     controls: Controls,
     input: SceneInput,
     perform: State<(KeyAction) -> Boolean>,
+    focus: FocusManager,
 ): Modifier = this
     .onPreviewKeyEvent { event ->
         input.lastInput = nowMillis()
@@ -91,6 +98,12 @@ internal fun Modifier.sceneKeys(
         val action = keyActionFor(event.key) ?: return@onKeyEvent false
         val wanted = if (action.repeats) KeyEventType.KeyDown else KeyEventType.KeyUp
         if (event.type != wanted) return@onKeyEvent false
+        val direction = when (action) {
+            KeyAction.VolumeUp -> FocusDirection.Up
+            KeyAction.VolumeDown -> FocusDirection.Down
+            else -> null
+        }
+        if (controls.overlayOpen && direction != null && focus.moveFocus(direction)) return@onKeyEvent true
         perform.value(action)
     }
 
