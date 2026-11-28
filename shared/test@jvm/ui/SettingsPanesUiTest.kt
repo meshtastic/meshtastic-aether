@@ -24,6 +24,9 @@ class SettingsPanesUiTest {
         onNodeWithText("Choose a topic").assertDoesNotExist()
         onNodeWithText("Updates").assertExists()
         assertEquals(1, onAllNodesWithContentDescription("Back").fetchSemanticsNodes().size)
+        onNodeWithContentDescription("Back").performClick()
+        onNodeWithText("Updates").assertDoesNotExist()
+        onNodeWithContentDescription("Settings").assertExists()
     }
 
     // On a narrow window the topic covers the list and needs its own Back to return to it.

@@ -45,6 +45,11 @@ internal fun MutableList<Screen>.showTopic(topic: SettingsTopic) {
     if (lastOrNull() is Screen.SettingsDetail) set(lastIndex, next) else add(next)
 }
 
+/** Leaves Settings: the list and any topic beside or over it. */
+internal fun MutableList<Screen>.closeSettings() {
+    removeAll { it == Screen.SettingsHome || it is Screen.SettingsDetail }
+}
+
 /** The topic showing beside the list, if any. */
 internal fun List<Screen>.shownTopic(): SettingsTopic? = (lastOrNull() as? Screen.SettingsDetail)?.topic
 
@@ -77,25 +82,27 @@ internal fun AppNavDisplay(
 }
 
 /**
- * The settings list and its topics. Beside the list ([twoPanes]) a topic has no Back of its own, the list marks it,
- * and with none open a note fills the empty pane; on a narrow window a topic covers the list and has its own Back.
+ * The settings list and its topics. The list's Back leaves Settings. Beside the list ([twoPanes]) a topic has no Back
+ * of its own, the list marks it, and with none open a note fills the empty pane; on a narrow window a topic covers
+ * the list and its own Back returns to it.
  */
 @OptIn(ExperimentalMaterial3AdaptiveApi::class)
 internal fun EntryProviderScope<Screen>.settingsEntries(
     backStack: MutableList<Screen>,
     content: () -> SettingsContent,
     twoPanes: () -> Boolean,
-    chrome: PaneChrome,
+    focusBack: Boolean,
     modifier: Modifier,
 ) {
     entry<Screen.SettingsHome>(metadata = { ListDetailSceneStrategy.listPane(detailPlaceholder = { NoTopic() }) }) {
         val selected = if (twoPanes()) backStack.shownTopic() else null
+        val chrome = PaneChrome(backStack::closeSettings, focusBack)
         SettingsList(content(), selected, backStack::showTopic, chrome, modifier)
     }
     entry<Screen.SettingsDetail>(metadata = { ListDetailSceneStrategy.detailPane() }) { key ->
         val beside = twoPanes()
-        val topicChrome = PaneChrome(chrome.onBack, focusBack = chrome.focusBack && !beside, showBack = !beside)
-        SettingsTopicPane(key.topic, content(), topicChrome, modifier)
+        val pop: () -> Unit = { backStack.removeAt(backStack.lastIndex) }
+        SettingsTopicPane(key.topic, content(), PaneChrome(pop, focusBack && !beside, !beside), modifier)
     }
 }
 

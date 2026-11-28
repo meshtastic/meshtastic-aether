@@ -1,7 +1,6 @@
 package org.meshtastic.aether
 
 import androidx.compose.runtime.mutableStateListOf
-import org.meshtastic.aether.ui.PaneChrome
 import org.meshtastic.aether.ui.SettingsContent
 import org.meshtastic.aether.midi.MidiChoice
 import org.meshtastic.aether.midi.midiOutputNames
@@ -171,7 +170,6 @@ internal fun AppRoot(
         val content = rememberSettingsContent(settingsState, platform, Screen.SettingsHome in backStack)
         val directive = paneDirective()
         val focusBack = platform.isTelevision || platform.hasKeyboard
-        val chrome = PaneChrome({ backStack.removeAt(backStack.lastIndex) }, focusBack)
         val safeArea = SafeArea
 
         Box(Modifier.fillMaxSize().background(LocalAmbientPalette.current.backgroundBottom)) {
@@ -189,7 +187,7 @@ internal fun AppRoot(
                         backStack.add(Screen.SettingsHome)
                     }
                 }
-                settingsEntries(backStack, { content }, { showsTwoPanes(directive) }, chrome, safeArea)
+                settingsEntries(backStack, { content }, { showsTwoPanes(directive) }, focusBack, safeArea)
                 entry<Screen.Playing> { key -> Running(key.session, env, look, host, app::stop) }
             }
         }

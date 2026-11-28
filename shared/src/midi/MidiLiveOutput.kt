@@ -36,7 +36,7 @@ class MidiLiveOutput(
     val name: String get() = output.name
 
     override fun schedule(output: ComposerOutput) {
-        if (gain > 0f) mapper.schedule(output)
+        if (gain > 0f) mapper.schedule(output) else mapper.scheduleTextures(output)
     }
 
     /** Anchors the clock on [played] and sends every message due up to the horizon behind [renderedTo]. */
@@ -48,6 +48,7 @@ class MidiLiveOutput(
         if (gain <= 0f) {
             if (!silent) mapper.close(drained, send)
             silent = true
+            mapper.trimTextures(drained)
             return
         }
         silent = false

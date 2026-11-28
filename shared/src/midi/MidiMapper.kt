@@ -130,6 +130,16 @@ class MidiMapper(sampleRate: Int, val config: MidiConfig = MidiConfig()) : NoteS
     private var lastFrame = Long.MIN_VALUE
     private var open = false
 
+    /** Takes only the texture changes of [output], so a muted output keeps its layer levels and buffers no note. */
+    fun scheduleTextures(output: ComposerOutput) {
+        for (c in output.controls) if (c is ControlEvent.SetTexture) insert(textures, c) { it.atFrame }
+    }
+
+    /** Drops textures a later one has replaced by [upTo]. */
+    fun trimTextures(upTo: Long) {
+        while (textures.size > 1 && textures[1].atFrame <= upTo) textures.removeAt(0)
+    }
+
     override fun schedule(output: ComposerOutput) {
         for (n in output.notes) insert(pending, n) { it.atFrame }
         for (c in output.controls) if (c is ControlEvent.SetTexture) insert(textures, c) { it.atFrame }
@@ -154,7 +164,7 @@ class MidiMapper(sampleRate: Int, val config: MidiConfig = MidiConfig()) : NoteS
             sent.track(e)
             emit(if (frame == e.frame) e else MidiEvent(frame, e.part, e.data))
         }
-        while (textures.size > 1 && textures[1].atFrame <= upTo) textures.removeAt(0)
+        trimTextures(upTo)
     }
 
     /**

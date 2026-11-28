@@ -35,6 +35,18 @@ class AppNavTest {
         assertEquals(listOf<Screen>(Screen.Connect, Screen.SettingsHome), stack)
     }
 
+    // On a wide window the list's Back is the only one showing; popping just the topic beside it would leave Settings
+    // open and take a second press to leave.
+    @Test
+    fun `closing settings leaves the connect screen whether or not a topic is open`() {
+        val open = mutableListOf(Screen.Connect, Screen.SettingsHome, Screen.SettingsDetail(SettingsTopic.About))
+        open.closeSettings()
+        assertEquals(listOf<Screen>(Screen.Connect), open)
+        val list = mutableListOf<Screen>(Screen.Connect, Screen.SettingsHome)
+        list.closeSettings()
+        assertEquals(listOf<Screen>(Screen.Connect), list)
+    }
+
     // On a wide window each topic picked beside the list would otherwise stack, and Back would walk through them all
     // before leaving settings.
     @Test
