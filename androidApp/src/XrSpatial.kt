@@ -184,7 +184,7 @@ internal class XrSpatial(private val session: Session, material: KhronosUnlitMat
         Choreographer.getInstance().postFrameCallback(this)
     }
 
-    /** Hides the cloud and restores the environment; [backToHome] when the view ended while the app was still in Full Space. */
+    /** Hides the cloud and restores the environment; [backToHome] when the view ended with the app still in Full Space. */
     private fun exit(backToHome: Boolean) {
         source = null
         root.setEnabled(false)

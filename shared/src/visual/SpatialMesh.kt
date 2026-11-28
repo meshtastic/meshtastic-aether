@@ -126,8 +126,8 @@ class SpatialMesh(spriteCapacity: Int, lineCapacity: Int) {
         val bx = l[b]
         val by = l[b + 1]
         val bz = l[b + 2]
-        // Across the line and across the view: (midpoint - eye) x (b - a), which winds the quad counter-clockwise as the
-        // eye sees it, glTF's front face.
+        // Across the line and the view: (midpoint - eye) x (b - a), which winds the quad counter-clockwise as the eye
+        // sees it, glTF's front face.
         val tx = bx - ax
         val ty = by - ay
         val tz = bz - az
