@@ -22,7 +22,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         var pending: CompletableDeferred<Boolean>? = null
         val launcher = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { granted ->
-            pending?.complete(granted.values.all { it })
+            pending?.complete(granted.isNotEmpty() && granted.values.all { it })
         }
         val ask: suspend (Array<String>) -> Boolean = { permissions ->
             val result = CompletableDeferred<Boolean>()
