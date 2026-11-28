@@ -70,6 +70,37 @@ class MidiLiveOutputTest {
         assertTrue(live.stats.notes > 1000)
     }
 
+    // The viewer's mute must silence the external synth too: a held pad would ring on, and new notes would keep
+    // coming, with the built-in synth muted.
+    @Test
+    fun `muting ends every sounding note and sends none until unmuted at a scaled velocity`() {
+        val port = FakeMidiOutput()
+        val live = MidiLiveOutput(port, SR)
+        var rendered = 0L
+        var k = 0
+        fun tick(gain: Float) {
+            live.gain = gain
+            val now = rendered.toDouble() / SR
+            live.schedule(ComposerOutput(listOf(bell(now + 0.05, 261.6255653005986 * (1 + k % 4 * 0.25), 3.0)), emptyList()))
+            live.pump(rendered, FrameTime(rendered - BUFFER, playsAt(rendered - BUFFER)))
+            port.now = playsAt(rendered - BUFFER)
+            port.deliver()
+            rendered += SR / 10
+            k++
+        }
+        repeat(30) { tick(1f) }
+        assertTrue(port.sounding.isNotEmpty(), "nothing was sounding before the mute")
+        repeat(50) { tick(0f) }
+        assertTrue(port.sounding.isEmpty(), "still sounding while muted: ${port.sounding}")
+        val onsBefore = port.sent.count { (it.second[0].toInt() and 0xF0) == 0x90 }
+        repeat(20) { tick(0f) }
+        assertEquals(onsBefore, port.sent.count { (it.second[0].toInt() and 0xF0) == 0x90 }, "a note went out while muted")
+        repeat(30) { tick(0.5f) }
+        val velocities = port.sent.filter { (it.second[0].toInt() and 0xF0) == 0x90 }.drop(onsBefore).map { it.second[2].toInt() }
+        assertTrue(velocities.isNotEmpty(), "nothing played after unmuting")
+        assertTrue(velocities.all { it == 32 }, "velocities after unmuting at half volume: $velocities")
+    }
+
     // A note-on the port's thread has not yet sent when the engine stops would go out after the close's note-offs and
     // hang on the receiver.
     @Test

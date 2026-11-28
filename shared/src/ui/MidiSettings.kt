@@ -4,9 +4,15 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.material3.ExposedDropdownMenuAnchorType
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.SegmentedListItem
 import androidx.compose.material3.Slider
@@ -14,20 +20,16 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import org.meshtastic.aether.midi.MidiChoice
 import kotlin.math.roundToInt
-
-/** The MIDI section's state: the saved [choice], the [outputs] there are now, and where a change goes. */
-@Stable
-internal class MidiSettingsState(
-    val choice: MidiChoice,
-    val outputs: List<String>,
-    val onChoice: (MidiChoice) -> Unit,
-)
 
 /** The rows of the output picker: Off, each output there is, and a saved output that is not connected now. */
 internal fun outputRows(choice: MidiChoice, outputs: List<String>): List<String?> {
@@ -43,6 +45,14 @@ internal fun releaseLabel(seconds: Double): String = when (seconds) {
     MidiChoice.RELEASES.last() -> "Long, 8 s"
     else -> "Normal, 2 s"
 }
+
+/** The MIDI section's state: the saved [choice], the [outputs] there are now, and where a change goes. */
+@Stable
+internal class MidiSettingsState(
+    val choice: MidiChoice,
+    val outputs: List<String>,
+    val onChoice: (MidiChoice) -> Unit,
+)
 
 /** Where the music also plays: a MIDI output, the built-in synth alongside it, and the timing for that synth. */
 @Composable
@@ -60,24 +70,33 @@ internal fun MidiSettings(state: MidiSettingsState) {
     LatencySlider(state)
 }
 
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun OutputPicker(state: MidiSettingsState) {
     val rows = outputRows(state.choice, state.outputs)
-    Column(
-        Modifier.fillMaxWidth().selectableGroup(),
-        verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap),
-    ) {
-        rows.forEachIndexed { index, name ->
-            val selected = name == state.choice.output
-            SegmentedListItem(
-                selected = selected,
-                onClick = { state.onChoice(state.choice.copy(output = name)) },
-                shapes = ListItemDefaults.segmentedShapes(index, rows.size),
-                leadingContent = { RadioButton(selected = selected, onClick = null) },
-                supportingContent = outputDetail(name, state.outputs)?.let { { Text(it) } },
-                content = { Text(name ?: "Off") },
-            )
+    var expanded by remember { mutableStateOf(false) }
+    ExposedDropdownMenuBox(expanded, onExpandedChange = { expanded = it }) {
+        OutlinedTextField(
+            value = state.choice.output ?: "Off",
+            onValueChange = {},
+            readOnly = true,
+            singleLine = true,
+            label = { Text("Output") },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
+            supportingText = outputDetail(state.choice.output, state.outputs)?.let { { Text(it) } },
+            modifier = Modifier.menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable).fillMaxWidth(),
+        )
+        ExposedDropdownMenu(expanded, onDismissRequest = { expanded = false }) {
+            rows.forEach { name ->
+                DropdownMenuItem(
+                    text = { Text(name ?: "Off") },
+                    onClick = {
+                        expanded = false
+                        state.onChoice(state.choice.copy(output = name))
+                    },
+                    contentPadding = ExposedDropdownMenuDefaults.ItemContentPadding,
+                )
+            }
         }
     }
     if (state.outputs.isEmpty()) {

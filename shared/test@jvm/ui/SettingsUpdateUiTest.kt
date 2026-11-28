@@ -48,7 +48,8 @@ private class FakeUpdater(installState: InstallState = InstallState.Idle) : Upda
 class SettingsUpdateUiTest {
     private fun androidx.compose.ui.test.ComposeUiTest.settings(updater: Updater, canBrowse: Boolean) = setContent {
         AmbientTheme {
-            SettingsScreen(TrackedUpdates(updater, UpdateTrack.Snapshot, {}, canBrowse), onBack = {})
+            val updates = TrackedUpdates(updater, UpdateTrack.Snapshot, {}, canBrowse)
+            SettingsTopicPane(SettingsTopic.Updates, SettingsContent(updates, midi = null), PaneChrome(onBack = {}))
         }
     }
 

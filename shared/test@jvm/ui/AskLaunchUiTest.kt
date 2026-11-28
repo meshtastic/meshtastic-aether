@@ -9,7 +9,7 @@ import org.meshtastic.aether.LaunchOptions
 import org.meshtastic.aether.Platform
 import kotlin.test.Test
 
-private class FakePlatform : Platform {
+internal class FakePlatform : Platform {
     override val name = "test"
     override val supportsTcp = true
     override val lookaheadMillis = 250
