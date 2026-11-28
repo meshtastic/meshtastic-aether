@@ -73,6 +73,7 @@ cd meshtastic-aether
 | Run the web app | `./kotlin run -m webApp` |
 | Render the simulated mesh to a WAV file | `./kotlin run -m tools -- sparse 1 /tmp/sparse.wav` |
 | Render a demo video offline (needs ffmpeg) | `./kotlin run -m tools -- video 90 /tmp/demo.mp4` |
+| Export the simulated mesh as a MIDI file | `./kotlin run -m tools -- midi 3600 /tmp/mesh.mid` |
 | List the modules | `./kotlin show modules` |
 
 [`README.md`](README.md) lists the launch flags and the other run targets.

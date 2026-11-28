@@ -15,14 +15,13 @@ Here the mesh is the lobby. The app plays a slow autonomous piece that sounds go
 - Generative audio synthesized in shared Kotlin, with per-platform output only.
 - A full-screen ambient visual driven by the same events and clock as the audio.
 - Simulated, demo and replayed meshes on every target, for development, demos and listening tests without a node.
-- Note events go through a seam so a MIDI or OSC output can be added without touching the composer.
+- Note events go through a seam: the synth and the MIDI output both take the composer's notes.
 
 ## Non-goals
 
-- MIDI or OSC output. The seam exists; an implementation does not.
 - Sending anything to the mesh. The app is listen-only.
 - Multi-speaker spatial installs. Output is stereo, and pan stands in for the nearest speakers.
-- Stored history, accounts or settings sync. The app keeps only the saved link, the volume and mute, the headphone mode and the palette choice, on the device.
+- Stored history, accounts or settings sync. The app keeps only the saved link, the volume and mute, the headphone mode, the palette choice and the MIDI choices, on the device.
 - App store publishing.
 - A web kiosk mode.
 
@@ -51,8 +50,8 @@ Here the mesh is the lobby. The app plays a slow autonomous piece that sounds go
 ## Decisions
 
 1. Synth in shared Kotlin, with a thin per-platform PCM sink. It is self-contained on every target and testable offline; the sound is limited to what the repository writes.
-2. MIDI or OSC out to an external synth was rejected. It gives the best sound but is effectively desktop-only and needs external setup per install.
-3. Synth in shared Kotlin with a note-event seam, so MIDI or OSC can be added later. This is the chosen design.
+2. MIDI out is an addition to the built-in synth, never a replacement: a synth app or DAW can sound better, but it needs setup per install and works only on desktop today. On desktop the composer's notes can also go to a MIDI output, each as the nearest key plus a pitch bend on its own MPE channel, with the built-in synth muted by default while it plays.
+3. Synth in shared Kotlin with a note-event seam, which the MIDI output also takes.
 4. Every audio sink is an `expect`/`actual` on platform APIs with no third-party audio library. kc-audio-bridge (Apache-2.0) is reference reading only.
 5. The Kotlin Toolchain is the build tool, with Gradle as the fallback.
 6. The piece is autonomous with long-form harmonic movement, perturbed by the mesh. A note per packet over a static drone is one drone for hours at a few packets a minute.
@@ -216,7 +215,8 @@ Built:
 - SDK, simulated, replay and demo sources; a connect screen with TCP, Bluetooth, USB serial, WebSocket and a saved link with auto-connect.
 - Clouds-topology reverb, polyBLEP, FM, modal, Karplus-Strong and pitch-shifter voices in pure Kotlin.
 - An update check on Android and desktop with a Release or Snapshot track in Settings, desktop installers (deb, dmg, msi) and a web build deployed from every snapshot.
-- A file log on desktop, an overlay with key controls, and the `tools` render, analyze and video commands.
+- A file log on desktop, an overlay with key controls, and the `tools` render, analyze, video and MIDI export commands.
+- MIDI output on desktop: `--midi` and a Settings section, timed to the audio sink, ending every note on stop or exit. Settings is a list-detail of topics on a Navigation 3 back stack, laid out by the window.
 - Mesh-driven parameters, pass 1: the per-event layer and palettes, `MeshMood` with `ParamValues`, rotation (speed, tilt and wobble, direction), gravity and orbits, the coverage log, the overlay Drivers panel and the demo sweep. A 6 hour run on a Mac against a real mesh held 59.9 fps and 340 MB with no warnings; no person has judged the sound or the visuals from it.
 
 Not built:
@@ -224,5 +224,5 @@ Not built:
 - Mesh-driven parameters, pass 2: the landscape mappings beyond those built (reverb, brightness, detune, ensemble, echo, ornament TTL, pad level, haze, background hue and the rest of the Layer 2 table), which wait on coverage data.
 - A desktop capture mode; replay plays a bundled synthetic capture.
 - WebSerial.
-- MIDI and OSC output.
+- MIDI output on Android, iOS and the web, MIDI texture controllers, MIDI hot-plug while Settings is open, and an OSC output.
 - A run of iOS on a device, of web in a browser past the connect screen, and of Android on a phone or tablet (Android TV has run on a Chromecast with Google TV).
