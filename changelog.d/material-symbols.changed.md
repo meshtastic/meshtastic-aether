@@ -1,0 +1,1 @@
+- The toolbar and Settings icons are Material Symbols, matching the link chooser.

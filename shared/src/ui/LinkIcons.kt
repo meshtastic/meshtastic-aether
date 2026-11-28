@@ -9,7 +9,7 @@ import androidx.compose.ui.unit.dp
 private const val SYMBOL_VIEWPORT = 960f
 
 // Icon tints the fill away, so only this ink's alpha matters; it is not a theme color.
-private fun symbol(name: String, pathData: String): ImageVector =
+internal fun symbol(name: String, pathData: String): ImageVector =
     ImageVector.Builder(name, 24.dp, 24.dp, SYMBOL_VIEWPORT, SYMBOL_VIEWPORT)
         .addPath(addPathNodes(pathData), fill = SolidColor(Color.Black))
         .build()
