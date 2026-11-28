@@ -158,10 +158,13 @@ void main() {
     const scene = renderer(gl);
     xr.updateRenderState({ baseLayer: new XRWebGLLayer(xr, gl) });
     let drop = 0;
-    const space = await xr.requestReferenceSpace('local-floor').catch(() => {
+    const base = await xr.requestReferenceSpace('local-floor').catch(() => {
       drop = EYE_METERS;
       return xr.requestReferenceSpace('local');
     });
+    // The platform picks local-floor's horizontal origin and heading, so the scene is anchored on the first viewer pose:
+    // under the viewer at floor height, with -z (north) where they face.
+    let space = null;
     const passthrough = mode === 'immersive-ar';
     const frame = (_time, xrFrame) => {
       if (!onFrame()) {
@@ -169,6 +172,19 @@ void main() {
         return;
       }
       xr.requestAnimationFrame(frame);
+      if (!space) {
+        const first = xrFrame.getViewerPose(base);
+        if (!first) return;
+        const p = first.transform.position;
+        const q = first.transform.orientation;
+        const fx = -2 * (q.x * q.z + q.w * q.y);
+        const fz = -(1 - 2 * (q.x * q.x + q.y * q.y));
+        const yaw = Math.atan2(-fx, -fz);
+        space = base.getOffsetReferenceSpace(new XRRigidTransform(
+          { x: p.x, y: 0, z: p.z },
+          { x: 0, y: Math.sin(yaw / 2), z: 0, w: Math.cos(yaw / 2) },
+        ));
+      }
       const pose = xrFrame.getViewerPose(space);
       if (!pose) return;
       const layer = xr.renderState.baseLayer;
