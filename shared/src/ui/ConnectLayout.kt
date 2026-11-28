@@ -1,6 +1,7 @@
 package org.meshtastic.aether.ui
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -8,6 +9,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
@@ -43,9 +45,14 @@ internal class ConnectSlots(
 /** Two panes on an expanded or short window, the brand beside the form; else one column with the button at the foot. */
 @Composable
 internal fun ConnectLayout(slots: ConnectSlots, modifier: Modifier) {
+    // The caller leaves the IME out of [modifier]'s insets: a keyboard that changed the pane choice would recreate the
+    // focused field and close itself.
     BoxWithConstraints(modifier.fillMaxSize()) {
-        val twoPanes = widthClass(maxWidth) == WidthClass.Expanded || maxHeight < ShortHeight
-        if (twoPanes) TwoPanes(slots) else OnePane(slots, medium = widthClass(maxWidth) == WidthClass.Medium)
+        val width = widthClass(maxWidth)
+        val twoPanes = width == WidthClass.Expanded || maxHeight < ShortHeight
+        Box(Modifier.fillMaxSize().imePadding()) {
+            if (twoPanes) TwoPanes(slots) else OnePane(slots, medium = width == WidthClass.Medium)
+        }
     }
 }
 

@@ -7,7 +7,9 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.exclude
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
@@ -253,7 +255,8 @@ private fun ConnectPane(app: AppSession, settings: Settings, platform: Platform,
     } else {
         Modifier
     }
-    Column(Modifier.windowInsetsPadding(WindowInsets.safeDrawing).then(tvMargin).fillMaxSize()) {
+    val insets = WindowInsets.safeDrawing.exclude(WindowInsets.ime)
+    Column(Modifier.windowInsetsPadding(insets).then(tvMargin).fillMaxSize()) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
             IconButton(onSettings, Modifier.size(MinTouch).semantics { contentDescription = "Settings" }) {
                 HudIcon(HudIcons.Settings)
