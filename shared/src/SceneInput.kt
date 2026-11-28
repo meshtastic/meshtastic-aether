@@ -27,11 +27,14 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import kotlinx.coroutines.delay
 import org.meshtastic.aether.ui.Controls
 import org.meshtastic.aether.ui.KeyAction
@@ -124,12 +127,15 @@ internal fun Modifier.scenePointer(controls: Controls, input: SceneInput): Modif
     .pointerInput(Unit) { detectTapGestures { controls.overlayOpen = !controls.overlayOpen } }
 
 /**
- * The scene as a screen reader sees it: a button whose click shows or hides the HUD, the same as a tap. It goes on the
- * scene drawing, not on the HUD's parent, so the HUD's controls stay separate nodes.
+ * The scene as a screen reader sees it: a button whose click shows or hides the HUD, the same as a tap, and whose
+ * state is the link [status], announced politely when it changes. It goes on the scene drawing, not on the HUD's
+ * parent, so the HUD's controls stay separate nodes.
  */
-internal fun Modifier.sceneSemantics(controls: Controls): Modifier = semantics {
+internal fun Modifier.sceneSemantics(controls: Controls, status: String?): Modifier = semantics {
     role = Role.Button
     contentDescription = SCENE_LABEL
+    if (status != null) stateDescription = status
+    liveRegion = LiveRegionMode.Polite
     onClick(label = if (controls.overlayOpen) "Hide controls" else "Show controls") {
         controls.overlayOpen = !controls.overlayOpen
         true

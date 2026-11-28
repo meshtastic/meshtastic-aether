@@ -32,6 +32,7 @@ import androidx.compose.ui.input.pointer.PointerIcon
 import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.unit.dp
 import androidx.navigationevent.NavigationEventInfo
 import androidx.navigationevent.compose.NavigationBackHandler
@@ -115,7 +116,8 @@ internal fun Running(
             .sceneKeys(controls, input, perform, LocalFocusManager.current)
             .scenePointer(controls, input),
     ) {
-        AmbientScene(engine, Modifier.fillMaxSize().sceneSemantics(controls))
+        val status = statusLineText(engine.status.link, engine.status.error)
+        AmbientScene(engine, Modifier.fillMaxSize().sceneSemantics(controls, status))
         StatusLine(engine.status.link, engine.status.error, Modifier.align(Alignment.TopCenter))
         ControlsHint(platform.hasKeyboard, platform.isTelevision, Modifier.align(Alignment.BottomCenter))
         if (controls.overlayOpen) {
@@ -251,8 +253,10 @@ private fun StatusLine(link: LinkState, error: String?, modifier: Modifier = Mod
     if (alpha > 0f) {
         Text(
             shown.text,
+            // The scene node carries this text for a screen reader, which would otherwise read it twice.
             modifier = modifier.windowInsetsPadding(WindowInsets.safeDrawing)
-                .padding(top = ScreenGutter + StatusShift * statusLineShiftSteps(elapsed)),
+                .padding(top = ScreenGutter + StatusShift * statusLineShiftSteps(elapsed))
+                .clearAndSetSemantics {},
             style = MaterialTheme.typography.bodyLarge,
             color = LocalAmbientPalette.current.text.copy(alpha = alpha),
         )
