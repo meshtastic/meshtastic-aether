@@ -59,6 +59,7 @@ import org.meshtastic.aether.ui.controlsHint
 import org.meshtastic.aether.ui.fadeIn
 import org.meshtastic.aether.ui.nowMillis
 import org.meshtastic.aether.ui.statusLineShiftSteps
+import org.meshtastic.aether.midi.MidiChoice
 import org.meshtastic.aether.midi.openLiveOutput
 import org.meshtastic.aether.ui.statusLineText
 import org.meshtastic.aether.ui.statusLineVisible
@@ -84,7 +85,7 @@ internal fun Running(
 ) {
     val platform = env.platform
     val haptics = LocalHapticFeedback.current
-    val engine = rememberEngine(session, platform, env.midi)
+    val engine = rememberEngine(session, platform, env.midiChoice())
     val palette = LocalAmbientPalette.current
     // A spatial view shows this session only: leaving it (Disconnect, Back) closes the view.
     val spatial = remember(engine) { SpatialViews() }
@@ -144,7 +145,7 @@ internal fun Running(
 
 /** The engine for [session], playing from the moment it exists; its link opens once it runs and closes after. */
 @Composable
-private fun rememberEngine(session: Session, platform: Platform, midiName: String?): AmbientEngine {
+private fun rememberEngine(session: Session, platform: Platform, midi: MidiChoice): AmbientEngine {
     val engine = remember(session) {
         val sink = createAudioSink()
         AmbientEngine(
@@ -155,7 +156,8 @@ private fun rememberEngine(session: Session, platform: Platform, midiName: Strin
             EngineOptions(
                 pinFormFull = session.demo,
                 failureText = session.failureText,
-                midi = midiName?.let { name -> { rate -> openLiveOutput(name, rate) } },
+                midi = midi.output?.let { name -> { rate -> openLiveOutput(name, rate, midi) } },
+                midiMutesBuiltIn = !midi.playAlongside,
             ),
         ).also { platform.resumeAudio() }
     }

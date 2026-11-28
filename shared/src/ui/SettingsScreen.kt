@@ -27,6 +27,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -38,7 +39,6 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
@@ -87,28 +87,105 @@ internal class TrackedUpdates(
     val canBrowse: Boolean = true,
 )
 
+/** The settings list's topics, in order; MIDI output only where Aether can play to MIDI. */
+internal enum class SettingsTopic(val title: String) {
+    Updates("Updates"),
+    Midi("MIDI output"),
+    About("About"),
+}
+
 /**
- * Settings: which builds the app follows for updates, and a check on demand. [updates] is null where updates come
- * another way (an app store, iOS, the web) or on a local build, and the screen then says so instead of offering a
- * choice.
+ * What the settings panes show. [updates] is null where updates come another way (an app store, iOS, the web) or on a
+ * local build, and the Updates pane then says so instead of offering a choice. [midi] is null where Aether cannot
+ * play to MIDI, and the list leaves that topic out.
  */
-@OptIn(ExperimentalMaterial3Api::class)
+@Stable
+internal class SettingsContent(val updates: TrackedUpdates?, val midi: MidiSettingsState?) {
+    val topics: List<SettingsTopic> get() = SettingsTopic.entries.filter { it != SettingsTopic.Midi || midi != null }
+}
+
+/** The one-line summary under a topic in the list. */
+internal fun topicSummary(topic: SettingsTopic, content: SettingsContent): String = when (topic) {
+    SettingsTopic.Updates -> content.updates?.let { trackLabel(it.track) } ?: "Updated another way"
+    SettingsTopic.Midi -> content.midi?.choice?.output ?: "Off"
+    SettingsTopic.About -> "Licenses, privacy and links"
+}
+
+/**
+ * How a settings pane sits: [onBack] leaves it, [focusBack] puts focus on Back for a remote or keyboard, and [showBack]
+ * is false for a topic beside its list, whose list's Back closes settings.
+ */
+@Immutable
+internal class PaneChrome(val onBack: () -> Unit, val focusBack: Boolean = false, val showBack: Boolean = true)
+
+/** The settings list, the list pane of the settings scene: one row per topic, [selected] marked while shown beside. */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
-internal fun SettingsScreen(
-    updates: TrackedUpdates?,
-    onBack: () -> Unit,
+internal fun SettingsList(
+    content: SettingsContent,
+    selected: SettingsTopic?,
+    onTopic: (SettingsTopic) -> Unit,
+    chrome: PaneChrome,
     modifier: Modifier = Modifier,
-    focusBack: Boolean = false,
 ) {
+    SettingsScaffold("Settings", chrome, modifier) {
+        val topics = content.topics
+        Column(
+            Modifier.fillMaxWidth().selectableGroup(),
+            verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap),
+        ) {
+            topics.forEachIndexed { index, topic ->
+                SegmentedListItem(
+                    selected = topic == selected,
+                    onClick = { onTopic(topic) },
+                    shapes = ListItemDefaults.segmentedShapes(index, topics.size),
+                    supportingContent = { Text(topicSummary(topic, content)) },
+                    content = { Text(topic.title) },
+                )
+            }
+        }
+    }
+}
+
+/** One topic's settings, the detail pane of the settings scene. */
+@Composable
+internal fun SettingsTopicPane(
+    topic: SettingsTopic,
+    content: SettingsContent,
+    chrome: PaneChrome,
+    modifier: Modifier = Modifier,
+) {
+    SettingsScaffold(topic.title, chrome, modifier) {
+        when (topic) {
+            SettingsTopic.Updates -> content.updates?.let { UpdateSettings(it) } ?: Text(
+                "This copy of Aether gets its updates another way.",
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            SettingsTopic.Midi -> content.midi?.let { MidiSettings(it) }
+            SettingsTopic.About -> AboutSection()
+        }
+    }
+}
+
+/** A settings pane: a collapsing title bar with Back, over a scrolling column held to a readable width. */
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
+@Composable
+private fun SettingsScaffold(title: String, chrome: PaneChrome, modifier: Modifier, body: @Composable () -> Unit) {
     val backFocus = remember { FocusRequester() }
-    LaunchedEffect(Unit) { if (focusBack) runCatching { backFocus.requestFocus() } }
+    LaunchedEffect(chrome.showBack) {
+        if (chrome.focusBack && chrome.showBack) runCatching { backFocus.requestFocus() }
+    }
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     Column(modifier.fillMaxSize().nestedScroll(scrollBehavior.nestedScrollConnection)) {
         LargeFlexibleTopAppBar(
-            title = { Text("Settings") },
+            title = { Text(title) },
             navigationIcon = {
-                IconButton(onBack, Modifier.focusRequester(backFocus).semantics { contentDescription = "Back" }) {
-                    HudIcon(HudIcons.Back)
+                if (chrome.showBack) {
+                    IconButton(
+                        chrome.onBack,
+                        Modifier.focusRequester(backFocus).semantics { contentDescription = "Back" },
+                    ) { HudIcon(HudIcons.Back) }
                 }
             },
             scrollBehavior = scrollBehavior,
@@ -119,31 +196,10 @@ internal fun SettingsScreen(
                     .padding(horizontal = ScreenGutter, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(24.dp),
             ) {
-                SectionHeading("Updates")
-                if (updates == null) {
-                    Text(
-                        "This copy of Aether gets its updates another way.",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                } else {
-                    UpdateSettings(updates)
-                }
-                SectionHeading("About")
-                AboutSection()
+                body()
             }
         }
     }
-}
-
-@Composable
-private fun SectionHeading(text: String) {
-    Text(
-        text,
-        Modifier.semantics { heading() },
-        style = MaterialTheme.typography.titleMedium,
-        color = MaterialTheme.colorScheme.primary,
-    )
 }
 
 @Composable

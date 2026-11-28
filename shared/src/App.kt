@@ -1,5 +1,10 @@
 package org.meshtastic.aether
 
+import androidx.compose.runtime.mutableStateListOf
+import org.meshtastic.aether.ui.SettingsContent
+import org.meshtastic.aether.midi.MidiChoice
+import org.meshtastic.aether.midi.midiOutputNames
+import org.meshtastic.aether.midi.midiSupported
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -23,7 +28,6 @@ import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -32,9 +36,6 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
-import androidx.navigationevent.NavigationEventInfo
-import androidx.navigationevent.compose.NavigationBackHandler
-import androidx.navigationevent.compose.rememberNavigationEventState
 import kotlinx.coroutines.delay
 import org.meshtastic.aether.theme.AmbientTheme
 import org.meshtastic.aether.theme.LocalAmbientPalette
@@ -45,6 +46,7 @@ import org.meshtastic.aether.ui.ConnectContext
 import org.meshtastic.aether.ui.ConnectScreen
 import org.meshtastic.aether.ui.ConnectTarget
 import org.meshtastic.aether.ui.Countdown
+import org.meshtastic.aether.ui.MidiSettingsState
 import org.meshtastic.aether.ui.HudIcon
 import org.meshtastic.aether.ui.HudIcons
 import org.meshtastic.aether.ui.LinkChoice
@@ -52,7 +54,6 @@ import org.meshtastic.aether.ui.LinkKind
 import org.meshtastic.aether.ui.MinTouch
 import org.meshtastic.aether.ui.PendingConnect
 import org.meshtastic.aether.ui.Settings
-import org.meshtastic.aether.ui.SettingsScreen
 import org.meshtastic.aether.ui.TrackedUpdates
 import org.meshtastic.aether.ui.UpdateChecks
 import org.meshtastic.aether.ui.appUpdater
@@ -98,7 +99,10 @@ data class HostWindow(
 )
 
 /** The app's saved settings and the platform it runs on; a test supplies a fake store. */
-internal class AppEnvironment(val settings: Settings, val platform: Platform, val midi: String? = null)
+internal class AppEnvironment(val settings: Settings, val platform: Platform, val midi: String? = null) {
+    /** The saved MIDI choices, with a `--midi` launch flag naming the output in place of the saved one. */
+    fun midiChoice(): MidiChoice = settings.midi.let { saved -> if (midi != null) saved.copy(output = midi) else saved }
+}
 
 /** The look in force; a pick is saved for the next launch. */
 @Stable
@@ -120,6 +124,9 @@ fun App(launch: LaunchOptions = LaunchOptions(), host: HostWindow = HostWindow()
     AppRoot(settings, platform, launch, host)
 }
 
+/** The safe drawing area a settings pane keeps inside. */
+private val SafeArea: Modifier @Composable get() = Modifier.windowInsetsPadding(WindowInsets.safeDrawing)
+
 /** [App] with its settings and platform supplied, so a test can run it on a fake store. */
 @Composable
 internal fun AppRoot(
@@ -129,8 +136,7 @@ internal fun AppRoot(
     host: HostWindow = HostWindow(),
 ) {
     val initialLink = if (launch.ask) null else launch.link
-    val settingsNav = rememberSettingsNav(settings)
-    val saveable = rememberSaveableStateHolder()
+    val settingsState = rememberSettingsState(settings)
     val look = remember {
         LookState(resolveLook(launch.look, settings.savedPalette, launch.launchedFullscreen), settings)
     }
@@ -148,73 +154,89 @@ internal fun AppRoot(
         }
 
         LaunchedEffect(Unit) { if (startup?.isSuccess == true && initialLink != null) settings.link = initialLink }
-        LaunchedEffect(app.session) { if (app.session != null) settingsNav.open = false }
+        val backStack = remember {
+            val first = app.session
+            mutableStateListOf(
+                when {
+                    !started -> Screen.TapToStart
+                    first != null -> Screen.Playing(first)
+                    else -> Screen.Connect
+                },
+            )
+        }
+        LaunchedEffect(app.session, started) { if (started) backStack.follow(app.session) }
         AutoConnect(app, started, saved)
+        val env = remember { AppEnvironment(settings, platform, launch.midi) }
+        val content = rememberSettingsContent(settingsState, platform, Screen.SettingsHome in backStack)
+        val directive = paneDirective()
+        val focusBack = platform.isTelevision || platform.hasKeyboard
+        val safeArea = SafeArea
 
         Box(Modifier.fillMaxSize().background(LocalAmbientPalette.current.backgroundBottom)) {
-            val current = app.session
-            when {
-                !started -> TapToStart {
-                    platform.resumeAudio()
-                    started = true
+            AppNavDisplay(backStack, directive) {
+                entry<Screen.TapToStart> {
+                    TapToStart {
+                        platform.resumeAudio()
+                        backStack.reset(Screen.Connect)
+                        started = true
+                    }
                 }
-                current == null && settingsNav.open -> SettingsPane(settingsNav, platform)
-                current == null -> saveable.SaveableStateProvider("connect") {
-                    ConnectPane(app, settings, platform) { settingsNav.openFrom(app) }
+                entry<Screen.Connect> {
+                    ConnectPane(app, settings, platform) {
+                        app.pending?.countdown?.cancel()
+                        backStack.add(Screen.SettingsHome)
+                    }
                 }
-                else -> {
-                    val env = remember { AppEnvironment(settings, platform, launch.midi) }
-                    Running(current, env, look, host, app::stop)
-                }
+                settingsEntries(backStack, { content }, { showsTwoPanes(directive) }, focusBack, safeArea)
+                entry<Screen.Playing> { key -> Running(key.session, env, look, host, app::stop) }
             }
         }
     }
 }
 
-/** The settings screen over the connect screen: whether it is open, and the update track it edits. */
+/** What the settings panes edit: the update track and the MIDI choices, each saved as it changes. */
 @Stable
-private class SettingsNav(private val settings: Settings) {
-    var open by mutableStateOf(false)
+private class SettingsState(private val settings: Settings) {
     var track by mutableStateOf(settings.updateTrack ?: UpdateTrack.of(BuildInfo.CHANNEL))
         private set
+    var midi by mutableStateOf(settings.midi)
+        private set
+
+    fun chooseMidi(next: MidiChoice) {
+        midi = next
+        settings.midi = next
+    }
 
     fun choose(next: UpdateTrack) {
         track = next
         settings.updateTrack = next
     }
-
-    /** Opens settings from the connect screen, which stops a pending reconnect's countdown. */
-    fun openFrom(app: AppSession) {
-        app.pending?.countdown?.cancel()
-        open = true
-    }
 }
 
-/** The settings state, the update checks on its track, and Back closing the screen while it is open. */
+/** The settings state, with the update checks on its track. */
 @Composable
-private fun rememberSettingsNav(settings: Settings): SettingsNav {
-    val nav = remember { SettingsNav(settings) }
-    UpdateChecks(appUpdater, nav.track)
-    val back = rememberNavigationEventState(NavigationEventInfo.None)
-    NavigationBackHandler(back, isBackEnabled = nav.open, onBackCompleted = { nav.open = false })
-    return nav
+private fun rememberSettingsState(settings: Settings): SettingsState {
+    val state = remember { SettingsState(settings) }
+    UpdateChecks(appUpdater, state.track)
+    return state
 }
 
+/** What the settings panes show now; the MIDI outputs are listed each time settings opens. */
 @Composable
-private fun SettingsPane(nav: SettingsNav, platform: Platform) {
+private fun rememberSettingsContent(state: SettingsState, platform: Platform, open: Boolean): SettingsContent {
     val updater = appUpdater
-    val track = nav.track
-    SettingsScreen(
+    val track = state.track
+    val outputs = remember(open) { if (open && midiSupported()) midiOutputNames() else emptyList() }
+    return SettingsContent(
         updates = if (updater != null && track != null) {
-            TrackedUpdates(updater, track, nav::choose, canBrowse = !platform.isTelevision)
+            TrackedUpdates(updater, track, state::choose, canBrowse = !platform.isTelevision)
         } else {
             null
         },
-        onBack = { nav.open = false },
-        modifier = Modifier.windowInsetsPadding(WindowInsets.safeDrawing),
-        focusBack = platform.isTelevision || platform.hasKeyboard,
+        midi = if (midiSupported()) MidiSettingsState(state.midi, outputs, state::chooseMidi) else null,
     )
 }
+
 
 /** Counts a saved link down once the app has started, then starts it, unless the countdown was cancelled. */
 @Composable
