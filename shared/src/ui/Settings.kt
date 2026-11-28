@@ -4,6 +4,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import org.meshtastic.aether.midi.MidiChoice
 import org.meshtastic.aether.theme.PaletteChoice
 import org.meshtastic.aether.update.UpdateTrack
 
@@ -79,7 +80,28 @@ internal class Settings(private val store: KeyValueStore) {
         get() = UpdateTrack.entries.firstOrNull { it.name == store.get(KEY_UPDATE_TRACK) }
         set(value) = if (value == null) store.remove(KEY_UPDATE_TRACK) else store.put(KEY_UPDATE_TRACK, value.name)
 
+    /** The MIDI choices; a saved value out of range reads as the nearest valid one. */
+    var midi: MidiChoice
+        get() = MidiChoice(
+            output = store.get(KEY_MIDI_OUTPUT)?.takeIf { it.isNotBlank() },
+            playAlongside = store.get(KEY_MIDI_ALONGSIDE) == "1",
+            releaseSeconds = store.get(KEY_MIDI_RELEASE)?.toDoubleOrNull()?.takeIf { it in MidiChoice.RELEASES }
+                ?: MidiChoice.DEFAULT_RELEASE,
+            latencyMillis = (store.get(KEY_MIDI_LATENCY)?.toIntOrNull() ?: 0)
+                .coerceIn(MidiChoice.MIN_LATENCY, MidiChoice.MAX_LATENCY),
+        )
+        set(value) {
+            if (value.output == null) store.remove(KEY_MIDI_OUTPUT) else store.put(KEY_MIDI_OUTPUT, value.output)
+            store.put(KEY_MIDI_ALONGSIDE, if (value.playAlongside) "1" else "0")
+            store.put(KEY_MIDI_RELEASE, value.releaseSeconds.toString())
+            store.put(KEY_MIDI_LATENCY, value.latencyMillis.toString())
+        }
+
     private companion object {
+        const val KEY_MIDI_OUTPUT = "midi_output"
+        const val KEY_MIDI_ALONGSIDE = "midi_alongside"
+        const val KEY_MIDI_RELEASE = "midi_release"
+        const val KEY_MIDI_LATENCY = "midi_latency"
         const val KEY_UPDATE_TRACK = "update_track"
         const val KEY_HEADPHONES = "headphones"
         const val KEY_LINK = "link"

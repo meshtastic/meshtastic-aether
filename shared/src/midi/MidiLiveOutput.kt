@@ -8,6 +8,7 @@ import org.meshtastic.aether.music.NoteSink
 /** Places a note 100 ms ahead of its frame and bends its channel 50 ms ahead: the live output's horizon. */
 private const val LIVE_AHEAD_SECONDS = 0.1
 private const val TAG = "midi"
+private const val NANOS_PER_MILLI = 1_000_000L
 
 /**
  * The composer's notes on a MIDI [output], timed to sound when the audio sink plays their frame. The composer can
@@ -26,18 +27,33 @@ class MidiLiveOutput(
     private val clock = MidiClock(sampleRate)
     private val behind = (config.dispatchAheadSeconds * sampleRate).toLong()
     private var drained = Long.MIN_VALUE
+    private var silent = false
+
+    /** The viewer's volume, 0..1, scaling every velocity; at 0 every note ends and none is sent until it rises. */
+    var gain = 1f
 
     val stats: MidiStats get() = mapper.stats
     val name: String get() = output.name
 
-    override fun schedule(output: ComposerOutput) = mapper.schedule(output)
+    override fun schedule(output: ComposerOutput) {
+        if (gain > 0f) mapper.schedule(output) else mapper.scheduleTextures(output)
+    }
 
     /** Anchors the clock on [played] and sends every message due up to the horizon behind [renderedTo]. */
     fun pump(renderedTo: Long, played: FrameTime?) {
         played?.let(clock::anchor)
         if (!clock.anchored) return
         drained = renderedTo - behind
-        mapper.drain(drained) { e -> output.send(e.data, clock.nanosAt(e.frame) + latencyNanos) }
+        val send = { e: MidiEvent -> output.send(e.data, clock.nanosAt(e.frame) + latencyNanos) }
+        if (gain <= 0f) {
+            if (!silent) mapper.close(drained, send)
+            silent = true
+            mapper.trimTextures(drained)
+            return
+        }
+        silent = false
+        mapper.gain = gain
+        mapper.drain(drained, send)
     }
 
     /** Drops what is queued, ends every note the port was sent, centres the bends and releases the port. */
@@ -48,13 +64,17 @@ class MidiLiveOutput(
     }
 }
 
-/** Opens the output [name] names for live playing at [sampleRate]; null, with the outputs there are logged, if none. */
-fun openLiveOutput(name: String, sampleRate: Int): MidiLiveOutput? {
+/**
+ * Opens the output [choice] names for live playing at [sampleRate], with its release allowance and latency; null, with
+ * the outputs there are logged, if none opens.
+ */
+fun openLiveOutput(name: String, sampleRate: Int, choice: MidiChoice = MidiChoice()): MidiLiveOutput? {
     val output = openMidiOutput(name)
     if (output == null) {
         Log.w(TAG, "no MIDI output matches \"$name\"; outputs: ${midiOutputNames().joinToString()}")
         return null
     }
     Log.i(TAG, "playing to ${output.name}")
-    return MidiLiveOutput(output, sampleRate)
+    val config = MidiConfig(dispatchAheadSeconds = LIVE_AHEAD_SECONDS, releaseAllowanceSeconds = choice.releaseSeconds)
+    return MidiLiveOutput(output, sampleRate, config, choice.latencyMillis * NANOS_PER_MILLI)
 }
