@@ -81,9 +81,9 @@ internal fun CursorAutoHide(input: SceneInput) {
 }
 
 /**
- * Keys on the scene: any key counts as input, Back closes the HUD, and the rest go through [perform]. With the HUD open,
- * Up and Down first move [focus] to a control in that direction, so the update panel above the toolbar is reachable;
- * with none there they change the volume as usual.
+ * Keys on the scene: any key counts as input, Back closes the HUD, and the rest go through [perform]. With the HUD
+ * open, Up and Down first move [focus] to a control in that direction, so the update panel above the toolbar is
+ * reachable; with none there they change the volume as usual.
  */
 internal fun Modifier.sceneKeys(
     controls: Controls,
