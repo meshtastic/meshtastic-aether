@@ -23,6 +23,7 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isSelected
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performTextInput
@@ -184,6 +185,16 @@ class ConnectScreenUiTest {
         waitForIdle()
         assertTrue(pending.countdown.cancelled)
         onNodeWithText("Connect now").assertDoesNotExist()
+    }
+
+    // Regression: a field in error told a screen reader only Material's generic "Invalid input", while the real reason
+    // was a separate supporting-text node.
+    @Test
+    fun `a blank host names its own error to a screen reader`() = runComposeUiTest {
+        show()
+        onNode(hasSetTextAction() and hasText("Node host")).performTextClearance()
+        waitForIdle()
+        onNode(hasSetTextAction() and SemanticsMatcher.expectValue(SemanticsProperties.Error, HOST_ERROR)).assertExists()
     }
 
     @Test

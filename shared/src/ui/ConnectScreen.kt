@@ -37,8 +37,13 @@ internal class PendingConnect(val link: LinkChoice, val countdown: Countdown) {
     val totalSeconds: Int = countdown.secondsLeft
 
     /** The banner line for [seconds] left. */
-    fun text(seconds: Int): String =
-        if (link == LinkChoice.Demo) "Starting the demo in $seconds s" else "Connecting to $label in $seconds s"
+    fun text(seconds: Int): String = line("$seconds s")
+
+    /** [text] for a screen reader, with the unit spelled out. */
+    fun spoken(seconds: Int): String = line(if (seconds == 1) "1 second" else "$seconds seconds")
+
+    private fun line(time: String): String =
+        if (link == LinkChoice.Demo) "Starting the demo in $time" else "Connecting to $label in $time"
 }
 
 /** A short name for a link, for the countdown banner. */

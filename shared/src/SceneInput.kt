@@ -16,6 +16,8 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.ui.focus.FocusManager
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -25,6 +27,14 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import kotlinx.coroutines.delay
 import org.meshtastic.aether.ui.Controls
 import org.meshtastic.aether.ui.KeyAction
@@ -70,11 +80,16 @@ internal fun CursorAutoHide(input: SceneInput) {
     DisposableEffect(Unit) { onDispose { input.cursorVisible = true } }
 }
 
-/** Keys on the scene: any key counts as input, Back closes the HUD, and the rest go through [perform]. */
+/**
+ * Keys on the scene: any key counts as input, Back closes the HUD, and the rest go through [perform]. With the HUD
+ * open, Up and Down first move [focus] to a control in that direction, so the update panel above the toolbar is
+ * reachable; with none there they change the volume as usual.
+ */
 internal fun Modifier.sceneKeys(
     controls: Controls,
     input: SceneInput,
     perform: State<(KeyAction) -> Boolean>,
+    focus: FocusManager,
 ): Modifier = this
     .onPreviewKeyEvent { event ->
         input.lastInput = nowMillis()
@@ -86,6 +101,12 @@ internal fun Modifier.sceneKeys(
         val action = keyActionFor(event.key) ?: return@onKeyEvent false
         val wanted = if (action.repeats) KeyEventType.KeyDown else KeyEventType.KeyUp
         if (event.type != wanted) return@onKeyEvent false
+        val direction = when (action) {
+            KeyAction.VolumeUp -> FocusDirection.Up
+            KeyAction.VolumeDown -> FocusDirection.Down
+            else -> null
+        }
+        if (controls.overlayOpen && direction != null && focus.moveFocus(direction)) return@onKeyEvent true
         perform.value(action)
     }
 
@@ -104,6 +125,24 @@ internal fun Modifier.scenePointer(controls: Controls, input: SceneInput): Modif
         }
     }
     .pointerInput(Unit) { detectTapGestures { controls.overlayOpen = !controls.overlayOpen } }
+
+/**
+ * The scene as a screen reader sees it: a button whose click shows or hides the HUD, the same as a tap, and whose
+ * state is the link [status], announced politely when it changes. It goes on the scene drawing, not on the HUD's
+ * parent, so the HUD's controls stay separate nodes.
+ */
+internal fun Modifier.sceneSemantics(controls: Controls, status: String?): Modifier = semantics {
+    role = Role.Button
+    contentDescription = SCENE_LABEL
+    if (status != null) stateDescription = status
+    liveRegion = LiveRegionMode.Polite
+    onClick(label = if (controls.overlayOpen) "Hide controls" else "Show controls") {
+        controls.overlayOpen = !controls.overlayOpen
+        true
+    }
+}
+
+internal const val SCENE_LABEL = "Mesh scene"
 
 /**
  * Whether a HUD control is in use: the auto-hide timer waits while one is focused or pressed, and while a screen

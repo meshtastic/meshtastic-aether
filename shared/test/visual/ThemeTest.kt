@@ -1,6 +1,9 @@
 package org.meshtastic.aether.visual
 
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.compositeOver
+import org.meshtastic.aether.HINT_ALPHA
+import org.meshtastic.aether.STATUS_ALPHA
 import org.meshtastic.aether.theme.PaletteChoice
 import org.meshtastic.aether.theme.ambientColorScheme
 import kotlin.math.abs
@@ -74,6 +77,21 @@ class ThemeTest {
             for (bg in listOf(p.backgroundTop, p.backgroundBottom)) {
                 assertTrue(contrastRatio(p.text.toRgb(), bg.toRgb()) >= 4.5, "$c text")
                 assertTrue(contrastRatio(p.anchor.toRgb(), bg.toRgb()) >= 4.5, "$c anchor")
+            }
+        }
+    }
+
+    // Regression: the controls hint drew palette text at half alpha, 3.96:1 on OLED night's black, under the 4.5:1 of
+    // design standards 9.
+    @Test
+    fun `the scene status line and hint keep text contrast at their alpha on every background`() {
+        for (c in PaletteChoice.entries) {
+            val p = c.palette
+            for (bg in listOf(p.backgroundTop, p.backgroundBottom)) {
+                for (alpha in listOf(STATUS_ALPHA, HINT_ALPHA)) {
+                    val text = p.text.copy(alpha = alpha).compositeOver(bg)
+                    assertTrue(contrastRatio(text.toRgb(), bg.toRgb()) >= 4.5, "$c text at $alpha")
+                }
             }
         }
     }

@@ -30,7 +30,9 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.pointer.PointerIcon
 import androidx.compose.ui.input.pointer.pointerHoverIcon
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.unit.dp
 import androidx.navigationevent.NavigationEventInfo
 import androidx.navigationevent.compose.NavigationBackHandler
@@ -61,8 +63,9 @@ private const val SAVE_DEBOUNCE_MS = 500L
 private const val HINT_SHOW_MS = 8_000L
 private const val STATUS_TICK_MS = 1_000L
 private val StatusShift = 12.dp
-private const val STATUS_ALPHA = 0.6f
-private const val HINT_ALPHA = 0.5f
+/** The status line's and the hint's alpha over the scene; text at either must still reach 4.5:1 on every palette. */
+internal const val STATUS_ALPHA = 0.6f
+internal const val HINT_ALPHA = 0.6f
 
 /**
  * The [running] session's window: the scene, its keys and pointer, and the HUD; [onStop] ends the session and returns
@@ -112,10 +115,11 @@ internal fun Running(
             .pointerHoverIcon(cursorIcon)
             .focusRequester(focus)
             .focusable()
-            .sceneKeys(controls, input, perform)
+            .sceneKeys(controls, input, perform, LocalFocusManager.current)
             .scenePointer(controls, input),
     ) {
-        AmbientScene(engine, Modifier.fillMaxSize())
+        val status = statusLineText(engine.status.link, engine.status.error)
+        AmbientScene(engine, Modifier.fillMaxSize().sceneSemantics(controls, status))
         StatusLine(engine.status.link, engine.status.error, Modifier.align(Alignment.TopCenter))
         ControlsHint(platform.hasKeyboard, platform.isTelevision, Modifier.align(Alignment.BottomCenter))
         if (controls.overlayOpen) {
@@ -244,8 +248,10 @@ private fun StatusLine(link: LinkState, error: String?, modifier: Modifier = Mod
     if (alpha > 0f) {
         Text(
             shown.text,
+            // The scene node carries this text for a screen reader, which would otherwise read it twice.
             modifier = modifier.windowInsetsPadding(WindowInsets.safeDrawing)
-                .padding(top = ScreenGutter + StatusShift * statusLineShiftSteps(elapsed)),
+                .padding(top = ScreenGutter + StatusShift * statusLineShiftSteps(elapsed))
+                .clearAndSetSemantics {},
             style = MaterialTheme.typography.bodyLarge,
             color = LocalAmbientPalette.current.text.copy(alpha = alpha),
         )

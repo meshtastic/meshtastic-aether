@@ -13,6 +13,8 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.error
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -66,7 +68,7 @@ private fun NetworkFields(form: ConnectForm, sideBySide: Boolean, onEdit: () -> 
                 onEdit()
                 form.host = it
             },
-            m,
+            m.errorSemantics(hostError),
             label = { Text("Node host") },
             singleLine = true,
             isError = hostError != null,
@@ -81,7 +83,7 @@ private fun NetworkFields(form: ConnectForm, sideBySide: Boolean, onEdit: () -> 
                 onEdit()
                 form.port = it.filter(Char::isDigit)
             },
-            m,
+            m.errorSemantics(portError),
             label = { Text("Port") },
             singleLine = true,
             isError = portError != null,
@@ -112,7 +114,7 @@ private fun WebSocketField(form: ConnectForm, onEdit: () -> Unit, submit: () -> 
             onEdit()
             form.ws = it
         },
-        Modifier.fillMaxWidth(),
+        Modifier.fillMaxWidth().errorSemantics(wsError),
         label = { Text("WebSocket URL") },
         singleLine = true,
         isError = wsError != null,
@@ -121,6 +123,10 @@ private fun WebSocketField(form: ConnectForm, onEdit: () -> Unit, submit: () -> 
         keyboardActions = KeyboardActions(onGo = { submit() }),
     )
 }
+
+/** Names a field's own error to a screen reader; Material only marks a field in error with a generic message. */
+private fun Modifier.errorSemantics(message: String?): Modifier =
+    if (message == null) this else semantics { error(message) }
 
 /** Connect over the pane's link, enabled once the fields describe one. */
 @Composable

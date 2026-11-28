@@ -22,6 +22,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
@@ -52,11 +53,12 @@ internal fun CountdownBanner(pending: PendingConnect, onNow: (() -> Unit)?, modi
                 text,
                 style = MaterialTheme.typography.bodyLarge,
                 modifier = Modifier.semantics {
-                    contentDescription = text.replace(" s", " seconds")
+                    contentDescription = pending.spoken(seconds)
                     if (announce) liveRegion = LiveRegionMode.Polite
                 },
             )
-            LinearWavyProgressIndicator({ progress }, Modifier.fillMaxWidth())
+            // The line above says the time left; the bar's per-second progress would only repeat it.
+            LinearWavyProgressIndicator({ progress }, Modifier.fillMaxWidth().clearAndSetSemantics {})
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (onNow != null) FilledTonalButton(onNow, Modifier.heightIn(min = MinTouch)) { Text("Connect now") }
                 TextButton(pending.countdown::cancel, Modifier.heightIn(min = MinTouch)) { Text("Cancel") }
