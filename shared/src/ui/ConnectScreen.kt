@@ -5,7 +5,6 @@ package org.meshtastic.aether.ui
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -14,9 +13,7 @@ import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.FocusRequester
 import org.meshtastic.aether.ble.bleSupported
 import org.meshtastic.aether.getPlatform
 import org.meshtastic.aether.serial.serialSupported
@@ -31,7 +28,6 @@ internal fun defaultWebSocketUrl(secure: Boolean): String =
     if (secure) "wss://meshtastic.local/api/v1/ws" else "ws://meshtastic.local/api/v1/ws"
 
 private const val DEFAULT_HOST = "meshtastic.local"
-private const val FOCUS_TRIES = 10
 
 /** A pending automatic reconnect: shown as a banner with a cancel button while [countdown] runs. */
 internal class PendingConnect(val link: LinkChoice, val countdown: Countdown) {
@@ -176,8 +172,8 @@ internal fun ConnectScreen(
     target: ConnectTarget = remember { ConnectTarget() },
     onKind: (LinkKind) -> Unit = {},
 ) {
-    val chooserFocus = remember { FocusRequester() }
-    FocusOnStart(chooserFocus, target.focusChooser)
+    // Once per visit: a layout change recomposes the chooser and must not pull focus out of a field being typed in.
+    var focusChooser by remember { mutableStateOf(target.focusChooser) }
     val kinds = availableKinds(target.supportsTcp, target.bluetooth, target.serial)
     val form = rememberSaveable(saver = ConnectForm.Saver) { connectForm(context, kinds, target.secureWebSocket) }
     val selected = if (form.kind in kinds) form.kind else kinds.first()
@@ -206,25 +202,10 @@ internal fun ConnectScreen(
                 cancelPending()
                 form.kind = it
                 onKind(it)
-            }, selectedFocus = chooserFocus)
+            }, onStartFocus = if (focusChooser) { { focusChooser = false } } else null)
         },
         fields = fields,
         primary = if (selected.picksFromList) null else { { PrimaryButton(selected, link) { choose(selected, it) } } },
     )
     ConnectLayout(slots, modifier)
-}
-
-/**
- * Focuses [requester] once at start when [enabled]. The chooser sits under BoxWithConstraints, which composes during
- * layout, so the first frames may not have it yet.
- */
-@Composable
-private fun FocusOnStart(requester: FocusRequester, enabled: Boolean) {
-    LaunchedEffect(Unit) {
-        if (!enabled) return@LaunchedEffect
-        repeat(FOCUS_TRIES) {
-            if (runCatching { requester.requestFocus() }.getOrDefault(false)) return@LaunchedEffect
-            withFrameNanos { }
-        }
-    }
 }

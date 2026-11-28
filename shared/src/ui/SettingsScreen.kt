@@ -101,7 +101,7 @@ internal fun SettingsScreen(
     focusBack: Boolean = false,
 ) {
     val backFocus = remember { FocusRequester() }
-    LaunchedEffect(Unit) { if (focusBack) runCatching { backFocus.requestFocus() } }
+    LaunchedEffect(Unit) { if (focusBack) backFocus.requestFocus() }
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     Column(modifier.fillMaxSize().nestedScroll(scrollBehavior.nestedScrollConnection)) {
         LargeFlexibleTopAppBar(
