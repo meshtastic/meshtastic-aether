@@ -15,6 +15,8 @@
     <uses-feature android:name="android.hardware.touchscreen" android:required="false"/>
     <uses-feature android:name="android.software.leanback" android:required="false"/>
     <uses-feature android:name="android.hardware.usb.host" android:required="false"/>
+    <!-- The spatial view on Android XR headsets; phones and TVs install as before. -->
+    <uses-feature android:name="android.software.xr.api.spatial" android:required="false"/>
 
     <application
             android:allowBackup="false"
@@ -25,6 +27,10 @@
             android:supportsRtl="true"
             android:usesCleartextTraffic="true"
             android:theme="@style/Theme.Aether">
+        <!-- Open as a panel in Home Space; the spatial view asks for Full Space itself. -->
+        <property
+                android:name="android.window.PROPERTY_XR_ACTIVITY_START_MODE"
+                android:value="XR_ACTIVITY_START_MODE_HOME_SPACE"/>
         <activity
                 android:exported="true"
                 android:configChanges="orientation|screenSize|keyboardHidden|smallestScreenSize|screenLayout|uiMode"

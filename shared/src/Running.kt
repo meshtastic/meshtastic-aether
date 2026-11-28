@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -60,10 +61,12 @@ import org.meshtastic.aether.ui.controlsHint
 import org.meshtastic.aether.ui.fadeIn
 import org.meshtastic.aether.ui.nowMillis
 import org.meshtastic.aether.ui.statusLineShiftSteps
+import org.meshtastic.aether.midi.MidiChoice
 import org.meshtastic.aether.midi.openLiveOutput
 import org.meshtastic.aether.ui.statusLineText
 import org.meshtastic.aether.ui.statusLineVisible
 import org.meshtastic.aether.visual.AmbientScene
+import org.meshtastic.aether.visual.SpatialViews
 
 private const val FADE_STEP_MS = 33L
 private const val SAVE_DEBOUNCE_MS = 500L
@@ -85,7 +88,11 @@ internal fun Running(
 ) {
     val platform = env.platform
     val haptics = LocalHapticFeedback.current
-    val engine = rememberEngine(session, platform, env.midi)
+    val engine = rememberEngine(session, platform, env.midiChoice())
+    val palette = LocalAmbientPalette.current
+    // A spatial view shows this session only: leaving it (Disconnect, Back) closes the view.
+    val spatial = remember(engine) { SpatialViews() }
+    DisposableEffect(spatial) { onDispose { spatial.closeAll() } }
     val controls = rememberControls(engine, env.settings)
     val disconnect = {
         haptics.performHapticFeedback(HapticFeedbackType.Confirm)
@@ -125,7 +132,14 @@ internal fun Running(
             StatusOverlay(
                 status = engine.status,
                 controls = controls,
-                host = HudHost(look.palette, look::choose, disconnect, host.onToggleFullscreen, appUpdater),
+                host = HudHost(
+                    look.palette,
+                    look::choose,
+                    disconnect,
+                    host.onToggleFullscreen,
+                    appUpdater,
+                    host.onEnterSpatial?.let { enter -> { enter(spatial.open(engine, palette)) } },
+                ),
                 input = HudInput(platform.hasKeyboard, platform.isTelevision),
                 modifier = Modifier.align(Alignment.TopStart),
             )
@@ -135,7 +149,7 @@ internal fun Running(
 
 /** The engine for [session], playing from the moment it exists; its link opens once it runs and closes after. */
 @Composable
-private fun rememberEngine(session: Session, platform: Platform, midiName: String?): AmbientEngine {
+private fun rememberEngine(session: Session, platform: Platform, midi: MidiChoice): AmbientEngine {
     val engine = remember(session) {
         val sink = createAudioSink()
         AmbientEngine(
@@ -146,7 +160,8 @@ private fun rememberEngine(session: Session, platform: Platform, midiName: Strin
             EngineOptions(
                 pinFormFull = session.demo,
                 failureText = session.failureText,
-                midi = midiName?.let { name -> { rate -> openLiveOutput(name, rate) } },
+                midi = midi.output?.let { name -> { rate -> openLiveOutput(name, rate, midi) } },
+                midiMutesBuiltIn = !midi.playAlongside,
             ),
         ).also { platform.resumeAudio() }
     }

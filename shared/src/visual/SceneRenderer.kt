@@ -42,21 +42,21 @@ private const val HAZE_SPREAD = 1.4f
 
 /** The anchor ring's radius as a fraction of the scene radius, breathing from 0.9 to 1.1 of it. */
 private const val ANCHOR_RING = 0.035f
-private const val ANCHOR_RING_REST = 0.9f
-private const val ANCHOR_RING_BREATH = 0.2f
+internal const val ANCHOR_RING_REST = 0.9f
+internal const val ANCHOR_RING_BREATH = 0.2f
 private const val ANCHOR_FILL_SPREAD = 1.6f
 
 // Orb sizes as fractions of the scene radius; the halo sprite fades to nothing over three halo radii.
-private const val HALO_RADIUS = 0.04f
-private const val HALO_SPRITE_SPREAD = 3f
-private const val CORE_RADIUS = 0.008f
-private const val CORE_REST = 0.9f
-private const val CORE_GLOW_GROWTH = 0.6f
+internal const val HALO_RADIUS = 0.04f
+internal const val HALO_SPRITE_SPREAD = 3f
+internal const val CORE_RADIUS = 0.008f
+internal const val CORE_REST = 0.9f
+internal const val CORE_GLOW_GROWTH = 0.6f
 
 /** A pulse draws a trail this much of its path long, fainter once it arrives. */
-private const val PULSE_TAIL = 0.25f
-private const val PULSE_ALPHA = 0.85f
-private const val ARRIVED_PULSE_ALPHA = 0.4f
+internal const val PULSE_TAIL = 0.25f
+internal const val PULSE_ALPHA = 0.85f
+internal const val ARRIVED_PULSE_ALPHA = 0.4f
 
 private const val RIPPLE_ALPHA = 0.8f
 private const val ECHO_RIPPLE_ALPHA = 0.35f
@@ -280,7 +280,7 @@ private fun ditherTile(): ImageBitmap {
 }
 
 /** [c] pulled toward a cool blue by [mix] 0..1. */
-private fun cool(c: Color, mix: Float): Color =
+internal fun cool(c: Color, mix: Float): Color =
     if (mix <= 0f) {
         c
     } else {

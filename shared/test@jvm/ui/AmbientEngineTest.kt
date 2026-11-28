@@ -93,6 +93,7 @@ class AmbientEngineTest {
             timing = EngineTiming(400, now = { base + currentTime }, composerContext = StandardTestDispatcher(testScheduler)),
             EngineOptions(midi = { MidiLiveOutput(port, it) }),
         )
+        e.volume = 1f
         val job = launch { e.run() }
         val block = FloatArray(2 * 4_800)
         val driver = launch {
@@ -128,6 +129,40 @@ class AmbientEngineTest {
         composer.runAll()
         job.join()
         assertTrue(port.closed)
+    }
+
+    /** The loudest sample the engine renders over 20 s at full volume, with [opener] as its MIDI output. */
+    private fun TestScope.peakWith(opener: ((Int) -> MidiLiveOutput?)?): Float {
+        val sink = FakeSink()
+        val e = AmbientEngine(
+            FlowSource(flow { emit(MeshEvent.Link(LinkState.Simulated, base)); awaitCancellation() }), sink, seed = 11L,
+            timing = EngineTiming(400, now = { base + currentTime }, composerContext = StandardTestDispatcher(testScheduler)),
+            EngineOptions(midi = opener),
+        )
+        e.volume = 1f
+        val job = launch { e.run() }
+        val block = FloatArray(2 * 4_800)
+        var peak = 0f
+        val driver = launch {
+            while (true) {
+                delay(100)
+                sink.renderer?.render(block, 4_800)
+                sink.frame += 4_800
+                for (x in block) peak = maxOf(peak, kotlin.math.abs(x))
+            }
+        }
+        advanceTimeBy(20_000)
+        driver.cancel()
+        job.cancel()
+        return peak
+    }
+
+    // With MIDI on, the built-in synth is muted only while an output really plays; a port that fails to open must
+    // leave the person hearing the built-in synth rather than silence.
+    @Test
+    fun `the built-in synth falls silent only while a midi output is open`() = runTest {
+        assertEquals(0f, peakWith { MidiLiveOutput(FakeMidiOutput(), it) })
+        assertTrue(peakWith { null } > 0.01f, "the built-in synth was silent with no output open")
     }
 
     // Regression: the engine used to leave the scene always "linked", so a lost link never desaturated the field.

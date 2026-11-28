@@ -2,7 +2,9 @@ package org.meshtastic.aether.midi
 
 import org.meshtastic.aether.audio.FrameTime
 import org.meshtastic.aether.music.ComposerOutput
+import org.meshtastic.aether.music.ControlEvent
 import org.meshtastic.aether.music.NoteEvent
+import org.meshtastic.aether.music.Texture
 import org.meshtastic.aether.music.Voice
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
@@ -68,6 +70,68 @@ class MidiLiveOutputTest {
         assertEquals(0, live.stats.shifted)
         assertEquals(0, live.stats.late)
         assertTrue(live.stats.notes > 1000)
+    }
+
+    // The viewer's mute must silence the external synth too: a held pad would ring on, and new notes would keep
+    // coming, with the built-in synth muted.
+    @Test
+    fun `muting ends every sounding note and sends none until unmuted at a scaled velocity`() {
+        val port = FakeMidiOutput()
+        val live = MidiLiveOutput(port, SR)
+        var rendered = 0L
+        var k = 0
+        fun tick(gain: Float) {
+            live.gain = gain
+            val now = rendered.toDouble() / SR
+            live.schedule(ComposerOutput(listOf(bell(now + 0.05, 261.6255653005986 * (1 + k % 4 * 0.25), 3.0)), emptyList()))
+            live.pump(rendered, FrameTime(rendered - BUFFER, playsAt(rendered - BUFFER)))
+            port.now = playsAt(rendered - BUFFER)
+            port.deliver()
+            rendered += SR / 10
+            k++
+        }
+        repeat(30) { tick(1f) }
+        assertTrue(port.sounding.isNotEmpty(), "nothing was sounding before the mute")
+        repeat(50) { tick(0f) }
+        assertTrue(port.sounding.isEmpty(), "still sounding while muted: ${port.sounding}")
+        val onsBefore = port.sent.count { (it.second[0].toInt() and 0xF0) == 0x90 }
+        repeat(20) { tick(0f) }
+        assertEquals(onsBefore, port.sent.count { (it.second[0].toInt() and 0xF0) == 0x90 }, "a note went out while muted")
+        repeat(30) { tick(0.5f) }
+        val velocities = port.sent.filter { (it.second[0].toInt() and 0xF0) == 0x90 }.drop(onsBefore).map { it.second[2].toInt() }
+        assertTrue(velocities.isNotEmpty(), "nothing played after unmuting")
+        assertTrue(velocities.all { it == 32 }, "velocities after unmuting at half volume: $velocities")
+    }
+
+    // A texture the composer sent during a mute sets the layer level the first notes after unmuting play at; dropped
+    // with the muted notes, they would play at the level from before the mute.
+    @Test
+    fun `a texture sent while muted sets the velocity after unmuting`() {
+        fun texture(at: Double, bell: Float) = ControlEvent.SetTexture(
+            (at * SR).toLong(), Texture(130.8, 0.5f, 0.5f, 0.3f, 0.2f, 0.2f, 0.1f, mapOf(Voice.Bell to bell)),
+        )
+        val port = FakeMidiOutput()
+        val live = MidiLiveOutput(port, SR)
+        var rendered = 0L
+        fun tick(gain: Float, controls: List<ControlEvent> = emptyList()) {
+            live.gain = gain
+            val now = rendered.toDouble() / SR
+            live.schedule(ComposerOutput(listOf(bell(now + 0.05, 261.6255653005986, 0.2)), controls))
+            live.pump(rendered, FrameTime(rendered - BUFFER, playsAt(rendered - BUFFER)))
+            port.now = playsAt(rendered - BUFFER)
+            port.deliver()
+            rendered += SR / 10
+        }
+        tick(1f, listOf(texture(0.0, 1f)))
+        repeat(10) { tick(1f) }
+        repeat(5) { tick(0f) }
+        tick(0f, listOf(texture(rendered.toDouble() / SR, 0.5f)))
+        repeat(5) { tick(0f) }
+        val before = port.sent.count { (it.second[0].toInt() and 0xF0) == 0x90 }
+        repeat(10) { tick(1f) }
+        val after = port.sent.filter { (it.second[0].toInt() and 0xF0) == 0x90 }.drop(before).map { it.second[2].toInt() }
+        assertTrue(after.isNotEmpty(), "nothing played after unmuting")
+        assertTrue(after.all { it == 32 }, "velocities after unmuting: $after")
     }
 
     // A note-on the port's thread has not yet sent when the engine stops would go out after the close's note-offs and

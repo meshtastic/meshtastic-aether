@@ -64,6 +64,9 @@ internal fun HudToolbar(controls: Controls, host: HudHost, input: HudInput, stac
         if (host.onToggleFullscreen != null) {
             HudButton("Fullscreen", HudIcons.Fullscreen, tooltips, host.onToggleFullscreen)
         }
+        if (host.onEnterSpatial != null) {
+            HudButton("Spatial view", HudIcons.Spatial, tooltips, host.onEnterSpatial)
+        }
         UpdateButton(host.updater, controls) { onClick -> HudButton("Update", HudIcons.Update, tooltips, onClick) }
         DisconnectButton(controls, host.onDisconnect, tooltips)
     }

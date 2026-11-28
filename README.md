@@ -29,17 +29,17 @@ The HUD over the same mesh, with the Drivers panel listing what the mesh is doin
 
 ![The HUD with the status card, toolbar and Drivers panel](docs/screenshots/hud.jpg)
 
-The connect screen, with the settings cog at the top right, and the settings screen with the update track and the project links:
+The connect screen, with the settings cog at the top right, and Settings on a wide window, its topics beside the one open:
 
 ![The connect screen with its link types and the settings cog](docs/screenshots/connect.jpg)
 
-![The settings screen with the Release and Snapshot tracks and the About links](docs/screenshots/settings.jpg)
+![Settings with the Updates, MIDI output and About topics beside the MIDI output section](docs/screenshots/settings.jpg)
 
 ## Run
 
 ```sh
 ./kotlin run -m desktopApp                      # desktop
-./kotlin run -m desktopApp -- --fullscreen      # also: --demo, --replay, --tcp host[:port], --serial PORT, --ask, --look standard|projector|oled
+./kotlin run -m desktopApp -- --fullscreen      # also: --demo, --replay, --tcp host[:port], --serial PORT, --ask, --look standard|projector|oled, --midi NAME, --midi-list
 ./kotlin run -m webApp                          # browser; tap to start audio
 ./kotlin run -m androidApp                      # device or emulator
 ./kotlin run -m iosApp                          # Mac only
@@ -147,6 +147,17 @@ The icon is its own glyph in the brand palette: a luminous green orb with a tilt
 
 The app is dark-only by design: it is a calm projector and night piece. The design standards ask for light and dark themes and for dynamic color on Android 12+, and both are waived here. The app is called `Aether`, never `Meshtastic Aether`: `Meshtastic` names the network, the project and the mark, and the identifiers (`org.meshtastic.aether`, the `meshtastic-aether` repository and file names, the `MeshtasticAether` log folder and tag) keep the long form.
 
+## MIDI output
+
+The desktop app can play the music to a MIDI output as well, for a software synth or a DAW: pick it under Settings > MIDI output, or name it at launch with `--midi NAME` (the output whose name is or contains NAME; `--midi-list` prints them). Each note keeps its just-intonation pitch: it goes out as the nearest key plus a pitch bend, on an MPE member channel that carries only that offset. The receiver needs MPE on channels 2 to 16 with a bend range of 48 semitones, which Aether sends when it opens the port.
+
+- Play the built-in synth too: off by default, so only the output plays while it is open. An output that fails to open leaves the built-in synth playing.
+- Release: how long a channel rests before Aether retunes it. Match the longest release of the synth's sound.
+- MIDI delay: raise it if the MIDI synth sounds before the built-in one.
+- The viewer's mute ends every MIDI note and sends none until unmuted; the volume scales velocity. Ending the session or quitting ends every note sent.
+
+A software synth needs a virtual port: the IAC Driver in Audio MIDI Setup on macOS, a loopback port such as loopMIDI on Windows, or `snd-virmidi` on Linux (`sudo modprobe snd-virmidi`, then `aconnect` it to the synth). Settings lists the outputs each time it opens. Android, iOS and the web have no MIDI output.
+
 ## Logs
 
 Desktop writes `aether.log` (and stdout) to `$XDG_STATE_HOME/meshtastic-aether/` or `~/.local/state/meshtastic-aether/` on Linux and `~/Library/Logs/MeshtasticAether/` on macOS, and keeps one older generation as `aether.log.1`. Android logs to logcat under `MeshtasticAether`, and web logs to the browser console.
@@ -159,6 +170,7 @@ The log records the session link, link state changes, Bluetooth scan results, fa
 ./kotlin run -m tools -- sparse 1 /tmp/sparse.wav   # silent | sparse | busy, hours, output [seed] [--at <UTC instant>]
 ./kotlin run -m tools -- analyze /tmp/sparse.wav    # per-window peak, RMS, clipping, centroid, LUFS, low band, pulse, rests
 ./kotlin run -m tools -- video 90 /tmp/demo.mp4     # the app's engine and scene rendered offline to H.264 and AAC (needs ffmpeg)
+./kotlin run -m tools -- midi 3600 /tmp/mesh.mid    # the composer's notes as a Standard MIDI File (MPE; --range 2, --layout two, --nodes, --speed, --at)
 ./kotlin run -m blescan -- 15                       # scan for nodes for 15 s, print what is found
 ```
 
@@ -175,7 +187,7 @@ The render tool runs the simulated mesh through the composer and synth offline. 
 
 ## Updates and privacy
 
-Aether only listens: it sends nothing to the mesh. It keeps the saved link, the last link type, the volume, mute, headphone mode and look on the device, and writes a local log. Android and desktop builds from [Releases](https://github.com/meshtastic/meshtastic-aether/releases) check this repository's releases for a newer build shortly after launch and then daily, and download one only when asked. A release build follows releases and a snapshot build follows snapshots until Settings (the cog on the connect screen) picks the other track; Settings also checks on demand. Store installs, iOS, the web build and local builds never check.
+Aether only listens: it sends nothing to the mesh. It keeps the saved link, the last link type, the volume, mute, headphone mode, look and MIDI choices on the device, and writes a local log. MIDI goes only to an output on the same computer. Android and desktop builds from [Releases](https://github.com/meshtastic/meshtastic-aether/releases) check this repository's releases for a newer build shortly after launch and then daily, and download one only when asked. A release build follows releases and a snapshot build follows snapshots until Settings (the cog on the connect screen) picks the other track; Settings also checks on demand. Store installs, iOS, the web build and local builds never check.
 
 ## Verified on
 

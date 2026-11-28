@@ -4,7 +4,7 @@ This project uses the [Kotlin Toolchain](https://kotlin-toolchain.org/) (a dedic
 
 ## Global constraints
 
-- No dependency beyond the meshtastic-sdk, kotlinx-coroutines and JetBrains Compose, plus `androidx.activity` in the Android entry point; anything else is written here on platform APIs, so every audio sink is `expect`/`actual` on platform APIs with no third-party audio library.
+- No dependency beyond the meshtastic-sdk, kotlinx-coroutines and JetBrains Compose (with its Navigation 3 UI and Material 3 adaptive libraries), plus `androidx.activity` and Jetpack XR (`androidx.xr` scenecore, runtime, arcore) in the Android entry point; anything else is written here on platform APIs, so every audio sink is `expect`/`actual` on platform APIs with no third-party audio library.
 - Ported code is MIT, BSD, Apache-2.0 or public domain, with its notice in `NOTICE`. Never port Shadertoy code (non-commercial license), Faust `vital_rev` or `kb_rom_rev1` (GPL-3.0-only).
 - `shared/src` (commonMain) is pure Kotlin and compiles for jvm, android, iosArm64, iosSimulatorArm64 and wasmJs.
 - Time is the audio sample counter (`Long` frames); phases and clocks are `Double` or `Long`, never `Float`.
@@ -43,18 +43,20 @@ This project uses the [Kotlin Toolchain](https://kotlin-toolchain.org/) (a dedic
 - `shared/src/mood`: `MeshMood` folds events into slow, self-normalized signals and the rotation target; `ParamValues` is the immutable result that the composer, scene and overlay read, with a value, unit and driver per parameter and the rotation direction and its strength. Neutral equals the constants it replaced.
 - `shared/src/music`: the pure, deterministic `Composer` (theory, harmony, form, day, weather, ornaments); mesh activity, SNR and channel utilization come from `MeshMood`, not a separate crowd model. It schedules by sample frame.
 - `shared/src/synth`: pure Kotlin DSP; `Synth` renders `NoteEvent`s and `Texture` changes to stereo float blocks.
-- `shared/src/audio`: `AudioSink` plus the block pump; `shared/src@<platform>/audio` holds the per-platform output.
-- `shared/src/ui`: `AmbientEngine` (owns the clock, composer, synth and sink; each tick carries `composer.params()` to the scene and the overlay's Drivers panel; feeds `Coverage` and logs its line), connect screen, controls, the HUD overlay, settings.
-- `shared/src/visual`: scene model and drawing, driven by the engine's events and the sink's playback frame.
+- `shared/src/audio`: `AudioSink` plus the block pump; `shared/src@<platform>/audio` holds the per-platform output. `playbackTimestamp()` pairs the playback frame with the monotonic time it was read, for the MIDI clock.
+- `shared/src/midi`: MIDI output. `MidiMapper` sends each `NoteEvent` as the nearest key plus a pitch bend on an MPE member channel that carries only that offset (bend range 48, or 2 for plain channels): the bend leads the note by 50 ms, a sounding channel is never re-bent, bed re-strikes carry on as the synth's do, and a note that cannot get a channel at its bend falls back to the nearest one, counted. `MidiClock` maps a frame to when the sink plays it; `MidiLiveOutput` drains the mapper 100 ms behind the frame the engine has rendered onto a `MidiOutput`, which on desktop is `javax.sound.midi` with a send thread and a shutdown hook that ends the notes it sent (no output elsewhere yet). `StandardMidiFile` writes the `tools` export.
+- `shared/src/ui`: `AmbientEngine` (owns the clock, composer, synth and sink, and opens the MIDI output `EngineOptions` names when it runs; each tick carries `composer.params()` to the scene and the overlay's Drivers panel; feeds `Coverage` and logs its line), connect screen, controls, the HUD overlay, Settings (a list of topics, each a detail pane).
+- `shared/src/App.kt` and `AppNav.kt`: the screens are a Navigation 3 back stack of `Screen` keys (a `mutableStateListOf`, no saved state) that follows the session, so the scene stands alone while one plays. Settings is a list-detail scene from `adaptive-navigation3`; the strategy and the panes read one `calculatePaneScaffoldDirective(currentWindowAdaptiveInfo())`.
+- `shared/src/visual`: scene model and drawing, driven by the engine's events and the sink's playback frame. `SpatialFrame` is the same cloud for a headset or AR view, which has no `DrawScope`: flat sprite and line arrays in metres around a viewer standing on the anchor (x right, y up, north at -z, floor at y 0), drawn additively. A host offers the view through `HostWindow.onEnterSpatial` and ends it when the `SpatialSource` closes with the session. `webApp/resources/spatial.js` is the WebXR host. `androidApp/src/XrSpatial.kt` is the Android XR host: SceneCore has no additive blend, lines or sprites, so `SpatialMesh` turns the frame into premultiplied fans and ribbons that face the eye, uploaded into one dynamic mesh each frame over a dark environment. It needs spatial API 3 (an API 1 system aborts on the first mesh update), makes its XR session on the first press, and R8 needs `androidApp/r8/extensions-xr-1.5.0.jar` as a library jar or the release build aborts at session creation.
 - `shared/src/log`: `Log` with a file sink on desktop, logcat on Android.
 - `shared/src/update`: `Channel` (`BuildInfo` is generated by `plugins/build-info`), the `update.properties` manifest and the `Updater` contract; `src@updatable` (jvm and android) fetches and verifies, `src@android` installs through `PackageInstaller` (never for an app store install), `src@jvm` swaps the executable jar and restarts (never for an app installed from a deb, dmg or msi, which `jpackage.app-path` marks). iOS, the web and local builds have no updater. `AETHER_UPDATE_MANIFEST` points the check at another manifest for testing.
-- Apps: `desktopApp`, `androidApp`, `iosApp`, `webApp`. Tools: `tools` (offline render, analyze and video), `blescan` (Bluetooth scan check).
+- Apps: `desktopApp`, `androidApp`, `iosApp`, `webApp`. Tools: `tools` (offline render, analyze, video and MIDI export), `blescan` (Bluetooth scan check).
 - `plugins/build-info`: a local Toolchain plugin that generates `BuildInfo` into `shared` from `AETHER_BUILD_LABEL`, `AETHER_BUILD_CODE` and `AETHER_BUILD_CHANNEL`, set together in CI; unset, a build is `dev`, code 0, channel `DEV`.
 - `plugins/detekt`: the Toolchain's detekt plugin, applied through `detekt.module-template.yaml` to the modules with a JVM target (`shared`, `desktopApp`, `tools`, `blescan`). It reads a module's JVM sources, so `src@android`, `src@ios` and `src@wasmJs` go unchecked. `detekt.yml` keeps detekt's defaults except settings that fit a rule to this project: a finding is fixed in code, never baselined or switched off. A `@Suppress` sits only on the one expression it covers, with a comment saying why (two catch-all boundaries today).
 
 The contracts `MeshEvent.kt`, `NoteEvent.kt` and `AudioSink.kt` change only on purpose, with every consumer updated.
 
-Launch flags: `--demo`, `--replay`, `--tcp host[:port]`, `--serial PORT`, `--ask`, `--fullscreen`, `--look standard|projector|oled` (`shared/src/ui/LaunchArgs.kt`); `--ask` shows the connect screen and ignores the saved link and any `--demo`, `--replay`, `--tcp` or `--serial`. Volume, mute, the headphone mode and the look persist in `Settings`; the master fades in over 3 s each session. Android takes the same flags as intent extras (`launchArgsFrom` in `androidApp/src/MainActivity.kt`).
+Launch flags: `--demo`, `--replay`, `--tcp host[:port]`, `--serial PORT`, `--ask`, `--fullscreen`, `--look standard|projector|oled`, `--midi NAME` (`shared/src/ui/LaunchArgs.kt`), and `--midi-list` on desktop (`desktopApp/src/main.kt` prints the outputs and exits); `--ask` shows the connect screen and ignores the saved link and any `--demo`, `--replay`, `--tcp` or `--serial`, and `--midi` names the output in place of the saved one. Volume, mute, the headphone mode, the look and the MIDI choices persist in `Settings`; the master fades in over 3 s each session. Android takes the same flags as intent extras (`launchArgsFrom` in `androidApp/src/MainActivity.kt`).
 
 ## UI rules
 
@@ -81,6 +83,7 @@ Launch flags: `--demo`, `--replay`, `--tcp host[:port]`, `--serial PORT`, `--ask
 ./kotlin run -m desktopApp
 ./kotlin run -m tools -- sparse 1 /tmp/sparse.wav
 ./kotlin run -m tools -- video 90 /tmp/demo.mp4      # needs ffmpeg
+./kotlin run -m tools -- midi 3600 /tmp/mesh.mid
 ./kotlin run -m blescan -- 15
 ```
 
