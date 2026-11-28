@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
 import android.graphics.Color
+import android.hardware.display.DisplayManager
 import android.opengl.GLES11Ext
 import android.opengl.GLES30
 import android.opengl.GLSurfaceView
@@ -111,6 +112,7 @@ internal class PhoneArHost(private val activity: ComponentActivity) : DefaultLif
     }
 
     fun enter(source: SpatialSource) {
+        handler.removeCallbacksAndMessages(null)
         view?.close()
         pending?.takeIf { it !== source }?.close()
         pending = source
@@ -170,6 +172,9 @@ internal class PhoneArHost(private val activity: ComponentActivity) : DefaultLif
             return fail(R.string.ar_failed, "$e")
         } catch (e: SecurityException) {
             return fail(R.string.ar_no_camera, "$e")
+        } catch (e: RuntimeException) {
+            // ARCore's FatalException and the like: report it rather than end the app.
+            return fail(R.string.ar_failed, "$e")
         }
         pending = null
         val opened = PhoneArView(activity, session, source) { closed -> if (view === closed) view = null }
@@ -215,18 +220,40 @@ internal class PhoneArView(
         }
     }
 
+    /** A turn straight to the opposite orientation keeps the surface size, so onSurfaceChanged alone misses it. */
+    private val displays = object : DisplayManager.DisplayListener {
+        override fun onDisplayChanged(displayId: Int) {
+            renderer.displayChanged = true
+        }
+
+        override fun onDisplayAdded(displayId: Int) = Unit
+
+        override fun onDisplayRemoved(displayId: Int) = Unit
+    }
+
     private val back = object : OnBackPressedCallback(true) {
         override fun handleOnBackPressed() = source.close()
     }
 
     /** Starts the camera and puts the view on screen; false, with the source closed, when the camera won't start. */
     fun open(): Boolean {
-        val config = Config(session).apply {
-            planeFindingMode = Config.PlaneFindingMode.HORIZONTAL
-            updateMode = Config.UpdateMode.LATEST_CAMERA_IMAGE
-            focusMode = Config.FocusMode.AUTO
+        try {
+            session.configure(
+                Config(session).apply {
+                    planeFindingMode = Config.PlaneFindingMode.HORIZONTAL
+                    updateMode = Config.UpdateMode.LATEST_CAMERA_IMAGE
+                    focusMode = Config.FocusMode.AUTO
+                },
+            )
+        } catch (e: RuntimeException) {
+            Log.w(TAG, "session not configured: $e")
+            Toast.makeText(activity, R.string.ar_failed, Toast.LENGTH_SHORT).show()
+            closed = true
+            session.close()
+            source.close()
+            onClosed(this)
+            return false
         }
-        session.configure(config)
         surface.preserveEGLContextOnPause = true
         surface.setEGLContextClientVersion(3)
         surface.setEGLConfigChooser(8, 8, 8, 8, 0, 0)
@@ -300,6 +327,7 @@ internal class PhoneArView(
         }
         activity.addContentView(root, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
         activity.onBackPressedDispatcher.addCallback(back)
+        activity.getSystemService(DisplayManager::class.java)?.registerDisplayListener(displays, handler)
         source.whenClosed(::close)
         if (closed) return false
         resume()
@@ -313,6 +341,11 @@ internal class PhoneArView(
     override fun doFrame(frameTimeNanos: Long) {
         if (closed) return
         if (source.closed) return close()
+        if (renderer.cameraLost) {
+            // Another app took the camera: end the view rather than leave a black screen until Back.
+            Toast.makeText(activity, R.string.ar_failed, Toast.LENGTH_SHORT).show()
+            return source.close()
+        }
         renderer.stage(source.frame())
         val tracking = renderer.tracking
         if (tracking != shownTracking) {
@@ -362,6 +395,7 @@ internal class PhoneArView(
         if (closed) return
         closed = true
         handler.removeCallbacksAndMessages(null)
+        activity.getSystemService(DisplayManager::class.java)?.unregisterDisplayListener(displays)
         Choreographer.getInstance().removeFrameCallback(this)
         back.remove()
         if (resumed) surface.onPause()
@@ -385,6 +419,8 @@ internal class PhoneArRenderer(private val session: Session, private val activit
     private var stagedLines = FloatArray(0)
     private var stagedSpriteCount = 0
     private var stagedLineCount = 0
+    private var staged = 0L
+    private var uploaded = -1L
 
     private var spriteData: FloatBuffer = floats(0)
     private var lineData: FloatBuffer = floats(0)
@@ -399,6 +435,15 @@ internal class PhoneArRenderer(private val session: Session, private val activit
         private set
 
     private var anchor: Anchor? = null
+
+    /** Set on a display rotation or surface change; the GL thread hands ARCore the new geometry before its next update. */
+    @Volatile var displayChanged = false
+    private var surfaceWidth = 0
+    private var surfaceHeight = 0
+
+    /** Set on the GL thread when ARCore loses the camera to another app; the UI thread then ends the view. */
+    @Volatile var cameraLost = false
+        private set
 
     /** Set from the UI thread when the view pauses; the next tracked frame places the cloud again. */
     @Volatile var replace = false
@@ -440,6 +485,7 @@ internal class PhoneArRenderer(private val session: Session, private val activit
             System.arraycopy(frame.lines, 0, stagedLines, 0, lineFloats)
             stagedSpriteCount = frame.spriteCount
             stagedLineCount = frame.lineVertexCount
+            staged++
         }
     }
 
@@ -491,16 +537,23 @@ internal class PhoneArRenderer(private val session: Session, private val activit
 
     override fun onSurfaceChanged(gl: GL10?, width: Int, height: Int) {
         GLES30.glViewport(0, 0, width, height)
-        session.setDisplayGeometry(displayRotation(), width, height)
+        surfaceWidth = width
+        surfaceHeight = height
+        displayChanged = true
     }
 
     override fun onDrawFrame(gl: GL10?) {
         GLES30.glClearColor(0f, 0f, 0f, 1f)
         GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT)
+        if (displayChanged) {
+            displayChanged = false
+            session.setDisplayGeometry(displayRotation(), surfaceWidth, surfaceHeight)
+        }
         val frame = try {
             session.update()
         } catch (e: CameraNotAvailableException) {
-            Log.w(TAG, "camera lost: $e")
+            if (!cameraLost) Log.w(TAG, "camera lost: $e")
+            cameraLost = true
             tracking = false
             return
         }
@@ -587,8 +640,11 @@ internal class PhoneArRenderer(private val session: Session, private val activit
         }
     }
 
+    /** Uploads the staged frame, unless the GL thread already has it: it can draw more often than the scene advances. */
     private fun upload() {
         synchronized(lock) {
+            if (staged == uploaded) return
+            uploaded = staged
             spriteCount = stagedSpriteCount
             lineCount = stagedLineCount
             spriteData = fill(spriteData, stagedSprites, spriteCount * SpatialFrame.SPRITE_STRIDE)
