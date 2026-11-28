@@ -18,8 +18,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import org.meshtastic.aether.update.InstallFailure
@@ -84,6 +85,13 @@ internal fun installText(state: InstallState, mode: InstallMode): String? = when
     is InstallState.Failed -> failureText(state.failure) + (state.detail?.let { " ($it)" } ?: "")
 }
 
+/**
+ * What a screen reader hears of [installText]: the same words without the download percent, so the live region speaks
+ * once per stage and the progress bar carries the percent.
+ */
+internal fun installAnnouncement(state: InstallState, mode: InstallMode): String? =
+    if (state is InstallState.Downloading) "Downloading" else installText(state, mode)
+
 /** The toolbar's update button: shown only while a newer build is published. */
 @Composable
 internal fun UpdateButton(updater: Updater?, controls: Controls, label: @Composable (onClick: () -> Unit) -> Unit) {
@@ -120,9 +128,13 @@ internal fun UpdateActions(updater: Updater, latest: PublishedBuild, canBrowse: 
     if (mode == InstallMode.OPEN_PAGE && !canBrowse) return
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         installText(install, mode)?.let {
+            val spoken = installAnnouncement(install, mode) ?: it
             Text(
                 it,
-                Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+                Modifier.clearAndSetSemantics {
+                    contentDescription = spoken
+                    liveRegion = LiveRegionMode.Polite
+                },
                 style = MaterialTheme.typography.bodyLarge,
             )
         }
