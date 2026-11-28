@@ -210,11 +210,18 @@ void main() {
     start(mode, onFrame, onEnd) {
       if (session || starting) return;
       starting = true;
-      begin(mode === 1 ? 'immersive-ar' : 'immersive-vr', onFrame, onEnd)
+      // Runs once however the attempt ends: a session can end while setup is pending and setup then still reject.
+      let ended = false;
+      const finish = () => {
+        if (ended) return;
+        ended = true;
+        onEnd();
+      };
+      begin(mode === 1 ? 'immersive-ar' : 'immersive-vr', onFrame, finish)
         .catch((e) => {
           console.warn('spatial: ' + e);
-          // The session's own end listener clears it and calls onEnd; with no session there is nothing to end.
-          if (session) session.end(); else onEnd();
+          // The session's own end listener clears it and finishes; with no session there is nothing to end.
+          if (session) session.end(); else finish();
         })
         .finally(() => { starting = false; });
     },
