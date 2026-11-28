@@ -142,6 +142,7 @@ class SpatialFrame internal constructor() {
         val ring = scene.anchorBreath.toFloat()
         val radius = SpatialLayout.ANCHOR_RING_METERS * (ANCHOR_RING_REST + ANCHOR_RING_BREATH * ring)
         val alpha = anchorRingAlpha(ring) * coreDim
+        val color = desaturate(scene.anchor?.let { colors.node(it.node) } ?: palette.anchor, sat)
         val step = 2 * PI / SpatialLayout.RING_SEGMENTS
         a[1] = 0f
         b[1] = 0f
@@ -150,7 +151,7 @@ class SpatialFrame internal constructor() {
             a[2] = (radius * sin(i * step)).toFloat()
             b[0] = (radius * cos((i + 1) * step)).toFloat()
             b[2] = (radius * sin((i + 1) * step)).toFloat()
-            line(a, b, palette.anchor, alpha)
+            line(a, b, color, alpha)
         }
     }
 

@@ -74,6 +74,16 @@ class SpatialFrameTest {
     }
 
     @Test
+    fun `the anchor ring takes the connected nodes color as the flat scene does`() {
+        val palette = PaletteChoice.Standard.palette
+        val f = frame(scene())
+        val expected = nodeRgb(self, palette.backgroundTop.toRgb())
+        assertEquals(expected.r / 255f, f.lines[3], 1e-6f)
+        assertEquals(expected.g / 255f, f.lines[4], 1e-6f)
+        assertEquals(expected.b / 255f, f.lines[5], 1e-6f)
+    }
+
+    @Test
     fun `a route that ends at our node sends its pulse to the floor under the viewer`() {
         val s = scene().also { it.onEvent(seen(2, at(1000.0, 0.0)), 0) }
         s.update(0)
