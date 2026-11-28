@@ -12,12 +12,15 @@ kotlinx-coroutines = "1.11.0"
 androidx-xr-scenecore = "1.1.0-alpha02"
 androidx-xr-runtime = "1.1.0-alpha03"
 androidx-xr-arcore = "1.1.0-alpha02"
+# The ARCore SDK that androidx-xr-arcore already ships at runtime; the phone AR view calls it directly for the camera image.
+arcore = "1.56.0"
 
 [libraries]
 androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "androidx-activity-compose" }
 androidx-xr-scenecore = { module = "androidx.xr.scenecore:scenecore", version.ref = "androidx-xr-scenecore" }
 androidx-xr-runtime = { module = "androidx.xr.runtime:runtime", version.ref = "androidx-xr-runtime" }
 androidx-xr-arcore = { module = "androidx.xr.arcore:arcore", version.ref = "androidx-xr-arcore" }
+arcore = { module = "com.google.ar:core", version.ref = "arcore" }
 kotlinx-coroutines-swing ={ module = "org.jetbrains.kotlinx:kotlinx-coroutines-swing", version.ref = "kotlinx-coroutines" }
 
 meshtastic-sdk-core = { module = "org.meshtastic:sdk-core", version.ref = "meshtastic-sdk" }

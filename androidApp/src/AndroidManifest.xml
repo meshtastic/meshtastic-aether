@@ -22,6 +22,10 @@
     <uses-feature android:name="android.hardware.usb.host" android:required="false"/>
     <!-- The spatial view on Android XR headsets; phones and TVs install as before. -->
     <uses-feature android:name="android.software.xr.api.spatial" android:required="false"/>
+    <!-- The phone AR view; asked for on its first press, and TVs and camera-less devices install as before. -->
+    <uses-permission android:name="android.permission.CAMERA"/>
+    <uses-feature android:name="android.hardware.camera" android:required="false"/>
+    <uses-feature android:name="android.hardware.camera.autofocus" android:required="false"/>
 
     <application
             android:allowBackup="false"
@@ -36,6 +40,8 @@
         <property
                 android:name="android.window.PROPERTY_XR_ACTIVITY_START_MODE"
                 android:value="XR_ACTIVITY_START_MODE_HOME_SPACE"/>
+        <!-- AR is one view, not the app: Google Play Services for AR is installed only when the person opens it. -->
+        <meta-data android:name="com.google.ar.core" android:value="optional"/>
         <activity
                 android:exported="true"
                 android:launchMode="singleTop"
