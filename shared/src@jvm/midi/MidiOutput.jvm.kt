@@ -82,7 +82,7 @@ private object OpenDevices {
  * not ended: a JVM exit (a signal, a logout, a window close that exits before the engine closes its output) ends them
  * from a shutdown hook, with sustain off and centred bends, so nothing is left sounding on the receiver.
  */
-private class JvmMidiOutput(
+internal class JvmMidiOutput(
     override val name: String,
     private val device: MidiDevice,
     private val receiver: Receiver,
@@ -119,7 +119,7 @@ private class JvmMidiOutput(
             changed.signal()
         }
         thread.join(CLOSE_JOIN_MILLIS)
-        wire.withLock { dead = true }
+        endSounding()
         try {
             Runtime.getRuntime().removeShutdownHook(exitHook)
         } catch (e: IllegalStateException) {
@@ -140,13 +140,18 @@ private class JvmMidiOutput(
         if (status == NOTE_ON && byte(data, 2) > 0) sounding += id else if (status == NOTE_OFF) sounding -= id
     }
 
-    /** The exit hook: drops what is queued, ends every sounding note, releases sustain and centres every bend. */
+    /** The exit hook: drops what is queued, then ends what is sounding. */
     private fun silence() {
         lock.withLock {
             closing = true
             queue.clear()
             changed.signal()
         }
+        endSounding()
+    }
+
+    /** Ends every note sent and not ended, releases sustain and centres every bend used, then sends nothing more. */
+    private fun endSounding() {
         wire.withLock {
             if (dead) return@withLock
             for (id in sounding) {

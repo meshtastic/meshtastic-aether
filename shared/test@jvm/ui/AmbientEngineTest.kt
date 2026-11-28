@@ -34,6 +34,19 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
+/** Holds work until [runAll]: a composer on it starts only when the test says. */
+private class HeldDispatcher : kotlinx.coroutines.CoroutineDispatcher() {
+    private val held = ArrayList<Runnable>()
+
+    override fun dispatch(context: kotlin.coroutines.CoroutineContext, block: Runnable) {
+        held += block
+    }
+
+    fun runAll() {
+        while (held.isNotEmpty()) held.removeAt(0).run()
+    }
+}
+
 @OptIn(ExperimentalCoroutinesApi::class)
 class AmbientEngineTest {
     private class FakeSink : AudioSink {
@@ -78,7 +91,7 @@ class AmbientEngineTest {
         val e = AmbientEngine(
             FlowSource(flow { emit(MeshEvent.Link(LinkState.Simulated, base)); awaitCancellation() }), sink, seed = 11L,
             timing = EngineTiming(400, now = { base + currentTime }, composerContext = StandardTestDispatcher(testScheduler)),
-            EngineOptions(midi = MidiLiveOutput(port, sink.sampleRate)),
+            EngineOptions(midi = { MidiLiveOutput(port, it) }),
         )
         val job = launch { e.run() }
         val block = FloatArray(2 * 4_800)
@@ -97,6 +110,24 @@ class AmbientEngineTest {
         job.cancelAndJoin()
         assertTrue(port.closed)
         assertTrue(port.sounding.isEmpty(), "still sounding: ${port.sounding}")
+    }
+
+    // An engine stopped before its composer first runs (a session left at once) must still release the port it opened.
+    @Test
+    fun `an engine stopped before its composer starts still closes its midi output`() = runTest {
+        val port = FakeMidiOutput()
+        val composer = HeldDispatcher()
+        val e = AmbientEngine(
+            FlowSource(flow { awaitCancellation() }), FakeSink(), 11L,
+            EngineTiming(400, now = { base + currentTime }, composerContext = composer),
+            EngineOptions(midi = { MidiLiveOutput(port, it) }),
+        )
+        val job = launch { e.run() }
+        runCurrent()
+        job.cancel()
+        composer.runAll()
+        job.join()
+        assertTrue(port.closed)
     }
 
     // Regression: the engine used to leave the scene always "linked", so a lost link never desaturated the field.

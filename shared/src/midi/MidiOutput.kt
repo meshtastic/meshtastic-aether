@@ -10,7 +10,10 @@ interface MidiOutput {
     /** Drops every message not yet sent. */
     fun cancel()
 
-    /** Sends what is due, drops the rest and releases the port. */
+    /**
+     * Sends what is due, drops the rest, ends every note the port sent and has not ended (a note-off the caller
+     * handed over may be among those dropped), and releases the port.
+     */
     fun close()
 }
 

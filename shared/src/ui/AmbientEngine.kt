@@ -33,6 +33,7 @@ import org.meshtastic.aether.mood.ParamValues
 import org.meshtastic.aether.synth.Synth
 import org.meshtastic.aether.visual.SceneModel
 import org.meshtastic.sdk.MeshtasticException
+import kotlin.concurrent.Volatile
 import kotlin.concurrent.atomics.AtomicInt
 import kotlin.concurrent.atomics.AtomicLong
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
@@ -89,14 +90,25 @@ class EngineTiming(
 )
 
 /**
+ * The composer takes a packet on its next tick and quantizes it to a quarter-second grid; so does this estimate of the
+ * frame a packet heard now sounds at, with [rendered] frames rendered and ticks [tickFrames] apart.
+ */
+private fun dueFrame(rendered: Long, tickFrames: Long, sampleRate: Int): Long {
+    val earliest = rendered + tickFrames
+    val grid = (Ornaments.GRID_SECONDS * sampleRate).toLong()
+    return -((-earliest).floorDiv(grid)) * grid
+}
+
+/**
  * What an engine does besides playing: [pinFormFull] holds the long form at its full level (demo mode), [failureText]
- * turns a failed link open into the line the person sees (the raw exception goes to the log only), and [midi] also
- * plays the music to a MIDI output, which the engine closes when it stops.
+ * turns a failed link open into the line the person sees (the raw exception goes to the log only), and [midi] opens a
+ * MIDI output at the sink's rate that also plays the music: the engine opens it when it starts running and closes it
+ * once everything it started has stopped.
  */
 class EngineOptions(
     val pinFormFull: Boolean = false,
     val failureText: (Throwable) -> String = { unreachableText(null) },
-    val midi: MidiLiveOutput? = null,
+    val midi: ((sampleRate: Int) -> MidiLiveOutput?)? = null,
 )
 
 /**
@@ -115,7 +127,9 @@ class AmbientEngine(
     options: EngineOptions = EngineOptions(),
 ) {
     private val failureText = options.failureText
-    private val midi = options.midi
+    private val openMidi = options.midi
+
+    @Volatile private var midi: MidiLiveOutput? = null
     private val tickMillis = timing.tickMillis
     private val now = timing.now
     private val composerContext = timing.composerContext
@@ -185,7 +199,21 @@ class AmbientEngine(
      * Runs until cancelled; [afterStart] opens a live link once the sink and source collector are up. A failure is
      * shown and retried with backoff, and a lost link is re-opened the same way.
      */
-    suspend fun run(afterStart: suspend () -> Unit = {}): Nothing = coroutineScope {
+    suspend fun run(afterStart: suspend () -> Unit = {}): Nothing {
+        val output = openMidi?.invoke(sampleRate)
+        midi = output
+        try {
+            runPlaying(afterStart)
+        } finally {
+            // runPlaying returns only once the composer, the output's one user, has stopped, started or not.
+            output?.let {
+                it.close()
+                Log.i(TAG, "midi ${it.name} closed: ${it.stats.notes} notes, ${it.stats.fallbacks} fallbacks")
+            }
+        }
+    }
+
+    private suspend fun runPlaying(afterStart: suspend () -> Unit): Nothing = coroutineScope {
         Log.i(TAG, "start sampleRate=$sampleRate lookaheadMs=${lookaheadFrames * MILLIS_PER_SECOND / sampleRate}")
         val firstTick = CompletableDeferred<Unit>()
         launch(composerContext) { composerLoop(firstTick) }
@@ -245,7 +273,7 @@ class AmbientEngine(
 
     /** Main thread: the scene sees the event now, the composer on its next tick. */
     private fun onEvent(e: MeshEvent) {
-        scene.onEvent(e, if (e is MeshEvent.PacketHeard) dueFrameFor() else 0L)
+        scene.onEvent(e, if (e is MeshEvent.PacketHeard) dueFrame(rendered.load(), tickFrames, sampleRate) else 0L)
         inbound.trySend(e)
         if (e is MeshEvent.Link) {
             if (e.state != status.link) Log.i(TAG, "link ${status.link} -> ${e.state}")
@@ -253,15 +281,6 @@ class AmbientEngine(
             scene.linked = isLinked(e.state)
             link.value = e.state
         }
-    }
-
-    /**
-     * The composer takes a packet on its next tick and quantizes it to a quarter-second grid; so does this estimate.
-     */
-    private fun dueFrameFor(): Long {
-        val earliest = rendered.load() + tickFrames
-        val grid = (Ornaments.GRID_SECONDS * sampleRate).toLong()
-        return -((-earliest).floorDiv(grid)) * grid
     }
 
     /** Main thread: shows what the composer scheduled. */
@@ -281,18 +300,11 @@ class AmbientEngine(
     }
 
     private suspend fun composerLoop(firstTick: CompletableDeferred<Unit>) {
-        try {
+        tick()
+        firstTick.complete(Unit)
+        while (true) {
+            delay(tickMillis)
             tick()
-            firstTick.complete(Unit)
-            while (true) {
-                delay(tickMillis)
-                tick()
-            }
-        } finally {
-            midi?.let {
-                it.close()
-                Log.i(TAG, "midi ${it.name} closed: ${it.stats.notes} notes, ${it.stats.fallbacks} fallbacks")
-            }
         }
     }
 

@@ -142,7 +142,7 @@ private fun rememberEngine(session: Session, platform: Platform, midiName: Strin
             EngineOptions(
                 pinFormFull = session.demo,
                 failureText = session.failureText,
-                midi = midiName?.let { openLiveOutput(it, sink.sampleRate) },
+                midi = midiName?.let { name -> { rate -> openLiveOutput(name, rate) } },
             ),
         ).also { platform.resumeAudio() }
     }
