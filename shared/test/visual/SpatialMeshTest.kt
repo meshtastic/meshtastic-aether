@@ -55,6 +55,34 @@ class SpatialMeshTest {
         for (k in 1..SpatialMesh.FAN_SEGMENTS) assertEquals(alpha(m.colors[core]), alpha(m.colors[core + k]), "core rim $k")
     }
 
+    /** The first triangle's normal, (v1 - v0) x (v2 - v0), dotted with the way back to the eye: positive is front facing. */
+    private fun facesEye(m: SpatialMesh, first: Int, ex: Float, ey: Float, ez: Float): Float {
+        val (x0, y0, z0) = pos(m, m.indices[first])
+        val (x1, y1, z1) = pos(m, m.indices[first + 1])
+        val (x2, y2, z2) = pos(m, m.indices[first + 2])
+        val ux = x1 - x0
+        val uy = y1 - y0
+        val uz = z1 - z0
+        val vx = x2 - x0
+        val vy = y2 - y0
+        val vz = z2 - z0
+        val nx = uy * vz - uz * vy
+        val ny = uz * vx - ux * vz
+        val nz = ux * vy - uy * vx
+        return nx * (ex - x0) + ny * (ey - y0) + nz * (ez - z0)
+    }
+
+    @Test
+    fun `fans and ribbons wind counter-clockwise toward the eye as glTF front faces do`() {
+        val f = frameWithOneOrb()
+        val m = SpatialMesh(8, 128)
+        m.build(f, 0f, 1.4f, 0f)
+        assertTrue(facesEye(m, 0, 0f, 1.4f, 0f) > 0f, "sprite fan faces away")
+        val ribbon = 2 * SpatialMesh.SPRITE_INDICES
+        assertTrue(facesEye(m, ribbon, 0f, 1.4f, 0f) > 0f, "ribbon faces away")
+        assertTrue(facesEye(m, ribbon + 3, 0f, 1.4f, 0f) > 0f, "ribbon second triangle faces away")
+    }
+
     @Test
     fun `a ribbon is as wide as the line width and crosses the view`() {
         val f = frameWithOneOrb()
@@ -64,6 +92,11 @@ class SpatialMeshTest {
         val (bx, by, bz) = pos(m, 1)
         val w = sqrt((bx - ax) * (bx - ax) + (by - ay) * (by - ay) + (bz - az) * (bz - az))
         assertEquals(SpatialMesh.LINE_WIDTH_METERS, w, 1e-5f)
+        val mx = (ax + bx) / 2
+        val my = (ay + by) / 2 - 1.4f
+        val mz = (az + bz) / 2
+        val across = ((bx - ax) * mx + (by - ay) * my + (bz - az) * mz) / (w * sqrt(mx * mx + my * my + mz * mz))
+        assertTrue(abs(across) < 1e-3f, "the width runs $across along the view")
     }
 
     @Test

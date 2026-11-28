@@ -63,6 +63,7 @@ void main() {
   let lineVertexCount = 0;
   const background = [0, 0, 0];
   let session = null;
+  let starting = false;
 
   function program(gl, vs, fs) {
     const p = gl.createProgram();
@@ -147,6 +148,10 @@ void main() {
   async function begin(mode, onFrame, onEnd) {
     const xr = await navigator.xr.requestSession(mode, { optionalFeatures: ['local-floor'] });
     session = xr;
+    xr.addEventListener('end', () => {
+      session = null;
+      onEnd();
+    });
     const canvas = document.createElement('canvas');
     const gl = canvas.getContext('webgl2', { xrCompatible: true, alpha: true, antialias: true });
     await gl.makeXRCompatible();
@@ -158,10 +163,6 @@ void main() {
       return xr.requestReferenceSpace('local');
     });
     const passthrough = mode === 'immersive-ar';
-    xr.addEventListener('end', () => {
-      session = null;
-      onEnd();
-    });
     const frame = (_time, xrFrame) => {
       if (!onFrame()) {
         xr.end();
@@ -195,11 +196,15 @@ void main() {
     // Opens a session from a click; onFrame fills the arrays before each frame and returns false to end the session,
     // onEnd runs when the session closes.
     start(mode, onFrame, onEnd) {
-      if (session) return;
-      begin(mode === 1 ? 'immersive-ar' : 'immersive-vr', onFrame, onEnd).catch((e) => {
-        console.warn('spatial: ' + e);
-        if (session) session.end(); else onEnd();
-      });
+      if (session || starting) return;
+      starting = true;
+      begin(mode === 1 ? 'immersive-ar' : 'immersive-vr', onFrame, onEnd)
+        .catch((e) => {
+          console.warn('spatial: ' + e);
+          // The session's own end listener clears it and calls onEnd; with no session there is nothing to end.
+          if (session) session.end(); else onEnd();
+        })
+        .finally(() => { starting = false; });
     },
     reserve(spriteFloats, lineFloats) {
       if (spriteFloats > sprites.length) sprites = new Float32Array(spriteFloats);

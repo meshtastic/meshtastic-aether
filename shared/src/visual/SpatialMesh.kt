@@ -91,12 +91,12 @@ class SpatialMesh(spriteCapacity: Int, lineCapacity: Int) {
     }
 
     private fun fan(s: FloatArray, at: Int) {
-        val radius = s[at + 3]
-        val r = s[at + 4]
-        val g = s[at + 5]
-        val b = s[at + 6]
-        val a = s[at + 7]
-        val crisp = s[at + 8] >= 0.5f
+        val radius = s[at + SpatialFrame.SPRITE_RADIUS]
+        val r = s[at + SpatialFrame.SPRITE_RED]
+        val g = s[at + SpatialFrame.SPRITE_GREEN]
+        val b = s[at + SpatialFrame.SPRITE_BLUE]
+        val a = s[at + SpatialFrame.SPRITE_ALPHA]
+        val crisp = s[at + SpatialFrame.SPRITE_CRISP] >= HALF
         val centre = vertexCount
         vertex(s[at], s[at + 1], s[at + 2], rgba(r, g, b, a))
         val rim = rgba(r, g, b, if (crisp) a else 0f)
@@ -126,16 +126,17 @@ class SpatialMesh(spriteCapacity: Int, lineCapacity: Int) {
         val bx = l[b]
         val by = l[b + 1]
         val bz = l[b + 2]
-        // Across the line and across the view: (b - a) x (midpoint - eye).
+        // Across the line and across the view: (midpoint - eye) x (b - a), which winds the quad counter-clockwise as the
+        // eye sees it, glTF's front face.
         val tx = bx - ax
         val ty = by - ay
         val tz = bz - az
         val vx = (ax + bx) / 2 - eyeX
         val vy = (ay + by) / 2 - eyeY
         val vz = (az + bz) / 2 - eyeZ
-        var wx = ty * vz - tz * vy
-        var wy = tz * vx - tx * vz
-        var wz = tx * vy - ty * vx
+        var wx = vy * tz - vz * ty
+        var wy = vz * tx - vx * tz
+        var wz = vx * ty - vy * tx
         val wl = sqrt(wx * wx + wy * wy + wz * wz)
         if (wl < TINY) {
             wx = 0f
@@ -147,20 +148,30 @@ class SpatialMesh(spriteCapacity: Int, lineCapacity: Int) {
             wy *= k
             wz *= k
         }
-        val ca = rgba(l[at + 3], l[at + 4], l[at + 5], l[at + 6])
-        val cb = rgba(l[b + 3], l[b + 4], l[b + 5], l[b + 6])
-        val first = vertexCount
+        val ca = lineColor(l, at)
+        val cb = lineColor(l, b)
+        val a0 = vertexCount
         vertex(ax - wx, ay - wy, az - wz, ca)
+        val a1 = vertexCount
         vertex(ax + wx, ay + wy, az + wz, ca)
+        val b1 = vertexCount
         vertex(bx + wx, by + wy, bz + wz, cb)
+        val b0 = vertexCount
         vertex(bx - wx, by - wy, bz - wz, cb)
-        indices[indexCount++] = first
-        indices[indexCount++] = first + 1
-        indices[indexCount++] = first + 2
-        indices[indexCount++] = first
-        indices[indexCount++] = first + 2
-        indices[indexCount++] = first + 3
+        indices[indexCount++] = a0
+        indices[indexCount++] = a1
+        indices[indexCount++] = b1
+        indices[indexCount++] = a0
+        indices[indexCount++] = b1
+        indices[indexCount++] = b0
     }
+
+    private fun lineColor(l: FloatArray, at: Int): Int = rgba(
+        l[at + SpatialFrame.LINE_RED],
+        l[at + SpatialFrame.LINE_GREEN],
+        l[at + SpatialFrame.LINE_BLUE],
+        l[at + SpatialFrame.LINE_ALPHA],
+    )
 
     private fun vertex(x: Float, y: Float, z: Float, color: Int) {
         val at = vertexCount * XYZ
@@ -187,10 +198,14 @@ class SpatialMesh(spriteCapacity: Int, lineCapacity: Int) {
         private const val CHANNEL = 255f
         private const val HALF = 0.5f
 
+        private const val GREEN_SHIFT = 8
+        private const val BLUE_SHIFT = 16
+        private const val ALPHA_SHIFT = 24
+
         private fun channel(v: Float): Int = (v.coerceIn(0f, 1f) * CHANNEL + HALF).toInt()
 
         /** [r], [g], [b] premultiplied by [a], packed red-first. */
-        internal fun rgba(r: Float, g: Float, b: Float, a: Float): Int =
-            channel(r * a) or (channel(g * a) shl 8) or (channel(b * a) shl 16) or (channel(a) shl 24)
+        internal fun rgba(r: Float, g: Float, b: Float, a: Float): Int = channel(r * a) or
+            (channel(g * a) shl GREEN_SHIFT) or (channel(b * a) shl BLUE_SHIFT) or (channel(a) shl ALPHA_SHIFT)
     }
 }

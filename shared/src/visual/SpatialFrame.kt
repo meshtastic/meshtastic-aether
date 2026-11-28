@@ -248,6 +248,20 @@ class SpatialFrame internal constructor() {
     companion object {
         const val SPRITE_STRIDE = 9
         const val LINE_STRIDE = 7
+
+        // Offsets into a sprite after its x, y, z.
+        const val SPRITE_RADIUS = 3
+        const val SPRITE_RED = 4
+        const val SPRITE_GREEN = 5
+        const val SPRITE_BLUE = 6
+        const val SPRITE_ALPHA = 7
+        const val SPRITE_CRISP = 8
+
+        // Offsets into a line vertex after its x, y, z.
+        const val LINE_RED = 3
+        const val LINE_GREEN = 4
+        const val LINE_BLUE = 5
+        const val LINE_ALPHA = 6
         private const val INITIAL_SPRITES = 256
         private const val INITIAL_LINE_VERTICES = 512
         private const val XYZ = 3

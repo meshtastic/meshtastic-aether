@@ -46,6 +46,9 @@ private const val XR_SPATIAL_FEATURE = "android.software.xr.api.spatial"
  * update ("SplitEngineBridge ... Unexpected command").
  */
 private const val MIN_SPATIAL_API = 3
+
+/** Frames to wait for head tracking in Full Space before opening anyway: about three seconds at 72 Hz. */
+private const val TRACKING_WAIT_FRAMES = 216
 private const val SPRITE_CAPACITY = 1024
 private const val LINE_CAPACITY = 1024
 
@@ -77,20 +80,28 @@ internal class XrSpatialHost(private val activity: ComponentActivity) {
         if (starting) return
         starting = true
         activity.lifecycleScope.launch {
-            val result = Session.create(activity, Dispatchers.Main, activity)
-            val session = (result as? SessionCreateSuccess)?.session
-            if (session == null) {
-                Log.w(TAG, "no session: $result")
+            try {
+                view = start()?.also { if (!source.closed) it.enter(source) }
+            } catch (e: IllegalStateException) {
+                Log.w(TAG, "spatial view failed to start: $e")
+            } finally {
                 starting = false
-                return@launch
             }
-            val tracking = Config.Builder(session.config).setDeviceTracking(DeviceTrackingMode.SPATIAL).build()
-            Log.i(TAG, "session created, device tracking ${session.configure(tracking)}")
-            val material = KhronosUnlitMaterial.create(session, AlphaMode.BLEND)
-            material.setBaseColorFactor(Vector4(1f, 1f, 1f, 1f))
-            view = XrSpatial(session, material).also { if (!source.closed) it.enter(source) }
-            starting = false
         }
+    }
+
+    private suspend fun start(): XrSpatial? {
+        val result = Session.create(activity, Dispatchers.Main, activity)
+        val session = (result as? SessionCreateSuccess)?.session
+        if (session == null) {
+            Log.w(TAG, "no session: $result")
+            return null
+        }
+        val tracking = Config.Builder(session.config).setDeviceTracking(DeviceTrackingMode.SPATIAL).build()
+        Log.i(TAG, "session created, device tracking ${session.configure(tracking)}")
+        val material = KhronosUnlitMaterial.create(session, AlphaMode.BLEND)
+        material.setBaseColorFactor(Vector4(1f, 1f, 1f, 1f))
+        return XrSpatial(session, material)
     }
 }
 
@@ -111,6 +122,7 @@ internal class XrSpatial(private val session: Session, material: KhronosUnlitMat
 
     private var source: SpatialSource? = null
     private var wasFull = false
+    private var waited = 0
 
     init {
         val layout = VertexLayout.Builder()
@@ -136,6 +148,7 @@ internal class XrSpatial(private val session: Session, material: KhronosUnlitMat
         val showing = source != null
         source = next
         wasFull = false
+        waited = 0
         session.scene.requestFullSpace()
         if (!showing) Choreographer.getInstance().postFrameCallback(this)
     }
@@ -145,11 +158,15 @@ internal class XrSpatial(private val session: Session, material: KhronosUnlitMat
         // Full Space arrives a few frames after the request; leaving it later ends the view.
         val full = SpatialCapability.SPATIAL_3D_CONTENT in session.scene.spatialCapabilities
         if (current.closed || (wasFull && !full)) {
-            exit()
+            exit(backToHome = full)
             return
         }
-        // Placed only once the head is tracked: an untracked pose would centre the cloud on the panel, not the viewer.
-        if (full && !wasFull && ArDevice.getInstance(session).state.value.trackingState == TrackingState.TRACKING) {
+        // Placed once the head is tracked, since an untracked pose centres the cloud on the panel rather than the
+        // viewer; after a few seconds without tracking it opens anyway rather than leave the button doing nothing.
+        if (full && !wasFull) waited++
+        val tracked = ArDevice.getInstance(session).state.value.trackingState == TrackingState.TRACKING
+        if (full && !wasFull && (tracked || waited > TRACKING_WAIT_FRAMES)) {
+            if (!tracked) Log.w(TAG, "head not tracked; placing the view at the last pose")
             wasFull = true
             root.setPose(rootPose())
             root.setEnabled(true)
@@ -167,10 +184,12 @@ internal class XrSpatial(private val session: Session, material: KhronosUnlitMat
         Choreographer.getInstance().postFrameCallback(this)
     }
 
-    private fun exit() {
+    /** Hides the cloud and restores the environment; [backToHome] when the view ended while the app was still in Full Space. */
+    private fun exit(backToHome: Boolean) {
         source = null
         root.setEnabled(false)
         session.scene.spatialEnvironment.preferredSpatialEnvironment = null
+        if (backToHome) session.scene.requestHomeSpace()
         Log.i(TAG, "view closed")
     }
 
