@@ -239,6 +239,42 @@ class MidiMapperTest {
         assertEquals(1, mapper.stats.held)
     }
 
+    // A bed drone at the pitch of a node's drone is a note of its own: held into the node's, it never sounds.
+    @Test
+    fun `a bed note at the key of a held node drone is struck on its own`() {
+        val notes = listOf(note(0.0, C4_HZ, 20.0, Voice.Drone, node = 7L), note(5.0, C4_HZ, 20.0, Voice.Drone, node = null))
+        val (mapper, rx) = run(notes, until = 40.0)
+        assertTrue(rx.problems.isEmpty(), rx.problems.joinToString())
+        assertEquals(listOf(sec(0.0), sec(5.0)), rx.heard.map { it.on })
+        assertEquals(0, mapper.stats.held)
+    }
+
+    // A retrigger cuts a long note short; a channel still marked busy to the cut note's old end is never freed for
+    // another offset, and a note that could have had it falls back to a wrong bend.
+    @Test
+    fun `a channel whose long note a retrigger cut is free again after its release`() {
+        val long = List(15) { note(0.0, C4_HZ, 100.0, node = it.toLong()) }
+        val cut = note(1.0, C4_HZ, 1.0, node = 99L)
+        val other = note(5.0, C4_HZ * 2.0.pow(25.0 / 1200), 1.0, node = 98L)
+        val (mapper, rx) = run(long + cut + other, until = 10.0)
+        assertTrue(rx.problems.isEmpty(), rx.problems.joinToString())
+        assertEquals(1, mapper.stats.retriggered)
+        assertEquals(0, mapper.stats.fallbacks)
+        assertTrue(rx.heard.any { it.on == sec(5.0) && cents(it.hz, C4_HZ * 2.0.pow(25.0 / 1200)) < 0.3 })
+    }
+
+    // Closing a mapper that never drained must still drop what comes after the close.
+    @Test
+    fun `closing before any drain drops the notes after the close`() {
+        val mapper = MidiMapper(SR)
+        val rx = Receiver(48)
+        mapper.schedule(ComposerOutput(listOf(note(1.0, C4_HZ, 1.0), note(10.0, C4_HZ * 3 / 2, 1.0)), emptyList()))
+        mapper.close(sec(5.0), rx::take)
+        drainTo(mapper, rx, sec(5.1), sec(20.0))
+        assertTrue(rx.heard.none { it.on == sec(10.0) }, "the note after the close sounded")
+        assertEquals(0, rx.stillSounding)
+    }
+
     // The synth never carries a voice a node started; a bed note at a node drone's pitch is struck on its own.
     @Test
     fun `a bed note does not carry on the drone of a node`() {

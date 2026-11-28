@@ -42,7 +42,7 @@ const val USAGE = "usage: RenderWav <silent|sparse|busy> <hours> <outPath> [seed
     "RenderWav analyze <wav>  |  RenderWav video <seconds> <out.mp4> [--nodes N] [--speed X] [--seed N] " +
     "[--at <UTC instant>] [--warmup S] [--fps N] [--size WxH] [--look standard|projector|oled]  |  " +
     "RenderWav midi <seconds> <out.mid> [--nodes N] [--speed X] [--seed N] [--at <UTC instant>] " +
-    "[--range 48|2] [--layout one|two] [--allowance S]"
+    "[--range 48|2] [--layout one|two, where two needs an output per track] [--allowance S]"
 
 private const val AT_FLAG = "--at"
 

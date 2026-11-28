@@ -35,7 +35,8 @@ internal fun parseMidiArgs(all: List<String>): Command.Midi {
     require(seconds != null && seconds > 0.0 && seconds.isFinite()) {
         "seconds must be a positive number: '${positional[0]}'"
     }
-    val range = flags["range"]?.toIntOrNull() ?: MidiConfig.MPE_BEND_RANGE
+    val range = flags["range"]?.let { requireNotNull(it.toIntOrNull()) { "--range is 48 or 2: '$it'" } }
+        ?: MidiConfig.MPE_BEND_RANGE
     require(range == MidiConfig.MPE_BEND_RANGE || range == MidiConfig.PLAIN_BEND_RANGE) { "--range is 48 or 2" }
     val layout = requireNotNull(LAYOUTS[flags["layout"] ?: "one"]) { "--layout is one or two" }
     val defaults = MidiSpec(seconds)
@@ -80,7 +81,7 @@ fun renderMidi(spec: MidiSpec, onOutput: (ComposerOutput) -> Unit = {}): MidiRen
         mapper.drain(done - behind, smf::add)
         done += MIDI_BLOCK
     }
-    mapper.close(done - behind, smf::add)
+    mapper.close(frames, smf::add)
     return MidiRender(smf.bytes(), mapper.stats)
 }
 

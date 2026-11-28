@@ -9,6 +9,7 @@ import kotlin.math.ln
 import kotlin.math.pow
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
 /** A note-on read back from the file: its time in ticks, its track and channel, and the pitch the bend gives it. */
@@ -21,6 +22,7 @@ private class SmfReader(private val b: ByteArray, private val range: Int) {
     var format = -1
     var division = -1
     var unclosed = 0
+    var lastTick = 0L
     val firstMessages = ArrayList<List<Int>>()
     private var p = 0
 
@@ -83,6 +85,7 @@ private class SmfReader(private val b: ByteArray, private val range: Int) {
             }
         }
         check(p == end && ended) { "track $index is not closed by its end-of-track event" }
+        lastTick = maxOf(lastTick, tick)
         unclosed += sounding.size
     }
 }
@@ -99,6 +102,15 @@ class RenderMidiTest {
         assertEquals(2, c.spec.config.bendRange)
         assertEquals(MidiLayout.BedAndOrnaments, c.spec.config.layout)
         assertEquals("out.mid", c.out)
+        assertFailsWith<IllegalArgumentException> { parseArgs(listOf("midi", "60", "x.mid", "--range", "2.0")) }
+    }
+
+    // The close is the file's last moment: closed a dispatch horizon early, a render drops its final 0.3 s of notes.
+    @Test
+    fun `a render ends at the requested length`() {
+        val r = renderMidi(MidiSpec(seconds = 60.0, nodes = 20, speed = 1.0))
+        val rx = SmfReader(r.bytes, 48).read()
+        assertEquals(60L * 1920, rx.lastTick)
     }
 
     // The probe's 12 h day on 150 nodes: every note the composer made sounds within half a bend step (0.29 cents at

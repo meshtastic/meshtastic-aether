@@ -40,7 +40,9 @@ private class Bytes {
 
 /**
  * A Standard MIDI File of the mapper's output: format 0 for one part, format 1 with one track per part. The file runs
- * at 960 ticks per quarter at 120 bpm, so a tick is 1/1920 s, exactly 25 frames at 48 kHz.
+ * at 960 ticks per quarter at 120 bpm, so a tick is 1/1920 s, exactly 25 frames at 48 kHz. The parts share channel
+ * numbers and each sets its own bends, so each track must play on its own output: a player that sends both tracks to
+ * one output mistunes the second part's notes.
  */
 class StandardMidiFile(private val sampleRate: Int, private val parts: Int) {
     private val tracks = List(parts) { Bytes() }

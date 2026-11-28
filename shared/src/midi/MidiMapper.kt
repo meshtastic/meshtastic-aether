@@ -159,7 +159,10 @@ class MidiMapper(sampleRate: Int, val config: MidiConfig = MidiConfig()) : NoteS
      * yet ended gets its note-off, then sustain off and centred bends. The next [drain] sends the preamble again.
      */
     fun close(at: Long, emit: (MidiEvent) -> Unit) {
-        if (!open) return
+        if (!open) {
+            pending.removeAll { it.atFrame > at }
+            if (pending.isEmpty()) return
+        }
         drain(at, emit)
         queue.dropAfter(at)
         pending.clear()

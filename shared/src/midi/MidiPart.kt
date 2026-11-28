@@ -64,6 +64,10 @@ internal class MidiChannel(val number: Int) {
     }
 }
 
+/** A bed note at a key a bed note holds: neither stands for a node, whose notes are struck on their own. */
+private fun bedUnison(s: Strike, held: Sounding): Boolean =
+    s.note.voice in BED_VOICES && s.note.node == null && held.note.node == null
+
 private fun memberChannels(config: MidiConfig): List<Int> =
     if (config.mpe) (1..MPE_MEMBERS).toList() else (0 until CHANNELS).filter { it != GM_DRUMS }
 
@@ -111,7 +115,7 @@ internal class MidiPart(
     fun play(s: Strike) {
         if (carry(s)) return
         val holder = channels.firstOrNull { it.bend == s.tuned.bend && it.sounding(s.key, s.at) != null }
-        if (holder != null && s.note.voice in BED_VOICES) {
+        if (holder != null && bedUnison(s, holder.notes.getValue(s.key))) {
             holder.extend(holder.notes.getValue(s.key), s.end)
             stats.held++
             return
@@ -177,14 +181,15 @@ internal class MidiPart(
     }
 
     private fun start(channel: MidiChannel, s: Strike) {
-        channel.notes[s.key]?.let { old ->
-            // A note at this key on this channel ends first: by its own end if that has passed, else now.
-            queue.add(minOf(old.end, s.at), index, NOTE_OFF or channel.number, s.key, OFF_VELOCITY)
-            if (old.end > s.at) stats.retriggered++
-        }
+        val old = channel.notes[s.key]
+        // A note at this key on this channel ends first: by its own end if that has passed, else now.
+        if (old != null) queue.add(minOf(old.end, s.at), index, NOTE_OFF or channel.number, s.key, OFF_VELOCITY)
+        val cut = old != null && old.end > s.at
+        if (cut) stats.retriggered++
         queue.add(s.at, index, NOTE_ON or channel.number, s.key, s.velocity)
         channel.notes[s.key] = Sounding(s.note, s.end, s.level)
-        channel.lastEnd = maxOf(channel.lastEnd, s.end)
+        // A cut note no longer holds the channel to its old end; the channel frees when its sounding notes end.
+        channel.lastEnd = if (cut) channel.notes.values.maxOf { it.end } else maxOf(channel.lastEnd, s.end)
     }
 
     /** Queues the note-off of every note that has ended by [upTo]. */
