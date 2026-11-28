@@ -94,11 +94,9 @@ internal fun UpdateButton(updater: Updater?, controls: Controls, label: @Composa
 
 /** The newer build, the platform's way to get it in, and the install's progress or failure. */
 @Composable
-internal fun UpdatePanel(updater: Updater, modifier: Modifier = Modifier) {
+internal fun UpdatePanel(updater: Updater, canBrowse: Boolean, modifier: Modifier = Modifier) {
     val state by updater.update.collectAsState()
-    val install by updater.install.collectAsState()
     val latest = offered(state) ?: return
-    val mode = updater.modeFor(latest)
     Surface(
         modifier.widthIn(max = PANEL_WIDTH),
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
@@ -106,30 +104,46 @@ internal fun UpdatePanel(updater: Updater, modifier: Modifier = Modifier) {
     ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("Aether ${latest.version} is ready", style = MaterialTheme.typography.titleMedium)
-            installText(install, mode)?.let {
-                Text(
-                    it,
-                    Modifier.semantics { liveRegion = LiveRegionMode.Polite },
-                    style = MaterialTheme.typography.bodyLarge,
-                )
+            UpdateActions(updater, latest, canBrowse)
+        }
+    }
+}
+
+/**
+ * The install button for [latest], then its progress or failure. Without [canBrowse] (a TV has no browser) the download
+ * page is never offered, so a build this platform cannot install offers nothing.
+ */
+@Composable
+internal fun UpdateActions(updater: Updater, latest: PublishedBuild, canBrowse: Boolean) {
+    val install by updater.install.collectAsState()
+    val mode = updater.modeFor(latest)
+    if (mode == InstallMode.OPEN_PAGE && !canBrowse) return
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        installText(install, mode)?.let {
+            Text(
+                it,
+                Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+                style = MaterialTheme.typography.bodyLarge,
+            )
+        }
+        val downloading = install as? InstallState.Downloading
+        if (downloading != null) {
+            val percent = downloading.percent
+            if (percent != null) {
+                LinearProgressIndicator(progress = { percent / 100f })
+            } else {
+                LinearProgressIndicator()
             }
-            val downloading = install as? InstallState.Downloading
-            if (downloading != null) {
-                val percent = downloading.percent
-                if (percent != null) {
-                    LinearProgressIndicator(progress = { percent / 100f })
-                } else {
-                    LinearProgressIndicator()
-                }
-            }
-            val busy = install is InstallState.Downloading || install == InstallState.Installing
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (install is InstallState.Failed && mode != InstallMode.OPEN_PAGE) {
-                    Button(onClick = { updater.install(latest) }) { Text("Try again") }
+        }
+        val busy = install is InstallState.Downloading || install == InstallState.Installing
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (install is InstallState.Failed && mode != InstallMode.OPEN_PAGE) {
+                Button(onClick = { updater.install(latest) }) { Text("Try again") }
+                if (canBrowse) {
                     TextButton(onClick = { updater.openPage(latest) }) { Text(actionLabel(InstallMode.OPEN_PAGE)) }
-                } else {
-                    Button(onClick = { updater.install(latest) }, enabled = !busy) { Text(actionLabel(mode)) }
                 }
+            } else {
+                Button(onClick = { updater.install(latest) }, enabled = !busy) { Text(actionLabel(mode)) }
             }
         }
     }

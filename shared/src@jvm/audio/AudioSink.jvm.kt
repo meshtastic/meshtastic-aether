@@ -69,4 +69,6 @@ class JvmAudioSink : AudioSink {
     }
 
     override fun playbackFrame(): Long = line?.longFramePosition ?: 0L
+
+    override fun playbackTimestamp(): FrameTime? = line?.let { FrameTime(it.longFramePosition, System.nanoTime()) }
 }

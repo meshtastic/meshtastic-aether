@@ -16,6 +16,7 @@ import kotlinx.coroutines.test.runTest
 import org.jetbrains.skia.Bitmap
 import org.meshtastic.aether.audio.AudioSink
 import org.meshtastic.aether.audio.BlockRenderer
+import org.meshtastic.aether.audio.FrameTime
 import org.meshtastic.aether.mesh.SimulatedMeshSource
 import org.meshtastic.aether.theme.LocalAmbientPalette
 import org.meshtastic.aether.theme.PaletteChoice
@@ -68,6 +69,9 @@ class OfflineSink(override val sampleRate: Int) : AudioSink {
     }
 
     override fun playbackFrame(): Long = played
+
+    /** The virtual clock: frame k plays at k / rate seconds. */
+    override fun playbackTimestamp(): FrameTime = FrameTime(played, played * NANOS_PER_SECOND / sampleRate)
 
     /** Renders [frames] into [out] and advances the clock by them; false, with nothing rendered, before [start]. */
     fun pull(out: FloatArray, frames: Int): Boolean {
@@ -270,10 +274,13 @@ private val LOOKS = mapOf(
 private val VIDEO_FLAGS = setOf("nodes", "speed", "seed", "at", "warmup", "fps", "size", "look")
 
 /** The simulator's node limit. */
-private const val MAX_VIDEO_NODES = 200
+internal const val MAX_VIDEO_NODES = 200
 
 /** The `--name value` flags of [all] (after the command word), and the words that are not flags. */
-private fun splitFlags(all: List<String>): Pair<Map<String, String>, List<String>> {
+internal fun splitFlags(
+    all: List<String>,
+    allowed: Set<String> = VIDEO_FLAGS,
+): Pair<Map<String, String>, List<String>> {
     val flags = HashMap<String, String>()
     val positional = ArrayList<String>()
     var i = 1
@@ -288,12 +295,12 @@ private fun splitFlags(all: List<String>): Pair<Map<String, String>, List<String
             i++
         }
     }
-    val unknown = flags.keys - VIDEO_FLAGS
+    val unknown = flags.keys - allowed
     require(unknown.isEmpty()) { "unknown flag --${unknown.first()}; $USAGE" }
     return flags to positional
 }
 
-private fun Map<String, String>.number(name: String, default: Double): Double {
+internal fun Map<String, String>.number(name: String, default: Double): Double {
     val raw = this[name] ?: return default
     val v = raw.toDoubleOrNull()
     require(v != null && v.isFinite() && v >= 0.0) { "--$name must be a non-negative number: '$raw'" }

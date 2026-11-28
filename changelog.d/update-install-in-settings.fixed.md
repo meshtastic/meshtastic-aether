@@ -1,0 +1,1 @@
+- Settings installs an offered update, so a TV can update without the toolbar, and a TV is never sent to a download page it cannot open.

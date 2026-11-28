@@ -45,6 +45,7 @@ import org.meshtastic.aether.theme.LocalAmbientPalette
 import org.meshtastic.aether.ui.AmbientEngine
 import org.meshtastic.aether.ui.Controls
 import org.meshtastic.aether.ui.Effect
+import org.meshtastic.aether.ui.EngineOptions
 import org.meshtastic.aether.ui.EngineTiming
 import org.meshtastic.aether.ui.HostCommands
 import org.meshtastic.aether.ui.HudHost
@@ -58,6 +59,7 @@ import org.meshtastic.aether.ui.controlsHint
 import org.meshtastic.aether.ui.fadeIn
 import org.meshtastic.aether.ui.nowMillis
 import org.meshtastic.aether.ui.statusLineShiftSteps
+import org.meshtastic.aether.midi.openLiveOutput
 import org.meshtastic.aether.ui.statusLineText
 import org.meshtastic.aether.ui.statusLineVisible
 import org.meshtastic.aether.visual.AmbientScene
@@ -82,7 +84,7 @@ internal fun Running(
 ) {
     val platform = env.platform
     val haptics = LocalHapticFeedback.current
-    val engine = rememberEngine(session, platform)
+    val engine = rememberEngine(session, platform, env.midi)
     val palette = LocalAmbientPalette.current
     // A spatial view shows this session only: leaving it (Disconnect, Back) closes the view.
     val spatial = remember(engine) { SpatialViews() }
@@ -142,15 +144,19 @@ internal fun Running(
 
 /** The engine for [session], playing from the moment it exists; its link opens once it runs and closes after. */
 @Composable
-private fun rememberEngine(session: Session, platform: Platform): AmbientEngine {
+private fun rememberEngine(session: Session, platform: Platform, midiName: String?): AmbientEngine {
     val engine = remember(session) {
+        val sink = createAudioSink()
         AmbientEngine(
             session.source,
-            createAudioSink(),
+            sink,
             session.seed,
             EngineTiming(platform.lookaheadMillis),
-            pinFormFull = session.demo,
-            failureText = session.failureText,
+            EngineOptions(
+                pinFormFull = session.demo,
+                failureText = session.failureText,
+                midi = midiName?.let { name -> { rate -> openLiveOutput(name, rate) } },
+            ),
         ).also { platform.resumeAudio() }
     }
     LaunchedEffect(engine) {

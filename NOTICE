@@ -34,9 +34,11 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 
 ----------------------------------------------------------------------
-Material Symbols path data (Apache-2.0), in shared/src/ui/LinkIcons.kt
+Material Symbols path data (Apache-2.0), in shared/src/ui/LinkIcons.kt and shared/src/ui/HudIcons.kt
 
-  google/material-design-icons  symbols: lan, bluetooth, usb, language, play_arrow (Rounded)
+  google/material-design-icons  symbols: lan, bluetooth, usb, language, play_arrow, volume_up, volume_off,
+                                contrast, videocam, dark_mode, tune, headphones, check, fullscreen,
+                                power_settings_new, settings, arrow_back, download, view_in_ar (Rounded)
 
 Copyright Google LLC
 
