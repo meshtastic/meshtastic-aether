@@ -114,7 +114,7 @@ internal fun Running(
             .sceneKeys(controls, input, perform)
             .scenePointer(controls, input),
     ) {
-        AmbientScene(engine, Modifier.fillMaxSize())
+        AmbientScene(engine, Modifier.fillMaxSize().sceneSemantics(controls))
         StatusLine(engine.status.link, engine.status.error, Modifier.align(Alignment.TopCenter))
         ControlsHint(platform.hasKeyboard, platform.isTelevision, Modifier.align(Alignment.BottomCenter))
         if (controls.overlayOpen) {

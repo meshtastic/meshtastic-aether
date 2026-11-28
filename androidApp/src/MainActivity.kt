@@ -4,10 +4,12 @@ import android.app.UiModeManager
 import android.content.res.Configuration
 import android.os.Bundle
 import android.view.WindowManager
+import android.view.accessibility.AccessibilityManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.runtime.mutableStateOf
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -17,9 +19,22 @@ import org.meshtastic.aether.log.Log
 import org.meshtastic.aether.ui.parseLaunchArgs
 
 class MainActivity : ComponentActivity() {
+    private val accessibility by lazy { getSystemService(ACCESSIBILITY_SERVICE) as AccessibilityManager }
+
+    // TalkBack's touch exploration, kept current so the HUD stays open while a screen reader is reading it.
+    private val screenReader = mutableStateOf(false)
+    private val screenReaderListener = AccessibilityManager.TouchExplorationStateChangeListener { screenReader.value = it }
+
+    override fun onDestroy() {
+        accessibility.removeTouchExplorationStateChangeListener(screenReaderListener)
+        super.onDestroy()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
+        screenReader.value = accessibility.isTouchExplorationEnabled
+        accessibility.addTouchExplorationStateChangeListener(screenReaderListener)
         var pending: CompletableDeferred<Boolean>? = null
         val launcher = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { granted ->
             pending?.complete(granted.values.all { it })
@@ -53,6 +68,7 @@ class MainActivity : ComponentActivity() {
                             if (immersive) controller.hide(WindowInsetsCompat.Type.systemBars()) else controller.show(WindowInsetsCompat.Type.systemBars())
                         }
                     },
+                    screenReaderActive = screenReader.value,
                 ),
             )
         }
