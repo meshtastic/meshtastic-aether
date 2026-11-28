@@ -163,8 +163,11 @@ void main() {
       onEnd();
     });
     const frame = (_time, xrFrame) => {
+      if (!onFrame()) {
+        xr.end();
+        return;
+      }
       xr.requestAnimationFrame(frame);
-      onFrame();
       const pose = xrFrame.getViewerPose(space);
       if (!pose) return;
       const layer = xr.renderState.baseLayer;
@@ -189,7 +192,8 @@ void main() {
       const can = (mode) => xr.isSessionSupported(mode).catch(() => false);
       can('immersive-ar').then((ar) => ar ? found(1) : can('immersive-vr').then((vr) => found(vr ? 2 : 0)));
     },
-    // Opens a session from a click; onFrame fills the arrays before each frame, onEnd runs when the session closes.
+    // Opens a session from a click; onFrame fills the arrays before each frame and returns false to end the session,
+    // onEnd runs when the session closes.
     start(mode, onFrame, onEnd) {
       if (session) return;
       begin(mode === 1 ? 'immersive-ar' : 'immersive-vr', onFrame, onEnd).catch((e) => {

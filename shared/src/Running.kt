@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -60,7 +61,7 @@ import org.meshtastic.aether.ui.statusLineShiftSteps
 import org.meshtastic.aether.ui.statusLineText
 import org.meshtastic.aether.ui.statusLineVisible
 import org.meshtastic.aether.visual.AmbientScene
-import org.meshtastic.aether.visual.SpatialSource
+import org.meshtastic.aether.visual.SpatialViews
 
 private const val FADE_STEP_MS = 33L
 private const val SAVE_DEBOUNCE_MS = 500L
@@ -83,6 +84,9 @@ internal fun Running(
     val haptics = LocalHapticFeedback.current
     val engine = rememberEngine(session, platform)
     val palette = LocalAmbientPalette.current
+    // A spatial view shows this session only: leaving it (Disconnect, Back) closes the view.
+    val spatial = remember(engine) { SpatialViews() }
+    DisposableEffect(spatial) { onDispose { spatial.closeAll() } }
     val controls = rememberControls(engine, env.settings)
     val disconnect = {
         haptics.performHapticFeedback(HapticFeedbackType.Confirm)
@@ -127,7 +131,7 @@ internal fun Running(
                     disconnect,
                     host.onToggleFullscreen,
                     appUpdater,
-                    host.onEnterSpatial?.let { enter -> { enter(SpatialSource(engine, palette)) } },
+                    host.onEnterSpatial?.let { enter -> { enter(spatial.open(engine, palette)) } },
                 ),
                 input = HudInput(platform.hasKeyboard, platform.isTelevision),
                 modifier = Modifier.align(Alignment.TopStart),

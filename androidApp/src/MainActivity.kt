@@ -39,6 +39,7 @@ class MainActivity : ComponentActivity() {
         controller.hide(WindowInsetsCompat.Type.systemBars())
         val launch = parseLaunchArgs(launchArgsFrom(intent))
         val isTelevision = (getSystemService(UI_MODE_SERVICE) as? UiModeManager)?.currentModeType == Configuration.UI_MODE_TYPE_TELEVISION
+        val xr = xrSpatialHost(this)
         setContent {
             App(
                 launch = LaunchOptions(link = launch.link, startupError = launch.error, look = launch.look, ask = launch.ask),
@@ -51,6 +52,7 @@ class MainActivity : ComponentActivity() {
                             if (immersive) controller.hide(WindowInsetsCompat.Type.systemBars()) else controller.show(WindowInsetsCompat.Type.systemBars())
                         }
                     },
+                    onEnterSpatial = xr?.let { it::enter },
                 ),
             )
         }

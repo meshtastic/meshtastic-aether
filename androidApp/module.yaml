@@ -6,6 +6,10 @@ apply:
 dependencies:
   - //shared
   - $libs.androidx.activity.compose
+  - $libs.androidx.xr.scenecore
+  - $libs.androidx.xr.runtime
+  - $libs.androidx.xr.arcore
+  - $libs.android.extensions.xr: compile-only
 
 settings:
   compose: enabled

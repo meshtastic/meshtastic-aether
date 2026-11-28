@@ -248,14 +248,38 @@ class SpatialFrame internal constructor() {
 
 /**
  * One session's cloud for a headset or AR view. [frame] advances the scene to the audio clock and returns it placed
- * around the viewer; call it once per displayed frame, on the thread that runs the app's UI.
+ * around the viewer; call it once per displayed frame, on the thread that runs the app's UI. A renderer that sees
+ * [closed] tears its view down: the session it showed has ended.
  */
 class SpatialSource internal constructor(private val engine: AmbientEngine, private val palette: AmbientPalette) {
     private val out = SpatialFrame()
 
+    var closed = false
+        private set
+
+    internal fun close() {
+        closed = true
+    }
+
+    /** Advances the scene and returns this frame of it. */
     fun frame(): SpatialFrame {
         engine.scene.update(engine.playbackFrame())
         out.fill(engine.scene, palette, engine.playbackSeconds())
         return out
+    }
+}
+
+/** The spatial views one session opened; [closeAll] ends them when the session does. */
+internal class SpatialViews {
+    private val open = ArrayList<SpatialSource>()
+
+    fun open(engine: AmbientEngine, palette: AmbientPalette): SpatialSource {
+        open.removeAll { it.closed }
+        return SpatialSource(engine, palette).also { open += it }
+    }
+
+    fun closeAll() {
+        for (s in open) s.close()
+        open.clear()
     }
 }
