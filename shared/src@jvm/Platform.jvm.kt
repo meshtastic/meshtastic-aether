@@ -25,6 +25,8 @@ internal actual fun localOffsetMinutes(epochMillis: Long): Int =
 
 internal actual fun createTcpTransport(host: String, port: Int): RadioTransport? = TcpTransport(host, port)
 
+internal actual suspend fun ensureLocalNetworkPermission(ask: Boolean): Boolean = true
+
 /** Java Preferences under one node; a failing backing store (read-only home, sandbox) degrades to forgetting. */
 private class PreferencesStore : KeyValueStore {
     private val prefs = java.util.prefs.Preferences.userRoot().node("org/meshtastic/aether")

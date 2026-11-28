@@ -8,6 +8,7 @@ import org.meshtastic.aether.log.Log
 import org.meshtastic.aether.mesh.DemoCapture
 import org.meshtastic.aether.mesh.DemoMeshSource
 import org.meshtastic.aether.mesh.MeshSource
+import org.meshtastic.aether.ui.LOCAL_NETWORK_DENIED
 import org.meshtastic.aether.ui.LinkChoice
 import org.meshtastic.aether.ui.LiveLink
 import org.meshtastic.aether.ui.LoopingReplaySource
@@ -32,6 +33,35 @@ internal class Session(
 private fun liveSession(link: LiveLink, target: String): Session =
     Session(link.source, link::connect, link::disconnect, failureText = { unreachableText(target) })
 
+/**
+ * The local network permission for one session: the first [check] asks, and after a denial later checks only look,
+ * so a retrying link never prompts again but still picks up a grant made in system settings.
+ */
+internal class LocalNetworkGate(private val permit: suspend (ask: Boolean) -> Boolean) {
+    var denied = false
+        private set
+
+    suspend fun check(): Boolean {
+        denied = !permit(!denied)
+        return !denied
+    }
+}
+
+/** A live session over the network, which opens only once [gate] allows it. */
+private fun networkSession(
+    link: LiveLink,
+    target: String,
+    gate: LocalNetworkGate = LocalNetworkGate(::ensureLocalNetworkPermission),
+): Session = Session(
+    link.source,
+    open = {
+        if (!gate.check()) throw MeshtasticException.Transport(LOCAL_NETWORK_DENIED, null)
+        link.connect()
+    },
+    close = link::disconnect,
+    failureText = { if (gate.denied) LOCAL_NETWORK_DENIED else unreachableText(target) },
+)
+
 internal fun sessionFor(choice: LinkChoice): Session = when (choice) {
     LinkChoice.Demo -> {
         Log.i("app", "session demo")
@@ -44,7 +74,7 @@ internal fun sessionFor(choice: LinkChoice): Session = when (choice) {
     is LinkChoice.Tcp -> {
         val link = LiveLink.tcp(choice.host, choice.port) ?: error("TCP is not available on this target")
         Log.i("app", "session tcp ${choice.host}:${choice.port}")
-        liveSession(link, "${choice.host}:${choice.port}")
+        networkSession(link, "${choice.host}:${choice.port}")
     }
     is LinkChoice.Ble -> {
         val link = LiveLink.ble(choice.radio) ?: error("Bluetooth is not available on this target")
@@ -62,7 +92,7 @@ internal fun sessionFor(choice: LinkChoice): Session = when (choice) {
         }
         val link = LiveLink.webSocket(choice.url)
         Log.i("app", "session websocket ${choice.url}")
-        liveSession(link, choice.url)
+        networkSession(link, choice.url)
     }
 }
 

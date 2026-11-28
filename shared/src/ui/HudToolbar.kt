@@ -50,10 +50,7 @@ import org.meshtastic.aether.theme.PaletteChoice
 @Composable
 internal fun HudToolbar(controls: Controls, host: HudHost, input: HudInput, stacked: Boolean) {
     val focusFirst = remember { FocusRequester() }
-    LaunchedEffect(Unit) {
-        // The toolbar has just composed; focus can only fail when it is already gone again.
-        runCatching { focusFirst.requestFocus() }
-    }
+    LaunchedEffect(Unit) { focusFirst.requestFocus() }
     val tooltips = input.hasKeyboard
     val colors = FloatingToolbarDefaults.standardFloatingToolbarColors()
     val volume: @Composable RowScope.() -> Unit = {

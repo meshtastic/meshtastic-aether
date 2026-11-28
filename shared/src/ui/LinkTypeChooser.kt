@@ -13,6 +13,8 @@ import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ToggleButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -27,7 +29,8 @@ private val ChooserPadding = PaddingValues(horizontal = 4.dp)
 
 /**
  * A connected single-select group of icon toggle buttons, each named by its label for accessibility. The selected
- * one reports `selected` and carries [selectedFocus], so a D-pad or keyboard user starts on the current choice.
+ * one reports `selected`; while [onStartFocus] is set it takes focus and then calls it, so a D-pad or keyboard user
+ * starts on the current choice.
  */
 @Composable
 internal fun LinkTypeChooser(
@@ -35,8 +38,15 @@ internal fun LinkTypeChooser(
     selected: LinkKind,
     onSelect: (LinkKind) -> Unit,
     modifier: Modifier = Modifier,
-    selectedFocus: FocusRequester? = null,
+    onStartFocus: (() -> Unit)? = null,
 ) {
+    val selectedFocus = remember { FocusRequester() }
+    if (onStartFocus != null) {
+        LaunchedEffect(Unit) {
+            selectedFocus.requestFocus()
+            onStartFocus()
+        }
+    }
     Row(
         modifier.fillMaxWidth().selectableGroup(),
         horizontalArrangement = Arrangement.spacedBy(ButtonGroupDefaults.ConnectedSpaceBetween),
@@ -52,7 +62,7 @@ internal fun LinkTypeChooser(
                 checked = checked,
                 onCheckedChange = { onSelect(kind) },
                 modifier = Modifier.weight(1f).heightIn(min = ChooserHeight)
-                    .then(if (checked && selectedFocus != null) Modifier.focusRequester(selectedFocus) else Modifier)
+                    .then(if (checked) Modifier.focusRequester(selectedFocus) else Modifier)
                     .semantics {
                         role = Role.RadioButton
                         this.selected = checked

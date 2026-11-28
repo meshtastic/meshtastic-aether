@@ -11,12 +11,15 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.systemBars
+import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -277,7 +280,8 @@ private fun ConnectPane(app: AppSession, settings: Settings, platform: Platform,
     } else {
         Modifier
     }
-    Column(Modifier.windowInsetsPadding(WindowInsets.safeDrawing).then(tvMargin).fillMaxSize()) {
+    val insets = WindowInsets.systemBars.union(WindowInsets.displayCutout)
+    Column(Modifier.windowInsetsPadding(insets).then(tvMargin).fillMaxSize()) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
             IconButton(onSettings, Modifier.size(MinTouch).semantics { contentDescription = "Settings" }) {
                 HudIcon(HudIcons.Settings)

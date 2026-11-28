@@ -180,6 +180,7 @@ The render tool runs the simulated mesh through the composer and synth offline. 
 
 - Headless over ssh: the desktop app needs a display, so use the render tool to produce a WAV file instead.
 - Bluetooth permission: Android asks for Bluetooth scan and connect permission on the first scan, and without it the scan does not start and the log says so. macOS and Linux need Bluetooth enabled and permitted for the terminal or app.
+- Local network permission: Android 17 asks for Nearby devices before the first TCP or WebSocket link, since the system blocks sockets to the local network without it. Without it the link does not open and the status line says what to allow; granting Bluetooth also grants it.
 - Silent on web: browsers block audio until a gesture, so tap the start screen.
 - No Bluetooth on web: the type is listed only where the browser has Web Bluetooth (Chrome and Edge, not Firefox or Safari; Chrome on Linux has it off by default), and the page must be served over HTTPS or from `localhost`.
 - No sound on desktop: check M (mute) and the volume in the HUD.

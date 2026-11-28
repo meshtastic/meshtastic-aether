@@ -106,7 +106,7 @@ internal fun Running(
     val focus = remember { FocusRequester() }
     // The HUD takes focus when it opens; when it closes the scene takes it back, so the next key (Select on a remote)
     // reaches it.
-    LaunchedEffect(controls.overlayOpen) { if (!controls.overlayOpen) runCatching { focus.requestFocus() } }
+    LaunchedEffect(controls.overlayOpen) { if (!controls.overlayOpen) focus.requestFocus() }
     val input = remember { SceneInput() }
     HudAutoHide(controls, input, host.screenReaderActive)
     MuteHaptics(controls)

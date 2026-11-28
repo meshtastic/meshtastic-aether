@@ -1,6 +1,8 @@
 package org.meshtastic.aether.ui
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -8,16 +10,27 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
@@ -43,16 +56,23 @@ internal class ConnectSlots(
 /** Two panes on an expanded or short window, the brand beside the form; else one column with the button at the foot. */
 @Composable
 internal fun ConnectLayout(slots: ConnectSlots, modifier: Modifier) {
+    // The caller leaves the IME out of [modifier]'s insets: a keyboard that changed the pane choice would recreate the
+    // focused field and close itself.
     BoxWithConstraints(modifier.fillMaxSize()) {
-        val twoPanes = widthClass(maxWidth) == WidthClass.Expanded || maxHeight < ShortHeight
-        if (twoPanes) TwoPanes(slots) else OnePane(slots, medium = widthClass(maxWidth) == WidthClass.Medium)
+        val width = widthClass(maxWidth)
+        val twoPanes = width == WidthClass.Expanded || maxHeight < ShortHeight
+        Box(Modifier.fillMaxSize().imePadding()) {
+            if (twoPanes) TwoPanes(slots) else OnePane(slots, medium = width == WidthClass.Medium)
+        }
     }
 }
 
 @Composable
 private fun TwoPanes(slots: ConnectSlots) {
+    // A landscape phone's keyboard leaves less height than a field and its label; the vertical gutter gives it back.
+    val keyboardUp = WindowInsets.ime.getBottom(LocalDensity.current) > 0
     Row(
-        Modifier.fillMaxSize().padding(ScreenGutter),
+        Modifier.fillMaxSize().padding(horizontal = ScreenGutter, vertical = if (keyboardUp) 0.dp else ScreenGutter),
         horizontalArrangement = Arrangement.spacedBy(ScreenGutter),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -75,7 +95,7 @@ private fun TwoPanes(slots: ConnectSlots) {
             ) {
                 slots.heading()
                 slots.chooser()
-                slots.fields(this, true)
+                KeptInView { slots.fields(this, true) }
                 slots.primary?.invoke()
             }
         }
@@ -100,12 +120,29 @@ private fun OnePane(slots: ConnectSlots, medium: Boolean) {
                 slots.banner?.invoke()
                 slots.heading()
                 slots.chooser()
-                slots.fields(this, medium)
+                KeptInView { slots.fields(this, medium) }
             }
         }
         val primary = slots.primary
         if (primary != null) Column(column.fillMaxWidth().padding(top = 12.dp)) { primary() }
     }
+}
+
+/**
+ * The link's fields as one group that a scroll keeps in view while one of them has focus, re-asked as the keyboard
+ * moves. A text field only brings its own text box into view, which leaves its label and the next field off screen.
+ */
+@Composable
+private fun KeptInView(fields: @Composable ColumnScope.() -> Unit) {
+    val requester = remember { BringIntoViewRequester() }
+    var focused by remember { mutableStateOf(false) }
+    val keyboard = WindowInsets.ime.getBottom(LocalDensity.current)
+    LaunchedEffect(focused, keyboard) { if (focused) requester.bringIntoView() }
+    Column(
+        Modifier.fillMaxWidth().bringIntoViewRequester(requester).onFocusChanged { focused = it.hasFocus },
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+        content = fields,
+    )
 }
 
 @Composable

@@ -173,9 +173,7 @@ internal fun SettingsTopicPane(
 @Composable
 private fun SettingsScaffold(title: String, chrome: PaneChrome, modifier: Modifier, body: @Composable () -> Unit) {
     val backFocus = remember { FocusRequester() }
-    LaunchedEffect(chrome.showBack) {
-        if (chrome.focusBack && chrome.showBack) runCatching { backFocus.requestFocus() }
-    }
+    LaunchedEffect(chrome.showBack) { if (chrome.focusBack && chrome.showBack) backFocus.requestFocus() }
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     Column(modifier.fillMaxSize().nestedScroll(scrollBehavior.nestedScrollConnection)) {
         LargeFlexibleTopAppBar(
