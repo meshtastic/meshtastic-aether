@@ -215,9 +215,9 @@ void main() {
       can('immersive-ar').then((ar) => ar ? found(1) : can('immersive-vr').then((vr) => found(vr ? 2 : 0)));
     },
     // Opens a session from a click; onFrame fills the arrays before each frame and returns false to end the session,
-    // onEnd runs when the session closes.
+    // onEnd runs when the session closes. Returns false, and calls nothing, when a session is already open or opening.
     start(mode, onFrame, onEnd) {
-      if (session || starting) return;
+      if (session || starting) return false;
       starting = true;
       stopAsked = false;
       // Runs once however the attempt ends: a session can end while setup is pending and setup then still reject.
@@ -234,6 +234,7 @@ void main() {
           if (session) session.end(); else finish();
         })
         .finally(() => { starting = false; });
+      return true;
     },
     // Ends the session now, without waiting for a frame; a start still asking for its session ends once it has one.
     stop() {

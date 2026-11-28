@@ -13,7 +13,7 @@ internal const val SPATIAL_NONE = 0
 private external fun probe(found: (Int) -> Unit)
 
 @JsFun("(mode, onFrame, onEnd) => window.aetherSpatial.start(mode, onFrame, onEnd)")
-private external fun start(mode: Int, onFrame: () -> Boolean, onEnd: () -> Unit)
+private external fun start(mode: Int, onFrame: () -> Boolean, onEnd: () -> Unit): Boolean
 
 @JsFun("() => window.aetherSpatial.stop()")
 private external fun stop()
@@ -37,8 +37,9 @@ internal fun probeSpatial(found: (Int) -> Unit) = probe(found)
 internal fun enterSpatial(mode: Int, source: SpatialSource) {
     // The frame check is a fallback: a browser stops XR frames while system UI covers the session, so closing the source
     // ends the session directly, and the session's end releases the source.
-    source.whenClosed(::stop)
-    start(mode, onFrame = { !source.closed && push(source.frame()) }, onEnd = source::close)
+    val accepted = start(mode, onFrame = { !source.closed && push(source.frame()) }, onEnd = source::close)
+    // A press while a session is open or opening is turned away: release its source without stopping that session.
+    if (accepted) source.whenClosed(::stop) else source.close()
 }
 
 private fun push(frame: SpatialFrame): Boolean {
