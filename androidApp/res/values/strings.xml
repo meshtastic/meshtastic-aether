@@ -1,3 +1,9 @@
 <resources>
     <string name="app_name">Aether</string>
+    <string name="playback_channel">Playback</string>
+    <string name="playback_playing">Listening to the mesh</string>
+    <string name="playback_paused">Paused</string>
+    <string name="playback_play">Play</string>
+    <string name="playback_pause">Pause</string>
+    <string name="playback_stop">Stop</string>
 </resources>

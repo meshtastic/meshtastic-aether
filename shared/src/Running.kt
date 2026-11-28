@@ -38,6 +38,7 @@ import androidx.navigationevent.compose.NavigationBackHandler
 import androidx.navigationevent.compose.rememberNavigationEventState
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.job
 import kotlinx.coroutines.withContext
 import org.meshtastic.aether.audio.createAudioSink
 import org.meshtastic.aether.mesh.LinkState
@@ -47,7 +48,6 @@ import org.meshtastic.aether.ui.Controls
 import org.meshtastic.aether.ui.Effect
 import org.meshtastic.aether.ui.EngineOptions
 import org.meshtastic.aether.ui.EngineTiming
-import org.meshtastic.aether.ui.HostCommands
 import org.meshtastic.aether.ui.HudHost
 import org.meshtastic.aether.ui.HudInput
 import org.meshtastic.aether.ui.KeyAction
@@ -85,12 +85,14 @@ internal fun Running(
 ) {
     val platform = env.platform
     val haptics = LocalHapticFeedback.current
-    val engine = rememberEngine(session, platform, env.midiChoice())
+    val run = remember(session) { EngineRun() }
+    val engine = rememberEngine(session, platform, env.midiChoice(), run)
     val palette = LocalAmbientPalette.current
     // A spatial view shows this session only: leaving it (Disconnect, Back) closes the view.
     val spatial = remember(engine) { SpatialViews() }
     DisposableEffect(spatial) { onDispose { spatial.closeAll() } }
     val controls = rememberControls(engine, env.settings)
+    val paused = host.commands?.paused == true
     val disconnect = {
         haptics.performHapticFeedback(HapticFeedbackType.Confirm)
         onStop()
@@ -100,9 +102,12 @@ internal fun Running(
     val perform = rememberUpdatedState<(KeyAction) -> Boolean> { action ->
         performAction(action, controls, host, disconnect)
     }
-    HostCommands(host.commands, controls.muted, perform)
+    SessionCommands(host.commands, controls, perform, engine) {
+        run.job?.cancel()
+        onStop()
+    }
     SessionBack(platform.hasSystemBack, controls, onStop)
-    MasterVolume(engine, controls)
+    MasterVolume(engine, controls, paused)
     val focus = remember { FocusRequester() }
     // The HUD takes focus when it opens; when it closes the scene takes it back, so the next key (Select on a remote)
     // reaches it.
@@ -145,7 +150,7 @@ internal fun Running(
 
 /** The engine for [session], playing from the moment it exists; its link opens once it runs and closes after. */
 @Composable
-private fun rememberEngine(session: Session, platform: Platform, midi: MidiChoice): AmbientEngine {
+private fun rememberEngine(session: Session, platform: Platform, midi: MidiChoice, run: EngineRun): AmbientEngine {
     val engine = remember(session) {
         val sink = createAudioSink()
         AmbientEngine(
@@ -162,6 +167,7 @@ private fun rememberEngine(session: Session, platform: Platform, midi: MidiChoic
         ).also { platform.resumeAudio() }
     }
     LaunchedEffect(engine) {
+        run.job = coroutineContext.job
         try {
             engine.run(session.open)
         } finally {
@@ -191,6 +197,12 @@ private fun rememberControls(engine: AmbientEngine, settings: Settings): Control
 
 /** Applies [action] and carries out the effect it asks for; true when the action used the key. */
 private fun performAction(action: KeyAction, controls: Controls, host: HostWindow, disconnect: () -> Unit): Boolean {
+    // While the system holds a pause, mute or play-pause brings the sound back in one press.
+    val commands = host.commands
+    if (action == KeyAction.ToggleMute && commands?.paused == true) {
+        commands.pause(false)
+        return true
+    }
     val result = controls.apply(action, host.isFullscreen, host.onToggleFullscreen != null)
     when (result.effect) {
         Effect.ToggleFullscreen -> host.onToggleFullscreen?.invoke()
@@ -214,9 +226,9 @@ private fun SessionBack(enabled: Boolean, controls: Controls, onStop: () -> Unit
     )
 }
 
-/** The engine's volume: the viewer's volume, silent while muted, under the session's fade-in. */
+/** The engine's volume: the viewer's volume, silent while muted or [paused], under the session's fade-in. */
 @Composable
-private fun MasterVolume(engine: AmbientEngine, controls: Controls) {
+private fun MasterVolume(engine: AmbientEngine, controls: Controls, paused: Boolean) {
     var fade by remember(engine) { mutableFloatStateOf(0f) }
     LaunchedEffect(engine) {
         val start = nowMillis()
@@ -225,7 +237,9 @@ private fun MasterVolume(engine: AmbientEngine, controls: Controls) {
             fade = fadeIn(nowMillis() - start)
         }
     }
-    LaunchedEffect(controls.effectiveVolume, fade) { engine.volume = controls.effectiveVolume * fade }
+    LaunchedEffect(controls.effectiveVolume, fade, paused) {
+        engine.volume = if (paused) 0f else controls.effectiveVolume * fade
+    }
 }
 
 /** A haptic tick each time the mute changes, on whichever route changed it. */

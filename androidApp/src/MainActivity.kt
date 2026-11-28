@@ -1,6 +1,7 @@
 package org.meshtastic.aether
 
 import android.app.UiModeManager
+import android.content.Intent
 import android.content.res.Configuration
 import android.os.Bundle
 import android.view.WindowManager
@@ -8,10 +9,15 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.runtime.snapshotFlow
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.launch
 import org.meshtastic.aether.ble.AndroidBlePermissions
 import org.meshtastic.aether.log.Log
 import org.meshtastic.aether.ui.parseLaunchArgs
@@ -55,8 +61,30 @@ class MainActivity : ComponentActivity() {
                         }
                     },
                     onEnterSpatial = xr?.let { it::enter },
+                    commands = Playback.commands,
                 ),
             )
+        }
+        // Android 12 and later refuse a foreground service started from the background, so a session that starts behind
+        // another app (the auto-connect countdown) gets its service on the next return to the foreground.
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                snapshotFlow { Playback.commands.sessionRunning }.collect { running -> if (running) startPlayback() }
+            }
+        }
+    }
+
+    override fun onDestroy() {
+        // The session lives in this activity's composition and ends with it.
+        stopService(Intent(this, PlaybackService::class.java))
+        super.onDestroy()
+    }
+
+    private fun startPlayback() {
+        try {
+            startForegroundService(Intent(this, PlaybackService::class.java))
+        } catch (e: IllegalStateException) {
+            Log.w("playback", "foreground service refused", e)
         }
     }
 }
