@@ -6,4 +6,11 @@
     <string name="playback_play">Play</string>
     <string name="playback_pause">Pause</string>
     <string name="playback_stop">Stop</string>
+    <string name="ar_unsupported">This phone can\'t run AR</string>
+    <string name="ar_no_camera">AR needs the camera</string>
+    <string name="ar_declined">AR needs Google Play Services for AR</string>
+    <string name="ar_failed">AR couldn\'t start</string>
+    <string name="ar_camera_brightness">Camera brightness</string>
+    <string name="ar_hint">Move the phone slowly to look around · Back to close</string>
+    <string name="ar_disclosure">Runs on Google Play Services for AR (ARCore), provided by Google and governed by the Google Privacy Policy</string>
 </resources>
