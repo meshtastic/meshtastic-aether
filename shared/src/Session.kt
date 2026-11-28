@@ -9,6 +9,8 @@ import org.meshtastic.aether.mesh.DemoCapture
 import org.meshtastic.aether.mesh.DemoMeshSource
 import org.meshtastic.aether.mesh.MeshSource
 import org.meshtastic.aether.ui.LOCAL_NETWORK_DENIED
+
+import org.meshtastic.aether.ui.AmbientEngine
 import org.meshtastic.aether.ui.LinkChoice
 import org.meshtastic.aether.ui.LiveLink
 import org.meshtastic.aether.ui.LoopingReplaySource
@@ -100,22 +102,26 @@ internal fun sessionFor(choice: LinkChoice): Session = when (choice) {
     }
 }
 
-/** Which screen shows and why: the running session, why the last start failed, and a pending reconnect. */
+/**
+ * Which screen shows and why: the session [host] runs, why the last start failed, and a pending reconnect. [engineFor]
+ * builds the engine for a session that starts.
+ */
 @Stable
 internal class AppSession(
     private val settings: Settings,
-    session: Session?,
+    private val host: SessionHost,
+    private val engineFor: (Session) -> AmbientEngine,
     failure: String?,
     pending: PendingConnect?,
 ) {
-    var session by mutableStateOf(session)
+    val session: Session? get() = host.running?.session
     var failure by mutableStateOf(failure)
     var pending by mutableStateOf(pending)
 
     /** Starts [choice] and saves it as the link to reconnect to; a link that cannot start shows why. */
     fun start(choice: LinkChoice) {
         try {
-            session = sessionFor(choice)
+            begin(sessionFor(choice))
             failure = null
             pending = null
             settings.link = choice
@@ -133,9 +139,14 @@ internal class AppSession(
         failure = startFailureText(e)
     }
 
+    /** Plays [session], ending any running one. */
+    fun begin(session: Session) {
+        host.start(session, engineFor(session))
+    }
+
     /** Back to the connect screen, with no reconnect pending. */
     fun stop() {
-        session = null
+        host.stop()
         pending = null
     }
 }

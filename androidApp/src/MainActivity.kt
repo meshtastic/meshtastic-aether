@@ -1,6 +1,7 @@
 package org.meshtastic.aether
 
 import android.app.UiModeManager
+import android.content.Intent
 import android.content.res.Configuration
 import android.os.Bundle
 import android.view.WindowManager
@@ -10,10 +11,16 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.mutableStateOf
+
+import androidx.compose.runtime.snapshotFlow
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.launch
 import org.meshtastic.aether.ble.AndroidBlePermissions
 import org.meshtastic.aether.log.Log
 import org.meshtastic.aether.ui.parseLaunchArgs
@@ -71,8 +78,24 @@ class MainActivity : ComponentActivity() {
                     },
                     screenReaderActive = screenReader.value,
                     onEnterSpatial = xr?.let { it::enter },
+                    sessions = Playback.sessions,
                 ),
             )
+        }
+        // Android 12 and later refuse a foreground service started from the background, so a session that starts behind
+        // another app (the auto-connect countdown) gets its service on the next return to the foreground.
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                snapshotFlow { Playback.sessions.isRunning }.collect { running -> if (running) startPlayback() }
+            }
+        }
+    }
+
+    private fun startPlayback() {
+        try {
+            startForegroundService(Intent(this, PlaybackService::class.java))
+        } catch (e: IllegalStateException) {
+            Log.w("playback", "foreground service refused", e)
         }
     }
 }
