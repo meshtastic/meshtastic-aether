@@ -198,7 +198,11 @@ private fun SettingsPane(nav: SettingsNav, platform: Platform) {
     val updater = appUpdater
     val track = nav.track
     SettingsScreen(
-        updates = if (updater != null && track != null) TrackedUpdates(updater, track, nav::choose) else null,
+        updates = if (updater != null && track != null) {
+            TrackedUpdates(updater, track, nav::choose, canBrowse = !platform.isTelevision)
+        } else {
+            null
+        },
         onBack = { nav.open = false },
         modifier = Modifier.windowInsetsPadding(WindowInsets.safeDrawing),
         focusBack = platform.isTelevision || platform.hasKeyboard,
