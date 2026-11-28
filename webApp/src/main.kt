@@ -2,6 +2,9 @@
 
 package org.meshtastic.aether
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.window.ComposeViewport
 import kotlin.js.ExperimentalWasmJsInterop
@@ -31,7 +34,15 @@ private external fun keepAwake()
 @OptIn(ExperimentalComposeUiApi::class)
 fun main() {
     keepAwake()
+    var spatialMode by mutableIntStateOf(SPATIAL_NONE)
+    probeSpatial { spatialMode = it }
     ComposeViewport {
-        App(host = HostWindow(onToggleFullscreen = ::toggleBrowserFullscreen))
+        val mode = spatialMode
+        App(
+            host = HostWindow(
+                onToggleFullscreen = ::toggleBrowserFullscreen,
+                onEnterSpatial = if (mode == SPATIAL_NONE) null else { source -> enterSpatial(mode, source) },
+            ),
+        )
     }
 }

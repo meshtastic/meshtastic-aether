@@ -62,6 +62,7 @@ import org.meshtastic.aether.midi.openLiveOutput
 import org.meshtastic.aether.ui.statusLineText
 import org.meshtastic.aether.ui.statusLineVisible
 import org.meshtastic.aether.visual.AmbientScene
+import org.meshtastic.aether.visual.SpatialSource
 
 private const val FADE_STEP_MS = 33L
 private const val SAVE_DEBOUNCE_MS = 500L
@@ -83,6 +84,7 @@ internal fun Running(
     val platform = env.platform
     val haptics = LocalHapticFeedback.current
     val engine = rememberEngine(session, platform, env.midi)
+    val palette = LocalAmbientPalette.current
     val controls = rememberControls(engine, env.settings)
     val disconnect = {
         haptics.performHapticFeedback(HapticFeedbackType.Confirm)
@@ -121,7 +123,14 @@ internal fun Running(
             StatusOverlay(
                 status = engine.status,
                 controls = controls,
-                host = HudHost(look.palette, look::choose, disconnect, host.onToggleFullscreen, appUpdater),
+                host = HudHost(
+                    look.palette,
+                    look::choose,
+                    disconnect,
+                    host.onToggleFullscreen,
+                    appUpdater,
+                    host.onEnterSpatial?.let { enter -> { enter(SpatialSource(engine, palette)) } },
+                ),
                 input = HudInput(platform.hasKeyboard, platform.isTelevision),
                 modifier = Modifier.align(Alignment.TopStart),
             )
