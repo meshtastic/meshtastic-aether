@@ -33,4 +33,13 @@ class ConnectScreenTest {
         assertEquals("Connecting to node.local:4403 in 3 s", PendingConnect(LinkChoice.Tcp("node.local", 4403), Countdown(5)).text(3))
         assertEquals("Connecting to ws://a/ws in 1 s", PendingConnect(LinkChoice.WebSocket("ws://a/ws"), Countdown(5)).text(1))
     }
+
+    // Regression: the spoken line replaced every " s" with " seconds", so a radio named "Node s1" was read as
+    // "Node seconds1".
+    @Test
+    fun `the spoken countdown spells out the unit and leaves the radio name alone`() {
+        val pending = PendingConnect(LinkChoice.Serial("/dev/ttyACM0", "Node s1"), Countdown(5))
+        assertEquals("Connecting to Node s1 in 5 seconds", pending.spoken(5))
+        assertEquals("Connecting to Node s1 in 1 second", pending.spoken(1))
+    }
 }
