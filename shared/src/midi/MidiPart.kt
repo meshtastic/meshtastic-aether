@@ -94,10 +94,18 @@ internal class MidiPart(
     private val lead = (config.bendLeadSeconds * sampleRate).toLong()
     val channels: List<MidiChannel> = memberChannels(config).map { MidiChannel(it) }
 
-    /** MPE configuration on the master channel, then each channel's bend range, then the null RPN. */
+    /**
+     * MPE configuration on the master channel, each channel's bend range, then each bend centred: a receiver keeps the
+     * bend another app or a crashed session left, and a note at a 12-TET pitch takes a channel without bending it.
+     */
     fun preamble(frame: Long) {
         if (config.mpe) queue.rpn(frame, index, MPE_MASTER, RPN_MPE_CONFIG, MPE_MEMBERS)
         for (c in channels) queue.rpn(frame, index, c.number, RPN_BEND_RANGE, config.bendRange)
+        for (c in channels) {
+            c.bend = MidiPitch.CENTER_BEND
+            c.bendSet = true
+            queue.add(frame, index, PITCH_BEND or c.number, 0, MidiPitch.CENTER_BEND shr BITS_PER_BYTE)
+        }
     }
 
     fun play(s: Strike) {
@@ -142,8 +150,8 @@ internal class MidiPart(
         if (n.node != null || n.voice !in CARRIED_VOICES) return null
         return channels.firstOrNull { c ->
             val o = c.notes[s.key]?.note
-            o != null && c.bend == s.tuned.bend && o.voice == n.voice && o.pitchHz == n.pitchHz && o.pan == n.pan &&
-                o.velocity == n.velocity
+            o != null && o.node == null && c.bend == s.tuned.bend && o.voice == n.voice && o.pitchHz == n.pitchHz &&
+                o.pan == n.pan && o.velocity == n.velocity
         }
     }
 

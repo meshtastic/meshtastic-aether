@@ -41,10 +41,12 @@ class MidiConfig(
 
 /**
  * What the mapper did with the notes it was given. A fallback is a note on a channel at another bend; a late message
- * was due before one already sent and went out at that one's frame, so a drain ran behind its notes.
+ * was due before one already sent and went out at that one's frame, so a drain ran behind its notes; a shifted note
+ * arrived after a later note was placed and starts at that note's frame.
  */
 class MidiStats {
     var late = 0
+    var shifted = 0
     var notes = 0
     var skipped = 0
     var carried = 0
@@ -121,6 +123,7 @@ class MidiMapper(sampleRate: Int, val config: MidiConfig = MidiConfig()) : NoteS
     private val ahead = (config.dispatchAheadSeconds * sampleRate).toLong()
     private val lead = (config.bendLeadSeconds * sampleRate).toLong()
     private val sent = SentNotes()
+    private var placedUpTo = Long.MIN_VALUE
     private var lastFrame = Long.MIN_VALUE
     private var open = false
 
@@ -163,10 +166,27 @@ class MidiMapper(sampleRate: Int, val config: MidiConfig = MidiConfig()) : NoteS
         sent.endAll { part, channel, key -> queue.add(at, part, NOTE_OFF or channel, key, OFF_VELOCITY) }
         for (p in parts) p.close(at)
         drain(at, emit)
+        placedUpTo = Long.MIN_VALUE
         open = false
     }
 
-    private fun dispatch(note: NoteEvent) {
+    /**
+     * Places [arrived]. A note that sounds before one already placed arrived inside the dispatch horizon; placing it
+     * at its own frame could strike over or re-bend under the later note, so it starts at that note's frame instead.
+     */
+    private fun dispatch(arrived: NoteEvent) {
+        val end = arrived.atFrame + arrived.durationFrames
+        if (arrived.atFrame < placedUpTo) stats.shifted++
+        val note = if (arrived.atFrame >= placedUpTo) {
+            arrived
+        } else {
+            arrived.copy(atFrame = placedUpTo, durationFrames = end - placedUpTo)
+        }
+        if (note.durationFrames <= 0) {
+            stats.skipped++
+            return
+        }
+        placedUpTo = note.atFrame
         val hz = if (note.voice == Voice.Shimmer) note.pitchHz * 2 else note.pitchHz
         val tuned = if (note.voice == Voice.Breath) null else MidiPitch.tune(hz, config.bendRange)
         val meshBed = note.node != null && (note.voice == Voice.Drone || note.voice == Voice.Shimmer)

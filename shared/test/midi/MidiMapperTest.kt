@@ -27,19 +27,27 @@ private fun texture(at: Double, pad: Float) = ControlEvent.SetTexture(
 /** One note as a receiver hears it: decoded from the stream with the MIDI 1.0 pitch formula, not the mapper's code. */
 private class Heard(val channel: Int, val key: Int, val velocity: Int, val on: Long, var off: Long, val hz: Double)
 
-/** A minimal receiver: tracks each channel's bend and sounding keys and flags what the spec forbids. */
-private class Receiver(private val range: Int) {
+/**
+ * A minimal receiver: tracks each channel's bend and sounding keys and flags what the spec forbids, a message that
+ * arrives after the drain it was due in ([due] is the previous drain's frame), a channel re-bent within [allowance]
+ * of its last note-off, and a note-on on a channel whose bend was never set.
+ */
+private class Receiver(private val range: Int, private val allowance: Long = sec(2.0)) {
     val heard = ArrayList<Heard>()
     val problems = ArrayList<String>()
     val events = ArrayList<MidiEvent>()
     private val bend = IntArray(16) { 8192 }
+    private val bent = BooleanArray(16)
     private val lastBendAt = LongArray(16) { Long.MIN_VALUE / 2 }
+    private val lastOffAt = LongArray(16) { Long.MIN_VALUE / 2 }
     private val sounding = HashMap<Pair<Int, Int>, Heard>()
     var lastFrame = Long.MIN_VALUE
+    var due = Long.MIN_VALUE
 
     fun take(e: MidiEvent) {
         events += e
         if (e.frame < lastFrame) problems += "out of order at ${e.frame}"
+        if (e.frame <= due) problems += "sent after its drain: frame ${e.frame}, drained to $due"
         lastFrame = e.frame
         val status = e.data[0].toInt() and 0xF0
         val ch = e.data[0].toInt() and 0x0F
@@ -48,11 +56,15 @@ private class Receiver(private val range: Int) {
         when (status) {
             0xE0 -> {
                 if (sounding.keys.any { it.first == ch }) problems += "channel $ch re-bent while sounding at ${e.frame}"
-                bend[ch] = d1 or (d2 shl 7)
+                val value = d1 or (d2 shl 7)
+                if (value != 8192 && e.frame < lastOffAt[ch] + allowance) problems += "channel $ch re-bent in its release at ${e.frame}"
+                bend[ch] = value
+                bent[ch] = true
                 lastBendAt[ch] = e.frame
             }
             0x90 -> {
                 if (sounding.containsKey(ch to d1)) problems += "second note-on for key $d1 on channel $ch at ${e.frame}"
+                if (!bent[ch]) problems += "note-on on channel $ch whose bend was never set"
                 val semis = d1 - 69 + (bend[ch] - 8192).toDouble() / 8192 * range
                 val h = Heard(ch, d1, d2, e.frame, -1, 440.0 * 2.0.pow(semis / 12))
                 if (e.frame - lastBendAt[ch] in 0 until sec(0.05) && lastBendAt[ch] > 0) problems += "bend only ${e.frame - lastBendAt[ch]} frames before note-on"
@@ -62,6 +74,7 @@ private class Receiver(private val range: Int) {
             0x80 -> {
                 val h = sounding.remove(ch to d1)
                 if (h == null) problems += "note-off for silent key $d1 on channel $ch" else h.off = e.frame
+                lastOffAt[ch] = e.frame
             }
         }
     }
@@ -81,13 +94,19 @@ class MidiMapperTest {
         val mapper = MidiMapper(SR, config)
         val rx = Receiver(config.bendRange)
         mapper.schedule(ComposerOutput(notes, controls))
-        var f = 0L
-        while (f < sec(until)) {
+        drainTo(mapper, rx, 0L, sec(until))
+        return mapper to rx
+    }
+
+    /** Drains every 0.1 s from [from] up to [until], then closes there; the receiver checks each drain's timing. */
+    private fun drainTo(mapper: MidiMapper, rx: Receiver, from: Long, until: Long, close: Boolean = true) {
+        var f = from
+        while (f < until) {
             mapper.drain(f, rx::take)
+            rx.due = f
             f += sec(0.1)
         }
-        mapper.close(f, rx::take)
-        return mapper to rx
+        if (close) mapper.close(f, rx::take)
     }
 
     // The MIDI 1.0 pitch formula: 5/4 over C4 is 327.03 Hz, note 63.863, so key 64 lowered 13.69 cents, which is
@@ -135,7 +154,8 @@ class MidiMapperTest {
         val (mapper, rx) = run(crowd(), until = 80.0)
         assertTrue(rx.problems.isEmpty(), rx.problems.take(5).joinToString("; "))
         assertEquals(0, rx.stillSounding)
-        assertTrue(rx.heard.all { it.off >= it.on }, "a note-off before its note-on")
+        // The crowd ends by 63.3 s; a note still sounding at 80 s was ended by the close, not by its own end.
+        assertTrue(rx.heard.all { it.off in it.on until sec(70.0) }, "a note-off before its note-on or left to the close")
         assertEquals(mapper.stats.notes, rx.heard.size + mapper.stats.carried + mapper.stats.held)
     }
 
@@ -150,26 +170,40 @@ class MidiMapperTest {
         assertEquals(mapper.stats.fallbacks, off)
     }
 
-    // A later composer window can bring a note that sounds before notes already queued; placing on arrival could bend
-    // a channel under it.
+    // A later composer window can bring a note that sounds before notes already queued; held behind them in arrival
+    // order it would go out late, after its drain.
     @Test
-    fun `a note that arrives after a later one is still placed and tuned in frame order`() {
+    fun `a note that arrives after a later one is placed in time and in tune`() {
         val mapper = MidiMapper(SR)
         val rx = Receiver(48)
         val late = C4_HZ * 3 / 2
         val early = C4_HZ * 16 / 15
         mapper.schedule(ComposerOutput(listOf(note(10.0, late, 2.0)), emptyList()))
-        mapper.drain(sec(1.0), rx::take)
+        drainTo(mapper, rx, 0L, sec(1.0), close = false)
         mapper.schedule(ComposerOutput(listOf(note(5.0, early, 2.0)), emptyList()))
-        var f = sec(1.0)
-        while (f < sec(20.0)) {
-            f += sec(0.1)
-            mapper.drain(f, rx::take)
-        }
-        mapper.close(f, rx::take)
+        drainTo(mapper, rx, sec(1.0), sec(20.0))
         assertTrue(rx.problems.isEmpty(), rx.problems.joinToString())
         assertEquals(listOf(sec(5.0), sec(10.0)), rx.heard.map { it.on })
         assertTrue(cents(rx.heard[0].hz, early) < 0.3 && cents(rx.heard[1].hz, late) < 0.3)
+        assertEquals(0, mapper.stats.shifted)
+    }
+
+    // A note that sounds before one already placed, on every channel busy, would land on the later note's channel as a
+    // note-off for a key not yet on and a second note-on; it starts at the placed note's frame instead.
+    @Test
+    fun `a note arriving after a later one was placed starts at that frame and strikes nothing twice`() {
+        val held = List(14) { note(0.0, C4_HZ * 1.5 * 2.0.pow((it + 1) * 5.0 / 1200), 30.0, node = 100L + it) }
+        val placed = note(10.0, C4_HZ * 5 / 4, 2.0)
+        val mapper = MidiMapper(SR)
+        val rx = Receiver(48)
+        mapper.schedule(ComposerOutput(held + placed, emptyList()))
+        drainTo(mapper, rx, 0L, sec(9.8), close = false)
+        mapper.schedule(ComposerOutput(listOf(note(9.9, C4_HZ * 5 / 4, 1.0)), emptyList()))
+        drainTo(mapper, rx, sec(9.8), sec(40.0))
+        assertTrue(rx.problems.isEmpty(), rx.problems.joinToString())
+        assertEquals(1, mapper.stats.shifted)
+        assertEquals(0, mapper.stats.late)
+        assertEquals(listOf(sec(10.0), sec(10.0)), rx.heard.filter { it.on > 0 }.map { it.on })
     }
 
     // The bed is struck again at every 20 s tick; an external synth would re-attack it each time. The synth carries a
@@ -190,17 +224,29 @@ class MidiMapperTest {
         assertEquals(3, mapper.stats.carried)
     }
 
-    // A loop note at a held pad's pitch would be a second note-on for a sounding key.
+    // A loop note at a held pad's pitch would be a second note-on for a sounding key; held, it keeps the pad sounding
+    // to its own end.
     @Test
-    fun `a bed note at a key the bed already holds extends it`() {
+    fun `a bed note at a key the bed already holds extends it to its own end`() {
         val notes = listOf(
             note(0.0, C4_HZ, 20.0, Voice.Pad, velocity = 0.5f, pan = -0.5f, node = null),
-            note(5.0, C4_HZ, 8.0, Voice.Pad, velocity = 0.4f, pan = 0.2f, node = null),
+            note(5.0, C4_HZ, 20.0, Voice.Pad, velocity = 0.4f, pan = 0.2f, node = null),
         )
-        val (mapper, rx) = run(notes, until = 30.0)
+        val (mapper, rx) = run(notes, until = 40.0)
         assertTrue(rx.problems.isEmpty(), rx.problems.joinToString())
         assertEquals(1, rx.heard.size)
+        assertEquals(sec(25.0), rx.heard.single().off)
         assertEquals(1, mapper.stats.held)
+    }
+
+    // The synth never carries a voice a node started; a bed note at a node drone's pitch is struck on its own.
+    @Test
+    fun `a bed note does not carry on the drone of a node`() {
+        val notes = listOf(note(0.0, C4_HZ, 20.0, Voice.Drone, node = 7L), note(20.0, C4_HZ, 20.0, Voice.Drone, node = null))
+        val (mapper, rx) = run(notes, until = 50.0)
+        assertTrue(rx.problems.isEmpty(), rx.problems.joinToString())
+        assertEquals(2, rx.heard.size)
+        assertEquals(0, mapper.stats.carried)
     }
 
     // A struck unison (an echo over its note) goes to another channel at the same bend, so neither cuts the other.
@@ -267,6 +313,7 @@ class MidiMapperTest {
             f += sec(0.1)
         }
         mapper.close(sec(19.9), rx::take)
+        assertTrue(rx.problems.isEmpty(), rx.problems.joinToString())
         assertEquals(1, mapper.stats.restruck, "the restrike was not placed before the close")
         assertEquals(1, rx.heard.size)
         assertEquals(0, rx.stillSounding)
@@ -284,6 +331,7 @@ class MidiMapperTest {
             f += sec(0.1)
         }
         mapper.close(f, rx::take)
+        assertTrue(rx.problems.isEmpty(), rx.problems.joinToString())
         assertEquals(0, rx.stillSounding)
         assertEquals(2, rx.heard.size)
         val tail = rx.events.takeLast(16).map { e -> e.data.map { it.toInt() and 0xFF } }

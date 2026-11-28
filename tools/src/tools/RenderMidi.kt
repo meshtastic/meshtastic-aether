@@ -87,4 +87,4 @@ fun renderMidi(spec: MidiSpec, onOutput: (ComposerOutput) -> Unit = {}): MidiRen
 fun formatMidiStats(s: MidiStats): String =
     "notes=${s.notes} skipped=${s.skipped} carried=${s.carried} restruck=${s.restruck} held=${s.held} " +
         "retriggered=${s.retriggered} fallbacks=${s.fallbacks} maxFallbackCents=${"%.1f".format(s.maxFallbackCents)} " +
-        "late=${s.late}"
+        "late=${s.late} shifted=${s.shifted}"
