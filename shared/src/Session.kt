@@ -47,15 +47,19 @@ internal class LocalNetworkGate(private val permit: suspend (ask: Boolean) -> Bo
     }
 }
 
-/** A live session over the network, which opens only once [gate] allows it. */
+/**
+ * A live session over the network to [host]. A local host opens only once [gate] allows it; any other host still
+ * tries, since the permission does not cover the internet.
+ */
 private fun networkSession(
     link: LiveLink,
     target: String,
+    host: String,
     gate: LocalNetworkGate = LocalNetworkGate(::ensureLocalNetworkPermission),
 ): Session = Session(
     link.source,
     open = {
-        if (!gate.check()) throw MeshtasticException.Transport(LOCAL_NETWORK_DENIED, null)
+        if (!gate.check() && isLocalHost(host)) throw MeshtasticException.Transport(LOCAL_NETWORK_DENIED, null)
         link.connect()
     },
     close = link::disconnect,
@@ -74,7 +78,7 @@ internal fun sessionFor(choice: LinkChoice): Session = when (choice) {
     is LinkChoice.Tcp -> {
         val link = LiveLink.tcp(choice.host, choice.port) ?: error("TCP is not available on this target")
         Log.i("app", "session tcp ${choice.host}:${choice.port}")
-        networkSession(link, "${choice.host}:${choice.port}")
+        networkSession(link, "${choice.host}:${choice.port}", choice.host)
     }
     is LinkChoice.Ble -> {
         val link = LiveLink.ble(choice.radio) ?: error("Bluetooth is not available on this target")
@@ -92,7 +96,7 @@ internal fun sessionFor(choice: LinkChoice): Session = when (choice) {
         }
         val link = LiveLink.webSocket(choice.url)
         Log.i("app", "session websocket ${choice.url}")
-        networkSession(link, choice.url)
+        networkSession(link, choice.url, webSocketHost(choice.url))
     }
 }
 
