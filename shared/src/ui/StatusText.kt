@@ -22,6 +22,9 @@ internal fun statusLineText(link: LinkState, error: String?): String? = when {
     else -> null
 }
 
+/** What the engine shows while the local network permission is denied. */
+internal const val LOCAL_NETWORK_DENIED = "Local network access is off - allow Nearby devices for Aether in Settings"
+
 /** What the engine shows while a link keeps failing to open; the raw exception goes to the log only. */
 internal fun unreachableText(target: String?): String =
     if (target == null) "Can't open the link - retrying" else "Can't reach $target - retrying"

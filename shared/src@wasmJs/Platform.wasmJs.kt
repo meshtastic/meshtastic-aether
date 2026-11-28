@@ -29,6 +29,8 @@ internal actual fun localOffsetMinutes(epochMillis: Long): Int = jsOffsetMinutes
 
 internal actual fun createTcpTransport(host: String, port: Int): RadioTransport? = null
 
+internal actual suspend fun ensureLocalNetworkPermission(ask: Boolean): Boolean = true
+
 @JsFun("(k) => { try { return localStorage.getItem(k); } catch (e) { return null; } }")
 private external fun storageGet(key: String): String?
 

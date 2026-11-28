@@ -2,6 +2,7 @@ package org.meshtastic.aether
 
 import android.app.UiModeManager
 import android.content.Context
+import android.content.pm.PackageManager
 import android.content.res.Configuration
 import android.os.Build
 import org.meshtastic.aether.ui.KeyValueStore
@@ -31,6 +32,24 @@ internal actual fun getPlatform(): Platform = AndroidPlatform()
 internal actual fun localOffsetMinutes(epochMillis: Long): Int = java.util.TimeZone.getDefault().getOffset(epochMillis) / 60_000
 
 internal actual fun createTcpTransport(host: String, port: Int): RadioTransport? = TcpTransport(host, port)
+
+/** The first SDK that enforces ACCESS_LOCAL_NETWORK, for an app that targets it. */
+private const val LOCAL_NETWORK_SDK = 37
+
+/** The runtime permission Android 17 requires before a socket to the local network opens. */
+const val LOCAL_NETWORK_PERMISSION = "android.permission.ACCESS_LOCAL_NETWORK"
+
+/** Set by the host activity: asks for [LOCAL_NETWORK_PERMISSION] and returns whether it was granted. */
+object AndroidLocalNetworkPermission {
+    var request: (suspend () -> Boolean)? = null
+}
+
+internal actual suspend fun ensureLocalNetworkPermission(ask: Boolean): Boolean {
+    if (Build.VERSION.SDK_INT < LOCAL_NETWORK_SDK) return true
+    val context = AndroidAppContext.context ?: return true
+    if (context.checkSelfPermission(LOCAL_NETWORK_PERMISSION) == PackageManager.PERMISSION_GRANTED) return true
+    return ask && AndroidLocalNetworkPermission.request?.invoke() == true
+}
 
 /** Set by the host activity before the first composition; the saved link and palette need a [Context]. */
 object AndroidAppContext {

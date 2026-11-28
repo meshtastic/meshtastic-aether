@@ -47,5 +47,11 @@ internal expect fun localOffsetMinutes(epochMillis: Long): Int
 /** A TCP link to a node's port, or null where the target has none. */
 internal expect fun createTcpTransport(host: String, port: Int): RadioTransport?
 
+/**
+ * Whether links to the local network may open. Android 17 blocks them for an app targeting it until
+ * ACCESS_LOCAL_NETWORK is granted; with [ask] false a missing grant returns false without prompting.
+ */
+internal expect suspend fun ensureLocalNetworkPermission(ask: Boolean): Boolean
+
 /** The platform's small persistent string store: Preferences, SharedPreferences, NSUserDefaults or localStorage. */
 internal expect fun createKeyValueStore(): KeyValueStore

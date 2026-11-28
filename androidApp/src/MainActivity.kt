@@ -24,12 +24,14 @@ class MainActivity : ComponentActivity() {
         val launcher = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { granted ->
             pending?.complete(granted.values.all { it })
         }
-        AndroidBlePermissions.request = {
+        val ask: suspend (Array<String>) -> Boolean = { permissions ->
             val result = CompletableDeferred<Boolean>()
             pending = result
-            launcher.launch(BLE_PERMISSIONS)
+            launcher.launch(permissions)
             result.await()
         }
+        AndroidBlePermissions.request = { ask(BLE_PERMISSIONS) }
+        AndroidLocalNetworkPermission.request = { ask(arrayOf(LOCAL_NETWORK_PERMISSION)) }
         AndroidAppContext.context = applicationContext
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         Log.i("keepawake", "screen-on flag set")
